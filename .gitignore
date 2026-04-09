@@ -1,3 +1,37 @@
 # Claude
 CLAUDE.md
 regista-claude-code-prompt.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# Alembic — não versionar o .env local
+backend/.env
+
+# Node / Next.js
+node_modules/
+.next/
+.env.local
+.env.production
+
+# Docker
+infra/.env
+
+# Logs / screenshots
+*.log
+workers/screenshots/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local config
+.claude/
