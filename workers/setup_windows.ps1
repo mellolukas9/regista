@@ -87,13 +87,23 @@ PREFECT_API_URL=$PrefectServerUrl
 # ---------------------------------------------------------------------------
 # 6. Criar script de inicialização do worker
 # ---------------------------------------------------------------------------
+Write-Step "Criando work pool '$WorkQueue' no Prefect (se não existir)"
+
+$env:PREFECT_API_URL = $PrefectServerUrl
+try {
+    & "$venvPath\Scripts\prefect.exe" work-pool create $WorkQueue --type process 2>$null
+    Write-Host "Work pool '$WorkQueue' criado."
+} catch {
+    Write-Host "Work pool '$WorkQueue' já existe ou erro ignorado."
+}
+
 Write-Step "Criando script de start do worker"
 
 $startScript = "$InstallDir\start_worker.ps1"
 @"
 Set-Location "$InstallDir"
 `$env:PREFECT_API_URL = "$PrefectServerUrl"
-& "$venvPath\Scripts\prefect.exe" worker start --pool default-agent-pool --work-queue $WorkQueue
+& "$venvPath\Scripts\prefect.exe" worker start --pool $WorkQueue
 "@ | Set-Content $startScript
 
 # ---------------------------------------------------------------------------

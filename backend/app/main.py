@@ -1,14 +1,22 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, bots, clients, runs, schedules
+from app.routers import auth, bots, clients, machines, runs, schedules
+from app.services.run_sync import run_sync_loop
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    task = asyncio.create_task(run_sync_loop())
     yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(
@@ -28,6 +36,7 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(clients.router, prefix="/api")
+app.include_router(machines.router, prefix="/api")
 app.include_router(bots.router, prefix="/api")
 app.include_router(runs.router, prefix="/api")
 app.include_router(schedules.router, prefix="/api")
