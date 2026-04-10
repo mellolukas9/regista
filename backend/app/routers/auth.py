@@ -29,6 +29,6 @@ async def login(
     token = create_access_token({
         "user_id": str(user.id),
         "client_id": str(user.client_id),
-        "role": user.role,
+        "role": user.role.value,
     })
     return Token(access_token=token)

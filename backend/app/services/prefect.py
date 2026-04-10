@@ -14,7 +14,7 @@ async def trigger_flow_run(deployment_id: str, parameters: dict | None = None) -
     payload = {"parameters": parameters or {}}
 
     async with httpx.AsyncClient(timeout=30) as client:
-        response = client.post(url, json=payload)
+        response = await client.post(url, json=payload)
         response.raise_for_status()
         return response.json()
 
