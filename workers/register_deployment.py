@@ -30,6 +30,7 @@ async def register(entrypoint: str, name: str, queue: str, description: str) -> 
     import importlib.util
     spec = importlib.util.spec_from_file_location("bot_module", script_path)
     module = importlib.util.module_from_spec(spec)
+    sys.modules["bot_module"] = module
     spec.loader.exec_module(module)
     flow_obj = getattr(module, flow_name)
 
@@ -39,13 +40,14 @@ async def register(entrypoint: str, name: str, queue: str, description: str) -> 
         work_queue_name=queue,
         work_pool_name=queue,
         description=description or "",
-        apply=True,
+        apply=False,
     )
+    deployment_id = await deployment.apply()
 
     print(f"\nDeployment registrado com sucesso!")
     print(f"  Nome:          {name}")
     print(f"  Fila:          {queue}")
-    print(f"  Deployment ID: {deployment.id}")
+    print(f"  Deployment ID: {deployment_id}")
     print(f"\nUse este ID ao cadastrar o bot no Regista (campo 'prefect_deployment_id').")
 
 

@@ -18,7 +18,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-from prefect import flow, task, get_run_logger
+from prefect import flow, get_run_logger
 from prefect.context import get_run_context
 from playwright.sync_api import sync_playwright, Page, Browser
 
@@ -35,12 +35,17 @@ SCREENSHOT_DIR  = Path("C:/regista-worker/screenshots")
 
 
 # ---------------------------------------------------------------------------
-# Tasks Prefect — cada etapa lógica vira uma @task separada
+# Etapas do bot — funcoes normais, NAO @task.
+#
+# A API sincrona do Playwright fica presa a thread onde o browser foi
+# lancado (usa fibers/greenlet). O Prefect executa cada @task em uma thread
+# separada do pool, entao chamar page/browser dentro de uma @task estoura
+# "greenlet.error: Cannot switch to a different thread". Por isso as etapas
+# abaixo sao funcoes comuns chamadas direto pelo flow, que roda tudo numa
+# unica thread.
 # ---------------------------------------------------------------------------
 
-@task(name="Inicializar browser", retries=2, retry_delay_seconds=10)
-def inicializar_browser(playwright) -> tuple[Browser, Page]:
-    logger = get_run_logger()
+def inicializar_browser(playwright, logger) -> tuple[Browser, Page]:
     logger.info("Iniciando browser Chromium (headless=%s)", HEADLESS)
 
     browser = playwright.chromium.launch(
@@ -57,9 +62,7 @@ def inicializar_browser(playwright) -> tuple[Browser, Page]:
     return browser, page
 
 
-@task(name="Fazer login")
-def fazer_login(page: Page, usuario: str, senha: str) -> None:
-    logger = get_run_logger()
+def fazer_login(page: Page, usuario: str, senha: str, logger) -> None:
     logger.info("Navegando para %s", TARGET_URL)
 
     page.goto(TARGET_URL)
@@ -74,13 +77,11 @@ def fazer_login(page: Page, usuario: str, senha: str) -> None:
     logger.info("Login realizado com sucesso")
 
 
-@task(name="Executar automacao principal")
-def executar_automacao(page: Page) -> dict:
+def executar_automacao(page: Page, logger) -> dict:
     """
     Implemente aqui a lógica principal do bot.
     Retorne um dict com os resultados/métricas para o relatório.
     """
-    logger = get_run_logger()
     logger.info("Executando automação principal")
 
     # TODO: implemente a lógica do bot aqui
@@ -99,9 +100,7 @@ def executar_automacao(page: Page) -> dict:
     return resultado
 
 
-@task(name="Tirar screenshot de evidencia")
-def tirar_screenshot(page: Page, nome: str) -> Path:
-    logger = get_run_logger()
+def tirar_screenshot(page: Page, nome: str, logger) -> Path:
     SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -112,10 +111,9 @@ def tirar_screenshot(page: Page, nome: str) -> Path:
     return caminho
 
 
-@task(name="Fechar browser")
-def fechar_browser(browser: Browser) -> None:
+def fechar_browser(browser: Browser, logger) -> None:
     browser.close()
-    get_run_logger().info("Browser encerrado")
+    logger.info("Browser encerrado")
 
 
 # ---------------------------------------------------------------------------
@@ -152,25 +150,25 @@ def meu_bot(
     logger.info("Iniciando %s v%s", BOT_NAME, BOT_VERSION)
 
     with sync_playwright() as playwright:
-        browser, page = inicializar_browser(playwright)
+        browser, page = inicializar_browser(playwright, logger)
 
         try:
-            fazer_login(page, usuario, senha)
-            resultado = executar_automacao(page)
-            tirar_screenshot(page, "conclusao")
+            fazer_login(page, usuario, senha, logger)
+            resultado = executar_automacao(page, logger)
+            tirar_screenshot(page, "conclusao", logger)
             return resultado
 
         except Exception as exc:
             # Screenshot de erro para diagnóstico
             try:
-                tirar_screenshot(page, "ERRO")
+                tirar_screenshot(page, "ERRO", logger)
             except Exception:
                 pass
             logger.error("Bot falhou: %s", exc)
             raise
 
         finally:
-            fechar_browser(browser)
+            fechar_browser(browser, logger)
 
 
 # ---------------------------------------------------------------------------

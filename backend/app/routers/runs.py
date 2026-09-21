@@ -63,7 +63,7 @@ async def trigger_run(
         except Exception as exc:
             run.status = RunStatus.failed
 
-    await db.refresh(run)
+    await db.flush()
     return run
 
 
