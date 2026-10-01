@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Regista v2 — Arquitetura e plano para o primeiro cliente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#F4F5F7; --surface:#FFFFFF; --surface-2:#ECEEF2; --ink:#141820; --muted:#454E5C; --faint:#626B79;
+  --line:#D6DAE1; --accent:#4A6500; --accent-bg:#E6F1C2; --accent-ink:#1E2900;
+  --warn:#7A5000; --warn-bg:#FBEFD2; --danger:#9E3426; --danger-bg:#FBE3DF; --ok:#1F6B3A; --ok-bg:#DDF2E3;
+  --code-bg:#ECEEF2; --zone-a:#EEF3FB; --zone-b:#F2F7E6;
+  --sans:'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono:'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top, 0px);
+  padding-bottom:env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B0D10; --surface:#12151A; --surface-2:#181C22; --ink:#E7EAEE; --muted:#A6AFBC; --faint:#848E9C;
+    --line:#252B34; --accent:#C8F169; --accent-bg:rgba(200,241,105,.12); --accent-ink:#0B0D10;
+    --warn:#F5C451; --warn-bg:rgba(245,196,81,.10); --danger:#FF8A7A; --danger-bg:rgba(255,138,122,.10); --ok:#4ADE80; --ok-bg:rgba(74,222,128,.10);
+    --code-bg:#0F1216; --zone-a:#121821; --zone-b:#141A12;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0D10; --surface:#12151A; --surface-2:#181C22; --ink:#E7EAEE; --muted:#A6AFBC; --faint:#848E9C;
+  --line:#252B34; --accent:#C8F169; --accent-bg:rgba(200,241,105,.12); --accent-ink:#0B0D10;
+  --warn:#F5C451; --warn-bg:rgba(245,196,81,.10); --danger:#FF8A7A; --danger-bg:rgba(255,138,122,.10); --ok:#4ADE80; --ok-bg:rgba(74,222,128,.10);
+  --code-bg:#0F1216; --zone-a:#121821; --zone-b:#141A12;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%; scroll-padding-top:calc(env(safe-area-inset-top, 0px) + 24px); scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+a:focus-visible, button:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:4px}
+code{font-family:var(--mono); font-size:.88em; background:var(--code-bg); padding:.1em .35em; border-radius:4px}
+pre{font-family:var(--mono); font-size:13px; line-height:1.6; background:var(--code-bg); border:1px solid var(--line); border-radius:10px; padding:16px 18px; overflow-x:auto; margin:20px 0}
+pre code{background:none; padding:0; font-size:inherit}
+
+.layout{display:grid; grid-template-columns:240px minmax(0,1fr); gap:56px; max-width:1240px; margin:0 auto; padding:0 32px}
+.toc{position:sticky; top:env(safe-area-inset-top, 0px); align-self:start; height:100vh; max-height:100%; overflow-y:auto; padding:48px 0 32px}
+.toc .brand{display:flex; align-items:center; gap:10px; margin-bottom:28px; font-weight:600; font-size:15px}
+.toc .mark{width:28px; height:28px; border-radius:8px; background:var(--accent); display:flex; align-items:center; justify-content:center}
+.toc .mark svg{stroke:var(--accent-ink)}
+.toc ol{list-style:none; margin:0; padding:0; counter-reset:t}
+.toc li{counter-increment:t}
+.toc a{display:flex; gap:10px; padding:7px 10px; border-radius:8px; color:var(--muted); text-decoration:none; font-size:14px; line-height:1.4}
+.toc a::before{content:counter(t); font-family:var(--mono); font-size:12px; color:var(--faint); min-width:16px; padding-top:1px}
+.toc a:hover{background:var(--surface-2); color:var(--ink)}
+
+main{padding:56px 0 96px; min-width:0}
+.prose{max-width:740px}
+header.hero{padding-bottom:40px; border-bottom:1px solid var(--line); margin-bottom:56px}
+.hero h1{font-size:clamp(40px, 6vw, 64px); line-height:1.02; letter-spacing:-.035em; font-weight:650; margin:0 0 20px}
+.hero p.lede{font-size:20px; line-height:1.5; color:var(--muted); max-width:640px; margin:0 0 28px}
+.hero .meta{font-size:14px; color:var(--faint)}
+
+section{margin-bottom:72px}
+h2{font-size:30px; line-height:1.15; letter-spacing:-.02em; font-weight:620; margin:0 0 20px; display:flex; gap:14px; align-items:baseline}
+h2 .n{font-family:var(--mono); font-size:15px; font-weight:500; color:var(--accent); min-width:24px}
+h3{font-size:19px; letter-spacing:-.01em; font-weight:600; margin:40px 0 10px}
+p{margin:0 0 16px}
+ul, ol.steps{padding-left:22px; margin:0 0 18px}
+li{margin-bottom:6px}
+
+.table-wrap{overflow-x:auto; margin:20px 0 24px; border:1px solid var(--line); border-radius:12px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:14px; line-height:1.5}
+th, td{text-align:left; vertical-align:top; padding:11px 14px; border-bottom:1px solid var(--line)}
+th{font-weight:600; font-size:13px; color:var(--muted); background:var(--surface-2)}
+tr:last-child td{border-bottom:0}
+td code{white-space:nowrap}
+
+.tag{display:inline-block; font-size:12px; font-weight:600; padding:1px 8px; border-radius:999px; white-space:nowrap}
+.tag.keep{background:var(--ok-bg); color:var(--ok)}
+.tag.swap{background:var(--warn-bg); color:var(--warn)}
+.tag.out{background:var(--danger-bg); color:var(--danger)}
+.tag.new{background:var(--accent-bg); color:var(--ink)}
+
+.callout{border:1px solid var(--line); background:var(--surface); border-radius:12px; padding:18px 20px; margin:24px 0}
+.callout.warn{background:var(--warn-bg); border-color:transparent}
+.callout strong:first-child{display:block; margin-bottom:4px}
+
+/* Hero diagram */
+.flow{margin:8px 0 0; display:grid; grid-template-columns:minmax(0,1fr) 120px minmax(0,1.25fr); gap:0; align-items:stretch}
+.zone{border-radius:16px; padding:22px; display:flex; flex-direction:column; gap:12px}
+.zone.a{background:var(--zone-a); border:1px solid var(--line)}
+.zone.b{background:var(--zone-b); border:1px solid var(--line)}
+.zone h4{margin:0 0 4px; font-size:13px; font-weight:600; color:var(--muted)}
+.node{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px}
+.node b{display:block; font-size:15px; font-weight:600}
+.node span{font-size:13px; color:var(--muted); line-height:1.45; display:block}
+.node.hot{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent)}
+.wire{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:0 8px; text-align:center}
+.wire .line{width:100%; height:2px; background:var(--accent); position:relative}
+.wire .line::after{content:""; position:absolute; left:-1px; top:-5px; border:6px solid transparent; border-right-color:var(--accent); border-left:0}
+.wire small{font-size:12px; color:var(--muted); line-height:1.35}
+.wire small b{display:block; font-family:var(--mono); font-weight:500; color:var(--ink)}
+
+.tree{font-size:13px}
+.tree .c{color:var(--faint)}
+
+.cols{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; margin:20px 0}
+.card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:18px 20px}
+.card h4{margin:0 0 6px; font-size:16px; font-weight:600}
+.card p, .card li{font-size:14.5px; color:var(--muted)}
+.card p:last-child, .card ul:last-child{margin-bottom:0}
+.card.pick{border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent)}
+
+pre.mermaid{background:var(--surface); text-align:center; font-family:var(--sans)}
+
+footer{border-top:1px solid var(--line); padding-top:24px; font-size:14px; color:var(--faint)}
+
+@media (max-width: 1020px){
+  .layout{grid-template-columns:minmax(0,1fr); gap:0; padding:0 20px}
+  .toc{display:none}
+  main{padding-top:32px}
+}
+@media (max-width: 760px){
+  .flow{grid-template-columns:minmax(0,1fr)}
+  .wire{padding:16px 0}
+  .wire .line{width:2px; height:36px}
+  .wire .line::after{left:-5px; top:-1px; border:6px solid transparent; border-bottom-color:var(--accent); border-top:0}
+  .cols{grid-template-columns:minmax(0,1fr)}
+  h2{font-size:25px}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc" aria-label="Sumário">
+  <div class="brand">
+    <span class="mark"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20V4h6.5a4.5 4.5 0 0 1 0 9H7"/><path d="M12.5 13l5 7"/></svg></span>
+    Regista v2
+  </div>
+  <ol>
+    <li><a href="#resumo">Em uma página</a></li>
+    <li><a href="#arquitetura">Arquitetura e stack</a></li>
+    <li><a href="#pastas">Estrutura de pastas</a></li>
+    <li><a href="#dados">Modelo de dados</a></li>
+    <li><a href="#orquestracao">Orquestração</a></li>
+    <li><a href="#agente">Desenho do agente</a></li>
+    <li><a href="#seguranca">Segurança nos dois sentidos</a></li>
+    <li><a href="#privacidade">Dados do cliente</a></li>
+    <li><a href="#primeiro-cliente">Primeiro cliente</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#riscos">Riscos e pendências</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<header class="hero">
+  <h1>Regista v2</h1>
+  <p class="lede">Orquestração de robôs Python e Playwright que rodam dentro do ambiente do cliente, com filas de itens, rastreio linha a linha e controle central num painel web.</p>
+  <p class="meta">Documento de arquitetura e plano de implantação para o primeiro cliente. Artemisys, outubro de 2026.</p>
+
+  <div class="flow" role="img" aria-label="Diagrama: o painel e a API ficam na infraestrutura da Artemisys; o agente e o robô ficam no ambiente do cliente e se conectam à API apenas por conexão de saída HTTPS.">
+    <div class="zone a">
+      <h4>Infraestrutura Artemisys</h4>
+      <div class="node"><b>Painel web</b><span>Next.js. Bots, filas, lotes, execuções e relatórios.</span></div>
+      <div class="node hot"><b>API Regista</b><span>FastAPI. Única porta de entrada, com isolamento por cliente.</span></div>
+      <div class="node"><b>PostgreSQL</b><span>Fila, estado, agendamento e logs. Fonte única de verdade, com RLS.</span></div>
+    </div>
+    <div class="wire" aria-hidden="true">
+      <div class="line"></div>
+      <small><b>HTTPS 443</b>só conexão de saída, iniciada pelo agente</small>
+    </div>
+    <div class="zone b">
+      <h4>Ambiente do cliente</h4>
+      <div class="node hot"><b>Agente Regista</b><span>Serviço instalado por MSI assinado. Identidade própria por máquina.</span></div>
+      <div class="node"><b>Robô (pacote assinado)</b><span>Python + Playwright em ambiente isolado. Consome itens da fila.</span></div>
+      <div class="node"><b>Sistemas do cliente</b><span>Sites, ERP, planilhas. Os dados sensíveis não precisam sair daqui.</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- 1 -->
+<section id="resumo" class="prose">
+  <h2><span class="n">1</span>Em uma página</h2>
+  <p>O piloto de 2026 validou o fluxo de disparar um robô pelo painel e acompanhar o resultado. A v2 transforma isso em produto com cinco decisões de base:</p>
+  <ul>
+    <li><strong>Execução no ambiente do cliente.</strong> Os robôs rodam na máquina física ou na nuvem do próprio cliente. Execução na infraestrutura da Artemisys só quando houver demanda.</li>
+    <li><strong>Segurança nos dois sentidos.</strong> Uma máquina de cliente comprometida não alcança outros clientes, e um Regista comprometido não consegue executar código arbitrário nas máquinas dos clientes.</li>
+    <li><strong>Postgres como centro.</strong> Fila de jobs, fila de itens, agendamento e logs vivem no mesmo banco. Sai o Prefect, sai o Redis, e com eles a sincronização entre duas fontes de verdade.</li>
+    <li><strong>Um agente, vários modos.</strong> O mesmo executável roda como serviço em segundo plano, na sessão de um usuário (quando o robô precisa de tela) ou em modo único dentro de containers.</li>
+    <li><strong>Pools, não máquinas.</strong> O robô aponta para um grupo de execução. Trocar onde ele roda é configuração, não código.</li>
+  </ul>
+</section>
+
+<!-- 2 -->
+<section id="arquitetura">
+  <div class="prose">
+    <h2><span class="n">2</span>Arquitetura e stack</h2>
+    <p>Três peças conversam por HTTPS: o painel, a API e o agente. O painel nunca fala com o agente, e o agente nunca fala com o banco. Toda regra de isolamento entre clientes mora na API e no próprio Postgres.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Componente</th><th>Onde roda</th><th>Responsabilidade</th></tr></thead>
+      <tbody>
+        <tr><td>Painel (Next.js)</td><td>Infra Artemisys</td><td>Interface de operação: bots, pools, máquinas, filas, lotes, execuções, relatórios, alertas.</td></tr>
+        <tr><td>API (FastAPI)</td><td>Infra Artemisys</td><td>Autenticação, regras de negócio, distribuição de jobs e itens, agendador, alertas.</td></tr>
+        <tr><td>PostgreSQL</td><td>Infra Artemisys</td><td>Estado de tudo, com Row-Level Security por cliente.</td></tr>
+        <tr><td>Tarefas internas (Procrastinate)</td><td>Infra Artemisys</td><td>Alertas, consolidação de lotes, liberação de itens abandonados, limpeza por retenção.</td></tr>
+        <tr><td>S3 + KMS</td><td>AWS</td><td>Screenshots e artefatos (upload direto por URL pré-assinada) e chaves de criptografia por cliente.</td></tr>
+        <tr><td>Agente</td><td>Ambiente do cliente</td><td>Identidade da máquina, heartbeat, busca de jobs, execução isolada dos robôs, envio de logs.</td></tr>
+        <tr><td>SDK Python</td><td>Dentro do robô</td><td>API para os robôs: pegar item, renovar trava, concluir, falhar, liberar, registrar log.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Stack: o que fica, o que sai, o que entra</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Peça</th><th>Situação</th><th>Motivo</th></tr></thead>
+      <tbody>
+        <tr><td>FastAPI async, SQLAlchemy async, Alembic</td><td><span class="tag keep">Mantém</span></td><td>Base adequada para long-polling, SSE e API do SDK.</td></tr>
+        <tr><td>PostgreSQL</td><td><span class="tag keep">Mantém</span></td><td>Passa a ser fila, estado e agendamento.</td></tr>
+        <tr><td>Next.js + Tailwind</td><td><span class="tag keep">Mantém</span></td><td>Sobe para a versão estável atual junto com o redesign dark.</td></tr>
+        <tr><td>Python + Playwright (API async)</td><td><span class="tag keep">Mantém</span></td><td>Um <code>BrowserContext</code> por item processado.</td></tr>
+        <tr><td>NextAuth (Credentials)</td><td><span class="tag swap">Troca</span></td><td>Autenticação centralizada no FastAPI: cookie httpOnly, argon2, MFA por TOTP, revogação de sessão.</td></tr>
+        <tr><td>NSSM</td><td><span class="tag swap">Troca</span></td><td>WinSW ou serviço nativo, distribuído em MSI assinado.</td></tr>
+        <tr><td>Prefect OSS</td><td><span class="tag out">Sai</span></td><td>Não é multi-tenant e exigiria expor o servidor às máquinas dos clientes.</td></tr>
+        <tr><td>Redis</td><td><span class="tag out">Sai</span></td><td>Sem consumidor no novo desenho.</td></tr>
+        <tr><td>Procrastinate, croniter</td><td><span class="tag new">Entra</span></td><td>Tarefas internas e cron, tudo sobre o Postgres.</td></tr>
+        <tr><td>httpx, cryptography / PyNaCl, boto3</td><td><span class="tag new">Entra</span></td><td>Cliente HTTP async, assinatura Ed25519, KMS e S3.</td></tr>
+        <tr><td>uv</td><td><span class="tag new">Entra</span></td><td>Ambiente isolado por versão de robô, criado em segundos.</td></tr>
+        <tr><td>structlog, Sentry, pytest + Testcontainers</td><td><span class="tag new">Entra</span></td><td>Logs estruturados, erros e testes de isolamento com Postgres real.</td></tr>
+        <tr><td>TanStack Query e Table, shadcn/ui, Recharts</td><td><span class="tag new">Entra</span></td><td>Dados ao vivo, tabelas grandes paginadas no servidor, componentes e gráficos.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="pastas">
+  <div class="prose">
+    <h2><span class="n">3</span>Estrutura de pastas</h2>
+    <p>Monorepo com fronteiras claras. O SDK é um pacote próprio porque é usado por dois consumidores: os robôs e o agente.</p>
+  </div>
+<pre class="tree"><code>regista/
+├── apps/
+│   ├── api/                      <span class="c"># FastAPI</span>
+│   │   ├── app/
+│   │   │   ├── core/             <span class="c"># config, segurança, sessão de banco com client_id (RLS)</span>
+│   │   │   ├── auth/             <span class="c"># login, MFA, sessões, papéis</span>
+│   │   │   ├── tenants/          <span class="c"># clientes, usuários, pools</span>
+│   │   │   ├── machines/         <span class="c"># cadastro de agentes, heartbeat, revogação</span>
+│   │   │   ├── bots/             <span class="c"># bots, versões, pacotes assinados</span>
+│   │   │   ├── jobs/             <span class="c"># execuções, distribuição por long-polling</span>
+│   │   │   ├── queues/           <span class="c"># filas, itens, lotes, reconciliação, relatórios</span>
+│   │   │   ├── schedules/        <span class="c"># agendador (croniter + advisory lock)</span>
+│   │   │   ├── alerts/           <span class="c"># regras e envio (e-mail primeiro)</span>
+│   │   │   ├── secrets/          <span class="c"># segredos criptografados com KMS</span>
+│   │   │   ├── audit/            <span class="c"># trilha de auditoria</span>
+│   │   │   └── tasks/            <span class="c"># tarefas Procrastinate</span>
+│   │   ├── migrations/           <span class="c"># Alembic, incluindo políticas RLS</span>
+│   │   └── tests/                <span class="c"># inclui testes de isolamento por rota</span>
+│   └── web/                      <span class="c"># Next.js (painel dark)</span>
+│       ├── app/                  <span class="c"># rotas: dashboard, bots, filas, lotes, execuções…</span>
+│       ├── components/           <span class="c"># StatusPill, DataTable, Sidebar, LogViewer</span>
+│       └── lib/                  <span class="c"># cliente da API, tokens de tema</span>
+├── agent/                        <span class="c"># Agente Regista</span>
+│   ├── regista_agent/
+│   │   ├── enroll.py             <span class="c"># cadastro com par de chaves</span>
+│   │   ├── transport.py          <span class="c"># HTTPS, proxy, pinning, tokens curtos</span>
+│   │   ├── runner.py             <span class="c"># baixa pacote, verifica assinatura, cria env com uv, executa</span>
+│   │   ├── modes/                <span class="c"># service.py, session.py, oneshot.py</span>
+│   │   ├── policy.py             <span class="c"># allowlist local, kill switch</span>
+│   │   └── diagnose.py           <span class="c"># autodiagnóstico</span>
+│   └── packaging/                <span class="c"># WinSW, WiX (MSI), assinatura do executável</span>
+├── sdk/                          <span class="c"># pacote regista-sdk</span>
+│   └── regista/                  <span class="c"># next_item, item_scope, success/fail/release, logger</span>
+├── bots/                         <span class="c"># robôs da Artemisys (um diretório por robô)</span>
+│   └── _template/                <span class="c"># template async com SDK</span>
+├── infra/
+│   ├── compose/                  <span class="c"># Postgres, API, web, Caddy (fase VPS)</span>
+│   └── cloudformation/           <span class="c"># EC2 com agente na conta do cliente</span>
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── ROADMAP.md
+│   └── adr/                      <span class="c"># uma decisão por arquivo</span>
+├── .github/workflows/            <span class="c"># lint, tipos, testes</span>
+└── CLAUDE.md                     <span class="c"># regras curtas + ponteiros para docs/</span></code></pre>
+</section>
+
+<!-- 4 -->
+<section id="dados">
+  <div class="prose">
+    <h2><span class="n">4</span>Modelo de dados</h2>
+    <p>Toda tabela de cliente tem <code>tenant_id</code> e uma política de Row-Level Security. Cada transação declara o cliente com <code>SET LOCAL app.tenant_id</code>, e o banco filtra as linhas. Uma query que esqueça o filtro não devolve dados de outro cliente.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tabela</th><th>Campos principais</th></tr></thead>
+      <tbody>
+        <tr><td><code>tenants</code></td><td>name, slug, região de dados</td></tr>
+        <tr><td><code>users</code></td><td>email, password_hash (argon2), role, segredo MFA criptografado</td></tr>
+        <tr><td><code>pools</code></td><td>name, kind (on_prem, client_cloud, internal)</td></tr>
+        <tr><td><code>machines</code></td><td>pool_id, public_key, mode, status, last_seen_at, agent_version, revoked_at</td></tr>
+        <tr><td><code>bots</code></td><td>pool_id, concurrency, is_active</td></tr>
+        <tr><td><code>bot_versions</code></td><td>version, package_sha256, signature, created_by</td></tr>
+        <tr><td><code>schedules</code></td><td>bot_id, cron, timezone, is_active, next_fire_at</td></tr>
+        <tr><td><code>jobs</code></td><td>bot_version_id, machine_id, status, trigger, triggered_by, started_at, finished_at, error</td></tr>
+        <tr><td><code>queues</code></td><td>name, data_mode, max_retries, lease_seconds, retention_days, visible_fields</td></tr>
+        <tr><td><code>batches</code></td><td>queue_id, source_name, source_sha256, rows_read, rows_enqueued, rows_rejected, created_by</td></tr>
+        <tr><td><code>batch_rejections</code></td><td>batch_id, row_ref, reason</td></tr>
+        <tr><td><code>queue_items</code></td><td>queue_id, batch_id, reference, status, priority, payload (criptografado), payload_ref, key_id, retry_count, exception_type, error_message, output, locked_by_job, worker_slot, locked_until, defer_until</td></tr>
+        <tr><td><code>job_logs</code></td><td>job_id, item_id, ts, level, message (particionada por mês)</td></tr>
+        <tr><td><code>secrets</code></td><td>name, ciphertext, key_id</td></tr>
+        <tr><td><code>alerts</code></td><td>alvo (bot ou fila), channel, destination, eventos</td></tr>
+        <tr><td><code>audit_log</code></td><td>actor, action, target, ts, ip</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 5 -->
+<section id="orquestracao">
+  <div class="prose">
+    <h2><span class="n">5</span>Orquestração</h2>
+    <p>Existem duas filas com papéis diferentes. A <strong>fila de jobs</strong> diz qual robô deve rodar e em qual pool. A <strong>fila de itens</strong> guarda o trabalho de negócio: cada linha de uma planilha, cada processo, cada pedido. Um job pode processar um item ou centenas, em paralelo.</p>
+
+    <h3>Ciclo de vida de um item</h3>
+  </div>
+<pre class="mermaid">
+stateDiagram-v2
+    [*] --> Novo
+    Novo --> EmAndamento: robô pega o item
+    EmAndamento --> Sucesso: success()
+    EmAndamento --> FalhaNegocio: fail(business)
+    EmAndamento --> FalhaAplicacao: fail(application)
+    EmAndamento --> Abandonado: trava venceu
+    EmAndamento --> Novo: release()
+    FalhaAplicacao --> Novo: ainda há tentativas
+    Abandonado --> Novo: ainda há tentativas
+    Sucesso --> [*]
+    FalhaNegocio --> [*]
+</pre>
+
+  <div class="prose">
+    <h3>Retirada atômica e trava com prazo</h3>
+    <p>Vários robôs, na mesma máquina ou em máquinas diferentes, consomem a mesma fila sem pegar o mesmo item:</p>
+  </div>
+<pre><code>UPDATE queue_items SET status = 'in_progress', locked_by_job = :job,
+       worker_slot = :slot, locked_until = now() + :lease
+WHERE id = (
+  SELECT id FROM queue_items
+  WHERE queue_id = :queue AND status = 'new'
+    AND (defer_until IS NULL OR defer_until &lt;= now())
+  ORDER BY priority DESC, created_at
+  FOR UPDATE SKIP LOCKED LIMIT 1
+) RETURNING *;</code></pre>
+  <div class="prose">
+    <p>O SDK renova <code>locked_until</code> em segundo plano enquanto o item é processado. Se a máquina cair, o prazo vence, uma tarefa interna marca o item como abandonado e ele volta para a fila. Nenhum item fica preso.</p>
+
+    <h3>Regras de nova tentativa</h3>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Situação</th><th>Exemplo</th><th>Comportamento</th></tr></thead>
+      <tbody>
+        <tr><td>Falha de aplicação</td><td>Site fora do ar, timeout no login</td><td>Volta para a fila até <code>max_retries</code>, com espera crescente.</td></tr>
+        <tr><td>Falha de negócio</td><td>Processo não localizado, CPF inválido</td><td>Não tenta de novo. Repetir não resolve. Fica visível para correção.</td></tr>
+        <tr><td>Abandonado</td><td>Máquina desligada no meio do item</td><td>Volta para a fila quando a trava vence.</td></tr>
+        <tr><td>Liberado</td><td>Execução cancelada pelo painel</td><td>Volta imediatamente, sem contar como tentativa.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="prose">
+    <h3>Concorrência com Playwright async</h3>
+    <p>Um browser por execução, um contexto por item, quantidade de tarefas definida no painel (campo <code>concurrency</code> do bot). Cada log é marcado com o item certo por meio de <code>contextvars</code>, mesmo com várias tarefas intercaladas.</p>
+  </div>
+<pre><code>async def worker(browser, fila):
+    while item := await regista.next_item(fila):
+        ctx = await browser.new_context()
+        async with regista.item_scope(item):       # trava, renovação, logs por item
+            page = await ctx.new_page()
+            try:
+                await processar(page, item)
+                await item.success(output)
+            except BusinessError as e:
+                await item.fail(e, business=True)
+            except Exception as e:
+                await item.fail(e, screenshot=await page.screenshot())
+        await ctx.close()
+
+await asyncio.gather(*(worker(browser, "acordos") for _ in range(regista.concurrency)))</code></pre>
+
+  <div class="prose">
+    <h3>Lotes e reconciliação</h3>
+    <p>Uma planilha enviada vira um lote. O robô que lê a planilha registra três números que precisam bater:</p>
+    <div class="callout"><strong>linhas lidas = itens enfileirados + linhas rejeitadas</strong>Toda linha tem um destino explicado. Nenhuma some sem motivo.</div>
+    <p>O relatório do lote usa só os dados de controle, então funciona mesmo quando o conteúdo é sensível:</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Referência</th><th>Status</th><th>Tentativas</th><th>Processado em</th><th>Motivo</th></tr></thead>
+      <tbody>
+        <tr><td>ACORDO-0041</td><td><span class="tag keep">Sucesso</span></td><td>1</td><td>01/10 09:12</td><td>—</td></tr>
+        <tr><td>ACORDO-0042</td><td><span class="tag out">Falha de negócio</span></td><td>1</td><td>01/10 09:13</td><td>Processo não localizado no site</td></tr>
+        <tr><td>ACORDO-0043</td><td><span class="tag out">Falha de aplicação</span></td><td>3</td><td>01/10 09:20</td><td>Timeout no login</td></tr>
+        <tr><td>ACORDO-0044</td><td><span class="tag swap">Não processado</span></td><td>0</td><td>—</td><td>Lote cancelado antes deste item</td></tr>
+        <tr><td>Linha 58</td><td><span class="tag swap">Rejeitada</span></td><td>—</td><td>—</td><td>Coluna “Nº do processo” vazia</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>A referência precisa ser estável: uma coluna identificadora que já exista na planilha, nunca o número da linha, que muda se o cliente reordenar o arquivo. Ao fim do lote, um passo de consolidação grava Status, Data e Mensagem na própria planilha, dentro do ambiente do cliente. Durante a execução não se escreve no arquivo, para evitar conflito entre robôs paralelos.</p>
+
+    <h3>Agendamento</h3>
+    <p>Um laço no backend calcula o próximo disparo de cada agendamento com <code>croniter</code> e cria o job no horário. Um advisory lock do Postgres garante que, com mais de uma instância da API, só uma dispare. O painel mostra o cron em linguagem natural e as próximas três execuções.</p>
+  </div>
+</section>
+
+<!-- 6 -->
+<section id="agente">
+  <div class="prose">
+    <h2><span class="n">6</span>Desenho do agente</h2>
+    <p>O agente é o único componente instalado no ambiente do cliente. Ele não abre portas, não aceita comandos arbitrários e só executa código assinado pela Artemisys.</p>
+
+    <h3>Cadastro de uma máquina</h3>
+  </div>
+<pre class="mermaid">
+sequenceDiagram
+    participant Admin as Admin (painel)
+    participant API as API Regista
+    participant Agente as Agente (máquina)
+    Admin->>API: cria máquina no pool
+    API-->>Admin: chave de registro de uso único (exibida uma vez)
+    Admin->>Agente: regista-agent enroll --key XXXX
+    Agente->>Agente: gera par de chaves Ed25519 localmente
+    Agente->>API: chave de registro + chave pública
+    API->>API: queima a chave de registro, grava a chave pública
+    API-->>Agente: machine_id
+    loop a cada requisição
+        Agente->>API: desafio assinado com a chave privada
+        API-->>Agente: token de acesso de curta duração
+    end
+</pre>
+  <div class="prose">
+    <p>A chave privada nunca sai da máquina. Um vazamento do banco do Regista não permite se passar por nenhuma máquina. Revogar uma máquina no painel corta o acesso imediatamente.</p>
+
+    <h3>Protocolo</h3>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Chamada</th><th>Quem chama</th><th>Para quê</th></tr></thead>
+      <tbody>
+        <tr><td><code>POST /agent/enroll</code></td><td>Agente</td><td>Cadastro com chave de uso único e chave pública.</td></tr>
+        <tr><td><code>POST /agent/token</code></td><td>Agente</td><td>Troca um desafio assinado por um token curto.</td></tr>
+        <tr><td><code>POST /agent/heartbeat</code></td><td>Agente</td><td>Status, versão, recursos livres.</td></tr>
+        <tr><td><code>GET /agent/jobs/next?wait=30</code></td><td>Agente</td><td>Long-polling. O Postgres <code>LISTEN/NOTIFY</code> acorda a requisição quando surge job.</td></tr>
+        <tr><td><code>GET /agent/packages/{bot}/{versão}</code></td><td>Agente</td><td>Pacote do robô com assinatura.</td></tr>
+        <tr><td><code>POST /agent/jobs/{id}/complete | fail</code></td><td>Agente</td><td>Resultado do job.</td></tr>
+        <tr><td><code>POST /agent/logs</code></td><td>Agente</td><td>Logs em lote, com item_id quando houver.</td></tr>
+        <tr><td><code>POST /agent/artifacts/presign</code></td><td>Agente</td><td>URL pré-assinada para enviar screenshot direto ao S3.</td></tr>
+        <tr><td><code>POST /queues/{fila}/items/next</code> e afins</td><td>Robô (SDK)</td><td>Pegar, renovar, concluir, falhar e liberar itens.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="prose">
+    <h3>Modos de execução</h3>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Modo</th><th>Como roda</th><th>Serve para</th></tr></thead>
+      <tbody>
+        <tr><td>Serviço</td><td>Serviço Windows (WinSW) ou systemd, com usuário dedicado sem privilégio de admin</td><td>Robôs web headless. Roda em segundo plano, sem tela.</td></tr>
+        <tr><td>Sessão de usuário</td><td>Inicia no login de um usuário dedicado, com login automático e sem bloqueio de tela</td><td>Robôs que precisam de janela visível ou de aplicativo desktop.</td></tr>
+        <tr><td>Único</td><td>Pega um job, executa e encerra</td><td>Containers (Fargate) e execução elástica, numa fase futura.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn"><strong>Por que dois modos no Windows</strong>Serviços rodam numa sessão sem área de trabalho. Playwright headless funciona ali, mas automação de janelas ou de aplicativos desktop não. Por isso o modo sessão de usuário existe desde a primeira versão.</div>
+
+  <div class="prose">
+    <h3>Execução de um robô</h3>
+    <ol class="steps">
+      <li>Recebe o job com bot, versão e parâmetros. Nunca um comando de shell.</li>
+      <li>Confere se o bot está na lista local de permitidos da máquina.</li>
+      <li>Baixa o pacote e verifica a assinatura Ed25519 com a chave pública embutida no agente.</li>
+      <li>Cria ou reaproveita o ambiente isolado daquela versão com <code>uv</code>.</li>
+      <li>Busca os segredos do job sob demanda, mantidos só em memória.</li>
+      <li>Executa com o usuário dedicado, prioridade de processo configurável e limite de concorrência.</li>
+      <li>Envia logs, artefatos e resultado. Apaga arquivos temporários.</li>
+    </ol>
+
+    <h3>Operação</h3>
+    <ul>
+      <li><strong>Autoatualização assinada:</strong> o agente baixa e valida novas versões de si mesmo.</li>
+      <li><strong>Autodiagnóstico:</strong> <code>regista-agent diagnose</code> testa conexão, proxy, certificado, permissões e versão do Python.</li>
+      <li><strong>Proxy corporativo:</strong> suportado na configuração.</li>
+      <li><strong>Log local:</strong> registro do que foi executado, quando e em qual versão, para o TI do cliente auditar.</li>
+      <li><strong>Kill switch local:</strong> o cliente suspende o agente sem depender da Artemisys.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 7 -->
+<section id="seguranca">
+  <div class="prose">
+    <h2><span class="n">7</span>Segurança nos dois sentidos</h2>
+    <p>O Regista protege os outros clientes de uma máquina comprometida e protege cada cliente de um Regista comprometido.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Ameaça</th><th>Contenção</th></tr></thead>
+      <tbody>
+        <tr><td>Máquina do cliente invadida</td><td>Credencial restrita ao próprio cliente e à própria máquina, revogável no painel.</td></tr>
+        <tr><td>Rota da API esquece o filtro de cliente</td><td>Row-Level Security no Postgres e testes automatizados de isolamento em todas as rotas.</td></tr>
+        <tr><td>Banco do Regista vaza</td><td>Chaves privadas ficam nas máquinas; segredos e payloads criptografados com chave KMS por cliente.</td></tr>
+        <tr><td>Servidor do Regista invadido</td><td>Pacotes assinados fora do servidor, nenhum comando arbitrário, lista local de bots permitidos.</td></tr>
+        <tr><td>Rede do cliente exposta</td><td>Somente conexão de saída, sem portas abertas, domínio fixo e certificado verificado.</td></tr>
+        <tr><td>Robô explorado</td><td>Usuário Windows dedicado e sem privilégio de admin.</td></tr>
+        <tr><td>Conteúdo malicioso em logs</td><td>Logs tratados como não confiáveis: limite de tamanho e exibição escapada no painel.</td></tr>
+        <tr><td>Uso indevido de conta</td><td>MFA, bloqueio por tentativas, sessões revogáveis e trilha de auditoria.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="privacidade">
+  <div class="prose">
+    <h2><span class="n">8</span>Dados do cliente</h2>
+    <p>Cada item tem duas partes. O <strong>controle</strong> (referência, status, tentativas, tempos, tipo de erro) fica sempre no Regista, porque é o que move a fila. O <strong>conteúdo</strong> segue o modo escolhido em cada fila:</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Modo</th><th>Onde fica o conteúdo</th><th>O painel mostra</th><th>Indicado para</th></tr></thead>
+      <tbody>
+        <tr><td>Referência <span class="tag new">padrão</span></td><td>No sistema do cliente. O item guarda só um ponteiro.</td><td>Referência e status</td><td>Planilhas e sistemas que já guardam os dados</td></tr>
+        <tr><td>Central</td><td>No Regista, criptografado com chave KMS do cliente</td><td>Tudo</td><td>Dados pouco sensíveis, praticidade</td></tr>
+        <tr><td>Ponta a ponta</td><td>Passa pelo Regista, cifrado com chave que só existe no ambiente do cliente</td><td>Referência e status, campos mascarados</td><td>Itens criados fora do cliente, mas sigilosos</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <h3>Vazamentos laterais tratados</h3>
+    <ul>
+      <li>Referências com identificador neutro (ACORDO-0042), nunca CPF.</li>
+      <li>O SDK mascara CPF, CNPJ e e-mail em mensagens de erro e logs.</li>
+      <li>Nas filas sensíveis, screenshots vão para o armazenamento do cliente; o Regista guarda só o link.</li>
+      <li>Campos visíveis configuráveis por fila, escolhidos pelo cliente.</li>
+      <li>Retenção: o conteúdo é apagado após o prazo da fila; o controle permanece para histórico. Ao encerrar um contrato, apagar a chave do cliente torna ilegível o que restar, inclusive em backups.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- 9 -->
+<section id="primeiro-cliente">
+  <div class="prose">
+    <h2><span class="n">9</span>Primeiro cliente: robô na estação de atendimento</h2>
+    <p>Cenário provável: um cliente simples, sem servidor, em que o processo hoje roda na máquina de quem faz o atendimento. O objetivo é automatizar sem atrapalhar o trabalho dessa pessoa. O Windows de estação (10 ou 11) não permite duas sessões interativas ao mesmo tempo, então abrir um segundo login para o robô na mesma máquina não é uma opção. A escolha depende de uma pergunta: o robô precisa de tela?</p>
+  </div>
+<pre class="mermaid">
+flowchart TD
+    A[O robô precisa de janela visível ou de aplicativo desktop?] -->|Não, é só web| B[Agente em modo serviço na própria máquina]
+    A -->|Sim| C{A máquina aguenta uma VM?}
+    C -->|Sim: 16 GB de RAM, SSD, 4 núcleos ou mais| D[VM Windows na estação com agente em modo sessão]
+    C -->|Não| E[Máquina dedicada simples ou EC2 do cliente]
+</pre>
+
+  <div class="cols">
+    <div class="card pick">
+      <h4>Caminho A: serviço em segundo plano</h4>
+      <p>Para robôs web headless. Não precisa de VM.</p>
+      <ul>
+        <li>O navegador roda sem janela e não usa mouse nem teclado.</li>
+        <li>Usuário Windows dedicado, sem admin.</li>
+        <li>Prioridade de processo abaixo do normal e concorrência 1 ou 2, para o atendente não sentir lentidão.</li>
+        <li>Menor custo e implantação mais rápida.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Caminho B: VM na própria estação</h4>
+      <p>Para robôs que precisam de tela ou de aplicativo desktop.</p>
+      <ul>
+        <li>Hyper-V já vem no Windows Pro, Enterprise e Education (não no Home). VMware Workstation é a alternativa.</li>
+        <li>A VM tem sessão própria, com login automático de um usuário dedicado; o agente sobe em modo sessão.</li>
+        <li>Exige licença Windows para a VM e memória sobrando no host.</li>
+        <li>Recursos da VM limitados para não competir com o atendente.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="prose">
+    <h3>Requisitos mínimos sugeridos</h3>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Caminho A (serviço)</th><th>Caminho B (VM)</th></tr></thead>
+      <tbody>
+        <tr><td>Memória da estação</td><td>8 GB funciona com concorrência 1</td><td>16 GB (4 a 6 GB reservados para a VM)</td></tr>
+        <tr><td>Processador</td><td>4 núcleos</td><td>4 núcleos ou mais, com virtualização ativa na BIOS</td></tr>
+        <tr><td>Disco</td><td>SSD, 10 GB livres</td><td>SSD, 60 GB livres para a VM</td></tr>
+        <tr><td>Sistema</td><td>Windows 10 ou 11</td><td>Windows 10 ou 11 Pro no host e licença para a VM</td></tr>
+        <tr><td>Rede</td><td colspan="2">Saída HTTPS liberada para o domínio do Regista, com proxy suportado se houver</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="prose">
+    <h3>Pontos para alinhar com o cliente</h3>
+    <ul>
+      <li><strong>Horário:</strong> se a máquina é desligada à noite, os agendamentos ficam dentro do expediente. Itens interrompidos voltam para a fila sozinhos, e o painel avisa quando a máquina fica sem sinal.</li>
+      <li><strong>Responsabilidade:</strong> a disponibilidade da máquina é do cliente. O Regista monitora e alerta, mas não liga o computador.</li>
+      <li><strong>Antivírus:</strong> o MSI assinado reduz bloqueios. Vale pedir ao TI, quando existir, uma exceção para a pasta do agente.</li>
+      <li><strong>Crescimento:</strong> quando o volume crescer, o mesmo robô migra para uma máquina dedicada ou para a nuvem do cliente trocando apenas o pool.</li>
+    </ul>
+
+    <h3>Implantação, passo a passo</h3>
+    <ol class="steps">
+      <li>Levantamento: o robô precisa de tela? Qual o volume diário? Em que horário a máquina fica ligada?</li>
+      <li>Escolha do caminho A ou B e conferência dos requisitos.</li>
+      <li>Criação do cliente, dos usuários (com MFA) e do pool no Regista.</li>
+      <li>Criação da máquina no painel e geração da chave de registro.</li>
+      <li>Instalação do MSI e cadastro com a chave. No caminho B, a VM é preparada antes e o cadastro acontece depois de pronta (nunca clonar uma VM já cadastrada).</li>
+      <li><code>regista-agent diagnose</code> e heartbeat verde no painel.</li>
+      <li>Publicação da versão assinada do robô e inclusão na lista de permitidos da máquina.</li>
+      <li>Lote de homologação pequeno, com conferência do relatório e da planilha devolvida.</li>
+      <li>Agendamento e alerta por e-mail ativados.</li>
+      <li>Acompanhamento na primeira semana e ajuste de concorrência.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- 10 -->
+<section id="roadmap">
+  <div class="prose">
+    <h2><span class="n">10</span>Roadmap</h2>
+    <p><strong>Dentro do MVP:</strong> autenticação com MFA e RLS, agente com cadastro e dois modos, pacotes assinados, disparo manual, filas e itens com SDK async, lotes com relatório, agendador, alerta por e-mail, painel dark, MSI assinado e deploy em VPS com HTTPS.</p>
+    <p><strong>Fora, por enquanto:</strong> containers Fargate, conector na nuvem do cliente, modo ponta a ponta, SSO, relatório em PDF e alertas por WhatsApp.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Marco</th><th>Entrega</th><th>Pronto quando</th></tr></thead>
+      <tbody>
+        <tr><td>M0</td><td>Fundação</td><td>Monorepo, CI (lint, tipos, testes), compose, migrations e RLS base rodando.</td></tr>
+        <tr><td>M1</td><td>Autenticação</td><td>Login com MFA, sessões revogáveis, papéis; teste de isolamento passando.</td></tr>
+        <tr><td>M2</td><td>Agente</td><td>Cadastro por chave, heartbeat, máquina online e offline no painel, modos serviço e sessão.</td></tr>
+        <tr><td>M3</td><td>Disparo manual</td><td>Robô de demonstração roda de ponta a ponta pelo agente, com logs no painel.</td></tr>
+        <tr><td>M4</td><td>Pacotes</td><td>Versões assinadas, verificação no agente, ambientes com <code>uv</code>, lista de permitidos.</td></tr>
+        <tr><td>M5</td><td>Filas</td><td>Itens com trava e prazo, regras de retry, SDK async, logs por item.</td></tr>
+        <tr><td>M6</td><td>Lotes</td><td>Reconciliação, relatório por referência, devolução na planilha, reprocessar falhas.</td></tr>
+        <tr><td>M7</td><td>Agenda e alertas</td><td>Cron com advisory lock, e-mail em falha e em máquina sem sinal.</td></tr>
+        <tr><td>M8</td><td>Produção</td><td>MSI assinado, VPS com Caddy e HTTPS, backup do Postgres, primeiro cliente implantado.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>Estimativa: de 10 a 15 semanas de dedicação, com o produto vendável para máquina do cliente ao fim do M6. Cada marco é feito numa branch própria, começa com um plano revisado antes do código e termina com o <code>ROADMAP.md</code> atualizado. Qualquer mudança de rumo vira uma nova ADR.</p>
+  </div>
+</section>
+
+<!-- 11 -->
+<section id="riscos" class="prose">
+  <h2><span class="n">11</span>Riscos e pendências</h2>
+  <ul>
+    <li><strong>Executável bloqueado por antivírus ou SmartScreen.</strong> Mitigação: assinatura de código do executável e do MSI desde o primeiro cliente.</li>
+    <li><strong>Robôs que precisam de tela.</strong> Exigem o modo sessão de usuário e, na estação do atendente, uma VM. Confirmar no levantamento.</li>
+    <li><strong>Licenças Windows em VMs.</strong> Precisam estar previstas na proposta comercial do caminho B.</li>
+    <li><strong>Região da infraestrutura.</strong> Decidir entre São Paulo e EUA considerando custo e a preferência do cliente por dados no Brasil.</li>
+    <li><strong>Provedor de identidade.</strong> Autenticação própria agora, preparada para SSO quando um cliente maior pedir.</li>
+    <li><strong>Escopo da v2.</strong> Manter o MVP fechado. Novidades entram como marcos depois do M8.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Regista v2, documento de arquitetura. Artemisys, <a href="https://artemisys.com.br/">artemisys.com.br</a>.</p>
+</footer>
+
+</main>
+</div>
+</body>
+</html>
