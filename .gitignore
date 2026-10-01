@@ -34,3 +34,7 @@ next-env.d.ts
 .coverage
 htmlcov/
 *.log
+
+# Gerados pelo `next dev` (instruções de agente do Next); não versionar sem decisão
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
