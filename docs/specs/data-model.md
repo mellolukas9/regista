@@ -3,7 +3,7 @@
 Convenções:
 
 - Toda tabela de cliente tem `tenant_id uuid not null` referenciando `tenants(id)`, índice que começa por `tenant_id` e política RLS (ver `security.md`).
-- Chave primária `id uuid` (v7 gerado na aplicação). `created_at` e `updated_at` em `timestamptz` UTC.
+- Chave primária `id uuid` (v7: padrão `uuidv7()` do PostgreSQL 18; gere na aplicação só quando o id for necessário antes do INSERT). `created_at` e `updated_at` em `timestamptz` UTC.
 - Enumerações como `text` com `CHECK` (mais simples de migrar que tipos `enum` do Postgres).
 - Nomes de tabelas e colunas em inglês, `snake_case`.
 

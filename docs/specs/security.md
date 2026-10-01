@@ -17,13 +17,23 @@ Princípio: **nenhum lado confia cegamente no outro.** Uma máquina de cliente c
 ALTER TABLE <tabela> ENABLE ROW LEVEL SECURITY;
 ALTER TABLE <tabela> FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY tenant_isolation ON <tabela>
-  USING (
-    tenant_id = app.current_tenant_id()
-    OR app.is_platform_admin()
-  )
+-- Políticas separadas por comando: administradores da plataforma só ampliam a LEITURA.
+CREATE POLICY tenant_select ON <tabela> FOR SELECT
+  USING (tenant_id = app.current_tenant_id() OR app.is_platform_admin());
+CREATE POLICY tenant_insert ON <tabela> FOR INSERT
   WITH CHECK (tenant_id = app.current_tenant_id());
+CREATE POLICY tenant_update ON <tabela> FOR UPDATE
+  USING (tenant_id = app.current_tenant_id())
+  WITH CHECK (tenant_id = app.current_tenant_id());
+CREATE POLICY tenant_delete ON <tabela> FOR DELETE
+  USING (tenant_id = app.current_tenant_id());
 ```
+
+Uma política única `FOR ALL` com `OR app.is_platform_admin()` no `USING` permitiria que um administrador da plataforma apagasse (`DELETE`, que não tem `WITH CHECK`) ou alterasse linhas de qualquer tenant, contrariando a ADR 0004. Por isso o `OR` existe só na política de `SELECT`. O helper `regista_api.core.rls.tenant_rls_statements(tabela)` gera exatamente este SQL; novas migrations devem usá-lo e conceder os `GRANT` explícitos por tabela (sem `DEFAULT PRIVILEGES`). O teste `test_every_tenant_table_has_forced_rls_and_policies` falha se uma tabela nascer sem o padrão.
+
+A tabela `tenants` usa `id` no lugar de `tenant_id`, só tem políticas de `SELECT` (próprio tenant ou administrador da plataforma), `INSERT` (**somente** administrador da plataforma, que é quem cria tenants) e `UPDATE` (próprio tenant). Não há `DELETE`: tenants são desativados (`is_active`), nunca apagados.
+
+Os roles são criados fora das migrations (`CREATE ROLE` exige privilégio de cluster): em dev por `infra/compose/initdb/01-roles.sh`, que os testes montam no container; em produção, no provisionamento do banco (M8). A migration roda como `regista_owner` e concede os privilégios ao `regista_app`.
 
 Funções auxiliares (schema `app`):
 

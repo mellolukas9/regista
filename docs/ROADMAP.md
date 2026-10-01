@@ -14,21 +14,21 @@ Cada marco é uma fatia vertical: termina funcionando de ponta a ponta, testado 
 
 **Objetivo:** esqueleto do monorepo com tooling, CI, banco com RLS funcionando e frontend base.
 
-- [ ] Estrutura de pastas conforme `docs/ARCHITECTURE.md`
-- [ ] Workspace `uv` na raiz com os pacotes `apps/api`, `sdk`, `agent` (Python 3.12+)
-- [ ] `apps/api`: FastAPI com `pydantic-settings`, `structlog`, endpoint `GET /health` (verifica conexão com o banco)
-- [ ] SQLAlchemy async + asyncpg + Alembic configurados
-- [ ] `infra/compose/docker-compose.dev.yml` com PostgreSQL 16+ e MinIO (S3 local)
-- [ ] Dois roles no Postgres: `regista_owner` (migrations, dono das tabelas) e `regista_app` (runtime, **sem** `BYPASSRLS`)
-- [ ] Migration inicial: tabela `tenants` + padrão de RLS documentado em `docs/specs/security.md` (incluindo `FORCE ROW LEVEL SECURITY`)
-- [ ] Helper de sessão que abre transação e executa `set_config('app.tenant_id', ..., true)` (e `app.platform_admin`)
-- [ ] Teste com Testcontainers provando o RLS: dois tenants, consulta sem `WHERE` retorna apenas linhas do tenant da sessão; sem tenant definido, retorna zero linhas
-- [ ] `apps/web`: Next.js (versão estável atual, App Router, TS strict) + Tailwind + tokens de tema de `docs/specs/frontend.md` + layout base com sidebar vazia e fonte Geist
-- [ ] Proxy de desenvolvimento no Next (`/api/*` → FastAPI) para cookies first-party
-- [ ] `sdk` e `agent`: pacotes com `pyproject`, módulo vazio e um teste trivial
-- [ ] Lint e tipos: `ruff`, `mypy`, `eslint`, `tsc`; `pre-commit`; `.editorconfig`; `.gitignore`; `.env.example`
-- [ ] CI (GitHub Actions): Python (ruff, mypy, pytest) e web (lint, typecheck, build)
-- [ ] Seção Comandos do `CLAUDE.md` conferida no PowerShell
+- [x] Estrutura de pastas conforme `docs/ARCHITECTURE.md`
+- [x] Workspace `uv` na raiz com os pacotes `apps/api`, `sdk`, `agent` (Python 3.12+)
+- [x] `apps/api`: FastAPI com `pydantic-settings`, `structlog`, endpoint `GET /health` (verifica conexão com o banco)
+- [x] SQLAlchemy async + asyncpg + Alembic configurados
+- [x] `infra/compose/docker-compose.dev.yml` com PostgreSQL 18 (o S3 local de dev fica para o M3)
+- [x] Dois roles no Postgres: `regista_owner` (migrations, dono das tabelas) e `regista_app` (runtime, **sem** `BYPASSRLS`)
+- [x] Migration inicial: tabela `tenants` + padrão de RLS documentado em `docs/specs/security.md` (incluindo `FORCE ROW LEVEL SECURITY`)
+- [x] Helper de sessão que abre transação e executa `set_config('app.tenant_id', ..., true)` (e `app.platform_admin`)
+- [x] Teste com Testcontainers provando o RLS: dois tenants, consulta sem `WHERE` retorna apenas linhas do tenant da sessão; sem tenant definido, retorna zero linhas
+- [x] `apps/web`: Next.js (versão estável atual, App Router, TS strict) + Tailwind + tokens de tema de `docs/specs/frontend.md` + layout base com sidebar vazia e fonte Geist
+- [x] Proxy de desenvolvimento no Next (`/api/*` → FastAPI) para cookies first-party
+- [x] `sdk` e `agent`: pacotes com `pyproject`, módulo vazio e um teste trivial
+- [x] Lint e tipos: `ruff`, `mypy`, `eslint`, `tsc`; `pre-commit`; `.editorconfig`; `.gitignore`; `.env.example`
+- [x] CI (GitHub Actions): Python (ruff, mypy, pytest) e web (lint, typecheck, build)
+- [x] Seção Comandos do `CLAUDE.md` conferida no PowerShell
 
 **Pronto quando:** `docker compose ... up -d`, migrations, `uv run pytest` (com o teste de RLS) e `npm run build` funcionam no Windows; `/health` responde; CI verde no GitHub.
 
@@ -70,10 +70,11 @@ Cada marco é uma fatia vertical: termina funcionando de ponta a ponta, testado 
 
 ## M3 — Disparo manual de ponta a ponta
 
+- [ ] ADR escolhendo o S3 local de dev (a MinIO foi retirada do M0) e adicioná-lo ao `docker-compose.dev.yml`
 - [ ] Tabelas `bots`, `jobs`, `job_logs` (particionada por mês)
 - [ ] `POST /jobs` pelo painel; `GET /agent/jobs/next?wait=30` com long-polling acordado por `LISTEN/NOTIFY`
 - [ ] Runner do agente executa robô a partir de pasta local **somente com flag de desenvolvimento** (assinatura vem no M4)
-- [ ] Envio de logs em lote; screenshots via URL pré-assinada (MinIO em dev, S3 em prod)
+- [ ] Envio de logs em lote; screenshots via URL pré-assinada (S3 local em dev, S3 em prod)
 - [ ] Cancelamento de job pelo painel
 - [ ] Robô de demonstração `bots/demo_busca_google` (Playwright async, pesquisa um termo e tira screenshot)
 - [ ] Status ao vivo no painel (SSE)
