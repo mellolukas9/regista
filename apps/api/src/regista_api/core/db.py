@@ -1,6 +1,9 @@
+import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -28,3 +31,26 @@ def create_engine(url: str, **kwargs: Any) -> AsyncEngine:
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(engine, expire_on_commit=False)
+
+
+@asynccontextmanager
+async def tenant_session(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    tenant_id: uuid.UUID | None = None,
+    platform_admin: bool = False,
+) -> AsyncIterator[AsyncSession]:
+    """Open a transaction scoped to a tenant (docs/specs/security.md).
+
+    `set_config(..., true)` is transaction-local, so nothing leaks to the next user of
+    the pooled connection. Commits on success and rolls back on error. With no
+    `tenant_id`, RLS returns zero rows. `platform_admin` only widens reads.
+    """
+    async with factory() as session, session.begin():
+        if tenant_id is not None:
+            await session.execute(
+                text("SELECT set_config('app.tenant_id', :tid, true)"), {"tid": str(tenant_id)}
+            )
+        if platform_admin:
+            await session.execute(text("SELECT set_config('app.platform_admin', 'on', true)"))
+        yield session
