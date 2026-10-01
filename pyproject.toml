@@ -1,0 +1,55 @@
+[project]
+name = "regista"
+version = "0.0.0"
+description = "Regista v2 workspace"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["apps/api", "sdk", "agent"]
+
+[tool.uv.sources]
+regista-api = { workspace = true }
+regista-sdk = { workspace = true }
+regista-agent = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "regista-api",
+    "regista-sdk",
+    "regista-agent",
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+    "testcontainers[postgres]>=4.15",
+    "httpx>=0.28",
+    "ruff>=0.16",
+    "mypy>=2.3",
+    "pre-commit>=4.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["apps/web", "docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+mypy_path = ["apps/api/src", "sdk/src", "agent/src"]
+explicit_package_bases = true
+files = ["apps/api", "sdk", "agent"]
+exclude = ["migrations/versions/"]
+
+[tool.pytest.ini_options]
+testpaths = ["apps/api/tests", "sdk/tests", "agent/tests"]
+addopts = "--import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
