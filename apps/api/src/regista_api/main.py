@@ -1,15 +1,17 @@
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Literal
 
 import structlog
-from fastapi import FastAPI, Request, Response, status
+from fastapi import Depends, FastAPI, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 
 from regista_api.auth.account import router as account_router
+from regista_api.auth.deps import PublicRoute
 from regista_api.auth.router import router as auth_router
 from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
@@ -57,13 +59,23 @@ def create_app(
     app = FastAPI(title="Regista API", lifespan=lifespan)
 
     @app.middleware("http")
-    async def security_headers(
+    async def http_middleware(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
+        started = time.perf_counter()
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         if _is_no_store(request.url.path):
             response.headers["Cache-Control"] = "no-store"
+        # Access log: method, path and outcome only. Secrets never travel in the URL, and
+        # bodies, headers and cookies are never logged.
+        log.info(
+            "http_request",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            ms=round((time.perf_counter() - started) * 1000, 1),
+        )
         return response
 
     app.include_router(auth_router)
@@ -78,7 +90,7 @@ def create_app(
         errors = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": errors})
 
-    @app.get("/health", response_model=HealthResponse)
+    @app.get("/health", response_model=HealthResponse, dependencies=[Depends(PublicRoute())])
     async def health(response: Response) -> HealthResponse:
         # Uses the runtime role (regista_app) with no tenant: only checks connectivity.
         try:

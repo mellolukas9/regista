@@ -48,5 +48,5 @@ def configure_logging(level: str = "INFO", *, json: bool = False) -> None:
             renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelName(level.upper())),
-        cache_logger_on_first_use=True,
+        cache_logger_on_first_use=False,
     )
