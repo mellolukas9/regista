@@ -12,6 +12,9 @@ dependencies = [
     "pydantic>=2.13",
     "pydantic-settings>=2.15",
     "structlog>=26.1",
+    "argon2-cffi>=25.1",
+    "pyotp>=2.9",
+    "cryptography>=46.0",
 ]
 
 [build-system]
