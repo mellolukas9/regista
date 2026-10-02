@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
+import { Topbar } from "./Topbar";
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const [open, setOpen] = useState(false);
@@ -16,44 +17,30 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   }, [open]);
 
   return (
-    <div className="min-h-dvh">
+    <div className="min-h-screen">
+      {/* Abaixo de 900px a sidebar vira painel lateral; fechada, sai da ordem de foco. */}
       <aside
         id="sidebar"
-        className={`fixed inset-y-0 left-0 z-30 w-[248px] border-r border-border bg-sidebar transition-transform min-[900px]:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-30 h-screen w-[248px] border-r border-border bg-sidebar transition-transform min-[900px]:translate-x-0 ${
+          open ? "translate-x-0" : "max-[899px]:invisible max-[899px]:-translate-x-full"
         }`}
       >
-        <Sidebar />
+        <Sidebar onClose={() => setOpen(false)} />
       </aside>
       {open && (
         <div
           aria-hidden
-          className="fixed inset-0 z-20 bg-black/60 min-[900px]:hidden"
+          className="fixed inset-0 z-20 bg-scrim min-[900px]:hidden"
           onClick={() => setOpen(false)}
         />
       )}
 
-      <div className="min-[900px]:pl-[248px]">
-        <header className="flex h-16 items-center gap-3 border-b border-border px-5">
-          <button
-            type="button"
-            aria-label={open ? "Fechar menu" : "Abrir menu"}
-            aria-expanded={open}
-            aria-controls="sidebar"
-            onClick={() => setOpen((value) => !value)}
-            className="grid size-11 place-items-center rounded-control border border-border-strong text-text-2 hover:bg-panel-2 min-[900px]:hidden"
-          >
-            <span aria-hidden className="text-lg leading-none">
-              ☰
-            </span>
-          </button>
-          <p className="text-sm text-muted">Regista / Início</p>
-        </header>
-        <main className="mx-auto w-full max-w-[1240px] px-5 py-8">
-          <h1 className="mb-6 text-2xl font-semibold tracking-tight">Painel</h1>
+      <main className="min-[900px]:pl-[248px]">
+        <div className="mx-auto flex max-w-[1240px] flex-col gap-6 px-10 pb-14 pt-6 max-[899px]:px-4">
+          <Topbar menuOpen={open} onMenu={() => setOpen((value) => !value)} />
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }
