@@ -16,7 +16,9 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
+from regista_api.core.config import Settings
 from regista_api.core.db import create_engine, create_session_factory, tenant_session
+from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.rls import tenant_rls_statements
 
 # The Ryuk reaper container races with Docker Desktop port publishing on Windows. The
@@ -36,6 +38,22 @@ APP_PASSWORD = "test-app"
 class DbUrls:
     owner: str
     app: str
+
+
+TEST_MASTER_KEY = LocalKeyProvider.generate_key()
+
+
+def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
+    """Settings for tests: real test database, in-memory e-mail, throwaway master key."""
+    values: dict[str, object] = {
+        "environment": "test",
+        "database_url": db_urls.app,
+        "database_owner_url": db_urls.owner,
+        "master_key": TEST_MASTER_KEY,
+        "email_backend": "memory",
+        **overrides,
+    }
+    return Settings.model_validate(values)
 
 
 @dataclass(frozen=True)

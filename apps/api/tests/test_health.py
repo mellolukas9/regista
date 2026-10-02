@@ -1,15 +1,11 @@
 from regista_api.core.config import Settings
 from regista_api.main import create_app
 
-from .conftest import DbUrls, api_client
+from .conftest import DbUrls, api_client, make_settings
 
 
 def _settings(db_urls: DbUrls, app_url: str | None = None) -> Settings:
-    return Settings(
-        environment="test",
-        database_url=app_url or db_urls.app,
-        database_owner_url=db_urls.owner,
-    )
+    return make_settings(db_urls, database_url=app_url or db_urls.app)
 
 
 async def test_health_ok_when_database_is_reachable(db_urls: DbUrls) -> None:
