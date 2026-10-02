@@ -9,12 +9,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from regista_api.auth.account import router as account_router
 from regista_api.auth.router import router as auth_router
 from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
 from regista_api.core.email import EmailSender, create_email_sender
 from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.logging import configure_logging
+from regista_api.tenants.clients import router as clients_router
+from regista_api.tenants.users import router as users_router
 
 log = structlog.get_logger()
 
@@ -64,6 +67,9 @@ def create_app(
         return response
 
     app.include_router(auth_router)
+    app.include_router(account_router)
+    app.include_router(clients_router)
+    app.include_router(users_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:

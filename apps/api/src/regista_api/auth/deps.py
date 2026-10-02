@@ -18,7 +18,6 @@ from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from fastapi import HTTPException, Request
 from sqlalchemy import text
@@ -31,17 +30,13 @@ from regista_api.auth.sessions import ALL_STAGES, SESSION_COOKIE
 from regista_api.core.config import Settings
 from regista_api.core.db import tenant_session
 from regista_api.core.email import EmailSender
+from regista_api.core.errors import api_error
 from regista_api.core.keys import KeyProvider
 from regista_api.core.security import hash_token
 
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 CSRF_HEADER = "x-csrf-token"
 _TOUCH_EVERY = timedelta(seconds=60)
-
-
-def api_error(status_code: int, code: str, **extra: Any) -> HTTPException:
-    """Errors carry a stable machine code; the panel maps it to the design-system texts."""
-    return HTTPException(status_code=status_code, detail={"code": code, **extra})
 
 
 @dataclass(frozen=True)
@@ -94,6 +89,13 @@ class Auth:
     state: AppState
     ip: str | None
     user_agent: str | None
+
+    @property
+    def client_id(self) -> uuid.UUID:
+        """The single client a write applies to; "all clients" has none (409)."""
+        if self.scope.tenant_id is None:
+            raise api_error(409, "client_context_required")
+        return self.scope.tenant_id
 
     def own(self) -> AbstractAsyncContextManager[AsyncSession]:
         """A transaction in the user's own tenant (account, MFA and session operations)."""

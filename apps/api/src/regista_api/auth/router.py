@@ -1,6 +1,5 @@
 """Login, invitation acceptance, MFA and session routes (docs/specs/security.md, ADR 0005/0017)."""
 
-import asyncio
 import uuid
 from typing import Annotated
 
@@ -16,12 +15,19 @@ from regista_api.auth.deps import (
     PublicRoute,
     Require,
     RequireStage,
-    api_error,
     get_state,
+)
+from regista_api.auth.flow import (
+    check_secret_attempt,
+    claim_step,
+    fail_attempt,
+    fresh_step,
+    limit,
+    replace_recovery_codes,
 )
 from regista_api.auth.lockout import is_locked, record_failure
 from regista_api.auth.permissions import Permission
-from regista_api.auth.rate_limit import client_ip, rate_limited
+from regista_api.auth.rate_limit import client_ip
 from regista_api.auth.schemas import (
     AcceptInvitationRequest,
     CodeRequest,
@@ -46,12 +52,11 @@ from regista_api.auth.sessions import (
     rotate_session,
 )
 from regista_api.core.db import tenant_session
+from regista_api.core.errors import api_error
 from regista_api.core.security import (
-    hash_password,
     hash_password_async,
     hash_token,
     needs_rehash,
-    new_recovery_code,
     normalize_recovery_code,
     password_problem,
     verify_password_async,
@@ -59,19 +64,13 @@ from regista_api.core.security import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-RECOVERY_CODE_COUNT = 10
-
 
 class _InvalidInvitation(Exception):
     """Raised inside a transaction to roll it back."""
 
 
 async def _limit(request: Request, scope: str, subject: str, window: int, max_hits: int) -> None:
-    state = get_state(request)
-    if await rate_limited(
-        state.factory, scope=scope, subject=subject, window_seconds=window, max_hits=max_hits
-    ):
-        raise api_error(429, "rate_limited")
+    await limit(get_state(request), scope, subject, window, max_hits)
 
 
 async def _promote(db: AsyncSession, auth: Auth, method: str) -> IssuedSession:
@@ -98,62 +97,8 @@ async def _promote(db: AsyncSession, auth: Auth, method: str) -> IssuedSession:
     return issued
 
 
-async def _fail_attempt(auth: Auth) -> None:
-    await record_failure(
-        auth.state.factory,
-        auth.state.settings,
-        tenant_id=auth.user.tenant_id,
-        user_id=auth.user.id,
-        stage=auth.session.stage,
-        ip=auth.ip,
-    )
-
-
-async def _check_mfa_attempt(request: Request, auth: Auth) -> None:
-    await _limit(request, "mfa", str(auth.session.id), 300, auth.state.settings.rate_mfa_per_5min)
-    if is_locked(auth.user.locked_until):
-        raise api_error(429, "rate_limited")
-
-
-def _totp_secret(auth: Auth) -> str:
-    user = auth.user
-    if not user.mfa_secret_enc or not user.mfa_key_id:
-        raise api_error(409, "mfa_not_configured")
-    return mfa.decrypt_secret(
-        auth.state.keys, user.tenant_id, user.id, user.mfa_secret_enc, user.mfa_key_id
-    )
-
-
-def _fresh_step(auth: Auth, code: str) -> int | None:
-    """The TOTP step if the code is valid and newer than the last accepted one."""
-    step = mfa.match_step(_totp_secret(auth), code)
-    last = auth.user.mfa_last_step
-    return step if step is not None and (last is None or step > last) else None
-
-
-async def _claim_step(db: AsyncSession, auth: Auth, step: int) -> bool:
-    """Atomically record the step; false when a concurrent request already used it."""
-    result = await db.execute(
-        text(
-            "UPDATE users SET mfa_last_step = :step, updated_at = now() WHERE id = :id"
-            " AND (mfa_last_step IS NULL OR mfa_last_step < :step) RETURNING id"
-        ),
-        {"id": auth.user.id, "step": step},
-    )
-    return result.first() is not None
-
-
-async def _replace_recovery_codes(db: AsyncSession, auth: Auth) -> list[str]:
-    codes = [new_recovery_code() for _ in range(RECOVERY_CODE_COUNT)]
-    hashes = await asyncio.to_thread(
-        lambda: [hash_password(normalize_recovery_code(c)) for c in codes]
-    )
-    await db.execute(text("DELETE FROM recovery_codes WHERE user_id = :u"), {"u": auth.user.id})
-    await db.execute(
-        text("INSERT INTO recovery_codes (tenant_id, user_id, code_hash) VALUES (:t, :u, :h)"),
-        [{"t": auth.user.tenant_id, "u": auth.user.id, "h": h} for h in hashes],
-    )
-    return codes
+async def _check_mfa_attempt(auth: Auth) -> None:
+    await check_secret_attempt(auth, "mfa", str(auth.session.id))
 
 
 # --- public routes ----------------------------------------------------------------------------
@@ -452,15 +397,15 @@ async def mfa_activate(
     response: Response,
     auth: Annotated[Auth, Depends(RequireStage("mfa_setup"))],
 ) -> RecoveryCodesResponse:
-    await _check_mfa_attempt(request, auth)
+    await _check_mfa_attempt(auth)
     if auth.user.mfa_enabled:
         raise api_error(409, "mfa_already_enabled")
-    step = _fresh_step(auth, body.code)
+    step = fresh_step(auth, body.code)
     codes: list[str] = []
     issued: IssuedSession | None = None
     if step is not None:
         async with auth.own() as db:
-            if await _claim_step(db, auth, step):
+            if await claim_step(db, auth, step):
                 await db.execute(
                     text(
                         "UPDATE users SET mfa_enabled = true, mfa_enabled_at = now(),"
@@ -468,7 +413,7 @@ async def mfa_activate(
                     ),
                     {"id": auth.user.id},
                 )
-                codes = await _replace_recovery_codes(db, auth)
+                codes = await replace_recovery_codes(db, auth)
                 issued = await rotate_session(
                     db,
                     session_id=auth.session.id,
@@ -484,7 +429,7 @@ async def mfa_activate(
                     ip=auth.ip,
                 )
     if issued is None:
-        await _fail_attempt(auth)
+        await fail_attempt(auth)
         raise api_error(401, "invalid_code")
     apply_cookies(response, auth.state.settings, issued)
     return RecoveryCodesResponse(stage="recovery_codes", recovery_codes=codes)
@@ -497,15 +442,15 @@ async def mfa_verify(
     response: Response,
     auth: Annotated[Auth, Depends(RequireStage("mfa_required"))],
 ) -> StageResponse:
-    await _check_mfa_attempt(request, auth)
-    step = _fresh_step(auth, body.code)
+    await _check_mfa_attempt(auth)
+    step = fresh_step(auth, body.code)
     issued: IssuedSession | None = None
     if step is not None:
         async with auth.own() as db:
-            if await _claim_step(db, auth, step):
+            if await claim_step(db, auth, step):
                 issued = await _promote(db, auth, "totp")
     if issued is None:
-        await _fail_attempt(auth)
+        await fail_attempt(auth)
         raise api_error(401, "invalid_code")
     apply_cookies(response, auth.state.settings, issued)
     return StageResponse(stage="active")
@@ -518,7 +463,7 @@ async def mfa_recover(
     response: Response,
     auth: Annotated[Auth, Depends(RequireStage("mfa_required"))],
 ) -> StageResponse:
-    await _check_mfa_attempt(request, auth)
+    await _check_mfa_attempt(auth)
     candidate = normalize_recovery_code(body.recovery_code)
     async with auth.own() as db:
         rows = (
@@ -549,7 +494,7 @@ async def mfa_recover(
             if used.first() is not None:
                 issued = await _promote(db, auth, "recovery_code")
     if issued is None:
-        await _fail_attempt(auth)
+        await fail_attempt(auth)
         raise api_error(401, "invalid_recovery_code")
     apply_cookies(response, auth.state.settings, issued)
     return StageResponse(stage="active")
@@ -561,7 +506,7 @@ async def reissue_recovery_codes(
 ) -> RecoveryCodesResponse:
     """The codes are shown once; if the page is reloaded before confirming, make a new set."""
     async with auth.own() as db:
-        codes = await _replace_recovery_codes(db, auth)
+        codes = await replace_recovery_codes(db, auth)
     return RecoveryCodesResponse(stage="recovery_codes", recovery_codes=codes)
 
 
