@@ -7,7 +7,7 @@ Convenções:
 - Enumerações como `text` com `CHECK` (mais simples de migrar que tipos `enum` do Postgres).
 - Nomes de tabelas e colunas em inglês, `snake_case`.
 
-O marco em que cada tabela nasce está entre parênteses.
+O marco em que cada tabela nasce está entre parênteses. Comportamentos de produto que dependem destas tabelas estão em `design-system.md`, seção 11.
 
 ## Identidade e acesso
 
@@ -20,6 +20,8 @@ O marco em que cada tabela nasce está entre parênteses.
 | data_region | text | ex.: `sa-east-1` |
 | is_active | bool | |
 
+Na interface, tenant se chama **Cliente**. Só a equipe Artemisys cria clientes (nome + e-mail do primeiro Admin do cliente, que recebe convite).
+
 A política de `tenants` usa `id` no lugar de `tenant_id`: a sessão enxerga apenas o próprio tenant, exceto administradores da plataforma.
 
 ### `users` (M1)
@@ -31,10 +33,17 @@ A política de `tenants` usa `id` no lugar de `tenant_id`: a sessão enxerga ape
 | role | text | `tenant_admin`, `operator`, `viewer` |
 | is_platform_admin | bool | equipe Artemisys |
 | mfa_secret_enc | bytea | criptografado via KeyProvider |
-| mfa_enabled | bool | |
+| mfa_enabled | bool | MFA é obrigatório para todos; `false` só até concluir o primeiro acesso |
+| status | text | `invited`, `active`, `disabled` ("Remover acesso" desativa na hora) |
 | failed_logins | int | |
 | locked_until | timestamptz | |
 | last_login_at | timestamptz | |
+
+### `invitations` (M1)
+id, tenant_id, user_id, token_hash, expires_at, used_at, created_by. O convite leva a definir senha e configurar MFA. "Reenviar convite" invalida o anterior.
+
+### `recovery_codes` (M1)
+id, tenant_id, user_id, code_hash, used_at. 10 por usuário, uso único; gerar novos invalida os anteriores.
 
 ### `sessions` (M1)
 id, tenant_id, user_id, token_hash (sha256 do token do cookie), csrf_token_hash, created_at, last_seen_at, expires_at, revoked_at, ip, user_agent, active_tenant_id (contexto escolhido por administradores da plataforma).
@@ -48,7 +57,12 @@ id, tenant_id, actor_type (`user`, `machine`, `system`), actor_id, action (ex.: 
 id, tenant_id, name, kind (`on_prem`, `client_cloud`, `internal`), description.
 
 ### `machines` (M2)
-id, tenant_id, pool_id, name, public_key (bytea, Ed25519), mode (`service`, `session`, `oneshot`), status (`pending`, `online`, `offline`, `revoked`), last_seen_at, agent_version, os_info jsonb, max_concurrency int, revoked_at.
+id, tenant_id, pool_id, name, public_key (bytea, Ed25519), mode (`service`, `session`, `oneshot`), status (`pending`, `online`, `offline`, `revoked`), last_seen_at, agent_version, os_info jsonb, max_concurrency int (paralelismo de itens dentro de uma execução), revoked_at.
+
+Regras: `offline` após **2 minutos** sem sinal; volta a `online` no próximo sinal. **Uma execução por máquina por vez.**
+
+### `machine_events` (M2)
+id, tenant_id, machine_id, kind (`enrolled`, `first_signal`, `went_offline`, `came_back`, `agent_updated`, `revoked`), metadata jsonb, created_at. Alimenta o histórico da máquina.
 
 ### `enrollment_keys` (M2)
 id, tenant_id, machine_id, key_hash, expires_at, used_at, created_by.
@@ -57,7 +71,7 @@ id, tenant_id, machine_id, key_hash, expires_at, used_at, created_by.
 id, tenant_id, pool_id, name, description, concurrency int default 1, is_active, current_version_id (M4).
 
 ### `bot_versions` (M4)
-id, tenant_id, bot_id, version text, package_sha256, signature bytea, storage_key, size_bytes, created_by.
+id, tenant_id, bot_id, version text, package_sha256, signature bytea, storage_key, size_bytes, release_note text, created_by. Só a equipe Artemisys publica versões.
 
 ### `jobs` (M3)
 | Coluna | Tipo | Notas |
@@ -72,17 +86,23 @@ id, tenant_id, bot_id, version text, package_sha256, signature bytea, storage_ke
 | started_at, finished_at | timestamptz | |
 | error_code, error_message | text | mensagem mascarada |
 | cancel_requested_at | timestamptz | |
+| short_code | text | código exibido (ex.: `exec-7f3a24`), único por tenant |
+| items_successful, items_failed, items_abandoned, items_total | int | contagem para a coluna Itens |
+
+Regras: `failed` quando qualquer item termina com falha, mesmo que o robô encerre normalmente. "Executar agora" com execução ativa do mesmo bot cria outro job `pending` (não bloqueia). Cancelar só em `pending`, `assigned` ou `running`.
 
 ### `job_logs` (M3), particionada por mês em `ts`
-tenant_id, job_id, item_id (nulo), ts, level, message (limite de tamanho), extra jsonb.
+tenant_id, job_id, item_id (nulo), item_ref (nulo), attempt (nulo), ts, level, message (limite de tamanho), extra jsonb.
 
 ### `artifacts` (M3)
-id, tenant_id, job_id, item_id, kind (`screenshot`, `file`), storage_key, size_bytes, created_at.
+id, tenant_id, job_id, item_id, attempt_id, kind (`screenshot`, `file`), storage_key, size_bytes, created_at.
 
 ## Filas
 
 ### `queues` (M5)
-id, tenant_id, name (único por tenant), data_mode (`reference`, `central`; `e2e` reservado), max_retries int default 3, lease_seconds int default 300, retention_days int default 30, visible_fields text[].
+id, tenant_id, name (único por tenant, **imutável**, formato `[a-z0-9-]+`, igual ao usado no código do robô), data_mode (`reference`, `central`; `e2e` reservado), max_attempts int default 3, lease_seconds int default 300, retention_days int default 30 (7 a 365), visible_fields text[].
+
+Só a equipe Artemisys cria filas e altera `data_mode` e `max_attempts`; o Admin do cliente altera apenas `visible_fields` e `retention_days`.
 
 ### `queue_items` (M5)
 | Coluna | Tipo | Notas |
@@ -96,8 +116,10 @@ id, tenant_id, name (único por tenant), data_mode (`reference`, `central`; `e2e
 | payload_ref | jsonb | modo `reference` (ex.: arquivo + id da linha) |
 | visible_data | jsonb | apenas campos de `visible_fields` |
 | key_id | text | chave usada na criptografia |
-| retry_count | int | |
-| exception_type | text | `business`, `application` |
+| attempt_count | int | continua contando após reprocessar |
+| failure_type | text | `business`, `application` |
+| row_number | int | linha da planilha de origem, quando veio de lote |
+| action_hint | jsonb | `{title, text}` montado pelo backend a partir do último motivo |
 | error_message | text | mascarada |
 | output | jsonb | resultado não sensível |
 | locked_by_job | uuid | |
@@ -108,13 +130,18 @@ id, tenant_id, name (único por tenant), data_mode (`reference`, `central`; `e2e
 
 Índice parcial para a retirada: `(queue_id, priority desc, created_at) where status = 'new'`.
 
+### `item_attempts` (M5)
+id, tenant_id, item_id, number, job_id, machine_id, started_at, finished_at, status (`successful`, `failed`, `abandoned`), failure_type, reason (texto curto para pessoas). Reprocessar mantém as tentativas anteriores.
+
 ### `batches` (M6)
-id, tenant_id, queue_id, source_name, source_sha256, rows_read, rows_enqueued, rows_rejected, status (`open`, `closed`, `completed`, `cancelled`), created_by, closed_at.
+id, tenant_id, queue_id, short_code (ex.: `LOTE-0012`), source_name, source_sha256, rows_read, rows_enqueued, rows_rejected, status (`open`, `closed`, `completed`, `cancelled`), created_by, closed_at.
+
+Entrada: `.xlsx` ou `.csv` até 10 MB, cabeçalho na primeira linha. "Cancelar lote" cancela só os itens ainda `new`.
 
 Restrição ao fechar: `rows_read = rows_enqueued + rows_rejected`.
 
 ### `batch_rejections` (M6)
-tenant_id, batch_id, row_ref, reason.
+tenant_id, batch_id, row_number, reference, reason_code (`duplicate_in_batch`, `empty_reference`, `already_successful`), related_row (para duplicadas).
 
 ## Agenda, alertas e segredos
 
@@ -122,7 +149,10 @@ tenant_id, batch_id, row_ref, reason.
 id, tenant_id, bot_id, cron, timezone (padrão `America/Sao_Paulo`), params jsonb, is_active, next_fire_at, last_fired_at.
 
 ### `alerts` (M7)
-id, tenant_id, target_type (`bot`, `queue`, `machine`, `tenant`), target_id, channel (`email`), destination, events text[], is_active.
+id, tenant_id, target_type (`bot`, `pool`, `queue`), target_id, event (`job_failed`, `job_pending_30m`, `machine_offline_15m`, `items_failed_or_abandoned`, `item_abandoned`), channel (`email`), destination, is_active, last_sent_at.
+
+### `notifications` (M7)
+id, tenant_id, user_id, kind, title, body, link, read_at, created_at. Mesmo conteúdo dos alertas, por usuário; guardadas por 30 dias.
 
 ### `secrets` (M5)
 id, tenant_id, name, ciphertext bytea, key_id, created_by, rotated_at. Entregues ao agente somente junto com o job que precisa deles.

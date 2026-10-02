@@ -15,8 +15,9 @@ Este repositório é a **v2**, reescrita do zero. O piloto anterior foi descarta
 - Arquitetura: `docs/ARCHITECTURE.md`
 - Decisões (por que as coisas são como são): `docs/adr/`
 - Especificações detalhadas: `docs/specs/`
+- Interface (tokens, componentes, telas, textos, permissões, decisões de produto): `docs/specs/design-system.md`
 
-Ordem de precedência em caso de conflito: ADRs > `docs/specs/` > `docs/ARCHITECTURE.md` > `docs/apresentacao/` (só apresentação). Aponte qualquer conflito encontrado em vez de escolher em silêncio.
+Ordem de precedência em caso de conflito: ADRs > `docs/specs/` (para interface, textos e permissões, `design-system.md`) > `docs/ARCHITECTURE.md` > `docs/apresentacao/` (só apresentação, com cores antigas). Aponte qualquer conflito encontrado em vez de escolher em silêncio.
 
 Trabalhe **somente no marco atual** indicado em `docs/STATUS.md`. Não antecipe funcionalidades de marcos futuros.
 
@@ -37,7 +38,7 @@ Trabalhe **somente no marco atual** indicado em `docs/STATUS.md`. Não antecipe 
 - Uma branch por marco (`m0-foundation`, `m1-auth`...). PRs pequenos.
 - IDs: UUID v7 (padrão `uuidv7()` do PostgreSQL 18; gere na aplicação só quando o id for necessário antes do INSERT). Datas: `timestamptz` em UTC; exibição em `America/Sao_Paulo`.
 - Python 3.12+, tipagem estrita (mypy), `ruff` para lint e formatação, `pytest` + Testcontainers (Postgres real) nos testes.
-- Frontend: Next.js (App Router, TypeScript strict), Tailwind, tokens de tema em `docs/specs/frontend.md`.
+- Frontend: Next.js (App Router, TypeScript strict), Tailwind v4, shadcn/ui; tokens, componentes e textos exatamente como em `docs/specs/design-system.md`.
 - **Ambiente de desenvolvimento é Windows.** Todo comando documentado precisa funcionar no PowerShell (sem Makefile, sem scripts bash obrigatórios). Docker Desktop disponível.
 
 ## Comandos

@@ -18,7 +18,7 @@ Orquestração de robôs Python + Playwright que rodam no ambiente do cliente, c
 | `docs/ROADMAP.md` | Marcos M0–M8 com critérios de pronto |
 | `docs/ARCHITECTURE.md` | Visão geral, componentes, stack e estrutura de pastas |
 | `docs/adr/` | Registro das decisões de arquitetura |
-| `docs/specs/` | Modelo de dados, orquestração, agente, segurança e frontend |
+| `docs/specs/` | Modelo de dados, orquestração, agente, segurança, frontend e design system (handoff de interface) |
 | `docs/runbooks/` | Procedimentos operacionais (implantação em cliente) |
 | `docs/apresentacao/` | Documento de apresentação da arquitetura (HTML) |
 

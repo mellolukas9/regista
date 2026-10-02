@@ -13,7 +13,7 @@ O agente só inicia conexões de saída HTTPS (443) para a API. Recebe trabalho 
 
 ## Consequências
 
-Funciona através de proxies; nenhuma regra de firewall de entrada; latência abaixo de um segundo. WebSocket/SSE podem ser adicionados depois para streaming, se necessário.
+Funciona através de proxies; nenhuma regra de firewall de entrada; latência abaixo de um segundo. WebSocket/SSE podem ser adicionados depois para streaming, se necessário. No MVP, o painel (navegador) usa polling de 15 s, sem SSE.
 
 ## Alternativas descartadas
 

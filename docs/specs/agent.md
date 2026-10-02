@@ -11,7 +11,7 @@
 5. A API valida, queima a chave de registro, grava a chave pública e responde com `machine_id`.
 6. Daqui em diante, para obter acesso: o agente pede um desafio (nonce), assina com a chave privada e troca por um **token de acesso de 15 minutos** com escopo `machine_id` + `tenant_id`.
 
-A chave privada nunca sai da máquina. Revogar a máquina no painel invalida novos tokens imediatamente e os existentes na próxima verificação (a API checa `revoked_at` em toda requisição de agente).
+A chave privada nunca sai da máquina. Revogar a máquina no painel invalida novos tokens imediatamente e os existentes na próxima verificação (a API checa `revoked_at` em toda requisição de agente); a execução em andamento nela é cancelada. Sem sinal por 2 minutos, a máquina fica `offline`. O modo (`service` ou `session`) é escolhido no cadastro da máquina e aparece no detalhe.
 
 **VMs clonadas:** o cadastro deve acontecer depois da clonagem. Uma imagem-modelo nunca contém agente cadastrado (no Windows, rodar sysprep antes de clonar).
 
