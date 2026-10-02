@@ -4,9 +4,9 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 
 ## Agora
 
-- **Marco atual:** M1 — Clientes, autenticação e usuários (branch `m1-auth`, plano aprovado em 2026-10-02)
-- **Situação:** M0 mergeado (PR #1). M1 em andamento, seguindo o plano aprovado (15 passos, cada um com verificação e commit).
-- **Próximo passo:** executar os passos do plano do M1 em ordem; PR em rascunho depois do passo 9 (CLI e seed) para a CI rodar no Linux; ao fim, `gh pr ready`, sem merge.
+- **Marco atual:** M2 — Agente: identidade e presença (o M1 está pronto; PR #2 aguardando revisão e merge pelo responsável do projeto)
+- **Situação:** M1 concluído: clientes, convites, login com MFA, sessões, seletor de cliente, permissões no servidor, varredura de isolamento automática e as telas de Login/MFA, Clientes, Usuários e Minhas sessões.
+- **Próximo passo:** depois do merge do PR #2, abrir a branch `m2-agent` a partir da `main` e planejar o M2 (leitura das ADRs 0006, 0007, 0009 e 0010 e de `docs/specs/agent.md` antes do plano, que deve ser aprovado antes de implementar).
 
 ## Decisões já aprovadas para o M0 (não perguntar de novo)
 
@@ -73,3 +73,15 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 | 2026-10-02 | M0 | Frontend alinhado ao `design-system.md`: tokens da seção 2 (azul Artemisys), Geist, shell com sidebar de 248px (itens não navegáveis), topbar (caminho, sincronização, busca e sino desabilitados) e menu recolhível abaixo de 900px; `lucide-react` adicionado. Critério de pronto conferido no Windows: 15 testes, ruff, mypy, lint, typecheck e build verdes; `/health` e `/api/health` (proxy) respondem. Sem `shadcn init` (adiado até o primeiro marco que precisar de componentes). |
 | 2026-10-02 | M1 | Branch `m1-auth` aberta. Testes da API passam a usar `httpx.AsyncClient` + `ASGITransport` (helper `api_client` em `apps/api/tests/conftest.py`, que também executa o lifespan do app) no lugar do `TestClient`; o `StarletteDeprecationWarning` do M0 deixou de aparecer. |
 | 2026-10-02 | M1 | Leitura completa e obrigatória feita (CLAUDE.md, STATUS, ROADMAP, ARCHITECTURE, ADRs 0001–0016, specs `agent`, `orchestration`, `data-model`, `security`, `frontend` e `design-system` inteiros). Plano do M1 aprovado com ajustes (ver "Decisões aprovadas para o M1"). ADR 0017 proposta. |
+| 2026-10-02 | M1 | Backend do M1 pronto (passos 2 a 9): tabelas e RLS (`0002`), funções `SECURITY DEFINER` mínimas (no PG18 o flag é ligado e restaurado dentro do corpo da função, não com `SET` na definição), fluxos de convite/senha/MFA/sessão, CSRF, bloqueio progressivo, rate limit no Postgres, auditoria, `regista-admin` e `seed-dev`. Varredura de isolamento por descoberta automática de rotas (rota sem marcador, parâmetro sem entrada no registro ou modelo sem `examples` falha o teste; checada por mutação), matriz de permissões do §4 e teste de ausência de segredos em log. CI verde no Linux. |
+| 2026-10-02 | M1 | Frontend do M1 (passos 10 a 13): shadcn/ui com os tokens do §2, telas de Login e MFA, convite, Clientes, Usuários e Minhas sessões, shell com seletor de cliente, rodapé do usuário e favicon. Conferido no navegador de ponta a ponta contra o stack de dev (convite do `estagio@` até o painel, login com TOTP, Leitor sem acesso a Usuários, equipe Artemisys entrando em um cliente), o que revelou e corrigiu a perda do token do convite no modo estrito do React. Nenhuma senha, segredo TOTP ou token apareceu no log da API. |
+
+## Desvios e escolhas do M1 para a revisão
+
+- **Reenviar convite no último Admin ativo é permitido.** O plano previa a trava também aqui, mas é o caminho de quem esqueceu a senha (e a Artemisys sempre pode fazê-lo); a trava de último Admin vale para mudar papel e remover acesso.
+- **TanStack Table v8 (8.21.3, fixada).** O `latest` do npm já é a v9, com API diferente; a v8 é a estável que a documentação do projeto assume. Migrar quando houver motivo.
+- **Textos novos** (convite, trocar senha, reenviar convite, erros) estão em `design-system.md` §12; os toasts "Cliente criado. Convite enviado para …", "Convite enviado para …", "Papel salvo", "Acesso removido", "Sessões encerradas", "Sessão encerrada", "Outras sessões encerradas" e o aviso de "Todos os clientes" em Usuários foram propostos aqui e ainda não estão no documento.
+- **Colunas de Máquinas, Bots e Última execução da tela Clientes** ficam para os marcos que criam esses dados; a cidade da sessão (GeoIP) ficou fora.
+- **"Gerar novos códigos"** mostra os códigos em `/login/recovery-codes?from=account` (como no design), mantidos só em memória.
+- **Tabela de Usuários** põe "Reenviar convite" num menu "Mais ações" para a linha ficar compacta; no mobile continua como botão.
+- **Cabeçalhos:** CSP completa de scripts fica para o M8.

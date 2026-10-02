@@ -38,19 +38,19 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 
 ## M1 — Clientes, autenticação e usuários
 
-- [ ] Tabelas `users`, `invitations`, `recovery_codes`, `sessions`, `audit_log` com RLS
-- [ ] Clientes: criação só pela equipe Artemisys (nome + e-mail do primeiro Admin do cliente, que recebe convite)
-- [ ] Convites: link de uso único → definir senha → configurar MFA; status "Convite enviado" até o primeiro acesso; "Reenviar convite"; "Remover acesso"
-- [ ] Senha com argon2id; bloqueio progressivo após tentativas erradas; rate limit no login
-- [ ] Sessão no servidor com cookie httpOnly, `Secure`, `SameSite=Lax`; proteção CSRF nas rotas que alteram dados
-- [ ] MFA por TOTP obrigatório para todos, com 10 códigos de recuperação de uso único
-- [ ] Papéis: `tenant_admin`, `operator`, `viewer` + flag `is_platform_admin` (equipe Artemisys)
-- [ ] Seletor de cliente para a equipe Artemisys (cookie `rg_client` validado pela API; vazio = "Todos os clientes", leitura consolidada)
-- [ ] Permissões por papel aplicadas no servidor conforme a matriz de `design-system.md` §4
-- [ ] Sem redefinição de senha por autoatendimento no MVP ("Reenviar convite" cobre o caso; ver decisões em aberto). E-mails impressos no console em dev
-- [ ] Revogação de sessões (minhas sessões / todas)
-- [ ] Fixture de teste que roda **toda rota autenticada** contra outro tenant e espera 404/403
-- [ ] Frontend: Login e MFA (7.1), Clientes (7.16), Usuários (7.17), Minhas sessões (7.18), shell autenticado com seletor de cliente
+- [x] Tabelas `users`, `invitations`, `recovery_codes`, `sessions`, `audit_log` com RLS
+- [x] Clientes: criação só pela equipe Artemisys (nome + e-mail do primeiro Admin do cliente, que recebe convite)
+- [x] Convites: link de uso único → definir senha → configurar MFA; status "Convite enviado" até o primeiro acesso; "Reenviar convite"; "Remover acesso"
+- [x] Senha com argon2id; bloqueio progressivo após tentativas erradas; rate limit no login
+- [x] Sessão no servidor com cookie httpOnly, `Secure`, `SameSite=Lax`; proteção CSRF nas rotas que alteram dados
+- [x] MFA por TOTP obrigatório para todos, com 10 códigos de recuperação de uso único
+- [x] Papéis: `tenant_admin`, `operator`, `viewer` + flag `is_platform_admin` (equipe Artemisys)
+- [x] Seletor de cliente para a equipe Artemisys (cookie `rg_client` validado pela API; vazio = "Todos os clientes", leitura consolidada)
+- [x] Permissões por papel aplicadas no servidor conforme a matriz de `design-system.md` §4
+- [x] Sem redefinição de senha por autoatendimento no MVP ("Reenviar convite" cobre o caso; ver decisões em aberto). E-mails impressos no console em dev
+- [x] Revogação de sessões (minhas sessões / todas)
+- [x] Fixture de teste que roda **toda rota autenticada** contra outro tenant e espera 404/403
+- [x] Frontend: Login e MFA (7.1), Clientes (7.16), Usuários (7.17), Minhas sessões (7.18), shell autenticado com seletor de cliente
 
 **Pronto quando:** login com MFA funciona no painel; teste de isolamento cobre todas as rotas; nenhuma senha, segredo TOTP ou token de sessão aparece em log.
 
