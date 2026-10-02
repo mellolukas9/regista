@@ -84,6 +84,7 @@ async def test_invitation_to_active_session(env: Env, seed: object, owner_factor
         "mfa_enabled": False,
         "mfa_enabled_at": None,
         "recovery_codes_remaining": None,
+        "context": None,
     }
 
     setup = await env.client.post("/auth/mfa/setup", headers=csrf(env.client))

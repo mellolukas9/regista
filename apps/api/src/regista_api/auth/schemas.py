@@ -5,6 +5,7 @@ from them (a model without examples fails that test on purpose).
 """
 
 import re
+import uuid
 from datetime import datetime
 from typing import Annotated
 
@@ -73,6 +74,22 @@ class RecoveryCodeRequest(_Request):
     recovery_code: Code
 
 
+class ContextRequest(_Request):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"examples": [{"client_id": "00000000-0000-0000-0000-000000000000"}]},
+    )
+    client_id: uuid.UUID | None
+
+
+class ContextInfo(BaseModel):
+    """The client the panel is working on. `all_clients` is the consolidated, read-only view."""
+
+    all_clients: bool
+    client_id: str | None = None
+    client_name: str | None = None
+
+
 class StageResponse(BaseModel):
     stage: str
 
@@ -102,3 +119,4 @@ class MeResponse(BaseModel):
     mfa_enabled: bool = False
     mfa_enabled_at: datetime | None = None
     recovery_codes_remaining: int | None = None
+    context: ContextInfo | None = None

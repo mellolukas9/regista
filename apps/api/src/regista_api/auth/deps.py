@@ -6,11 +6,16 @@ finds routes and their markers by walking `app.routes`, so a route without a mar
 - `PublicRoute`: no session (login, invitation).
 - `RequireStage(...)`: a session in one of the given stages (partial login steps, `/auth/me`).
 - `SelfService`: an active session, any role (own account).
+- `Require(permission)`: an active session whose role holds the permission.
+
+`Auth.scope` is the client the request works on (see `auth/context.py`); handlers read with
+`auth.scoped()`, write with `auth.writing()` and touch the user's own account with `auth.own()`.
 """
 
 import hmac
 import uuid
-from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -19,6 +24,8 @@ from fastapi import HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from regista_api.auth.context import ClientScope, resolve_scope
+from regista_api.auth.permissions import Permission, has_permission
 from regista_api.auth.rate_limit import client_ip
 from regista_api.auth.sessions import ALL_STAGES, SESSION_COOKIE
 from regista_api.core.config import Settings
@@ -83,6 +90,7 @@ class SessionInfo:
 class Auth:
     user: CurrentUser
     session: SessionInfo
+    scope: ClientScope
     state: AppState
     ip: str | None
     user_agent: str | None
@@ -90,6 +98,27 @@ class Auth:
     def own(self) -> AbstractAsyncContextManager[AsyncSession]:
         """A transaction in the user's own tenant (account, MFA and session operations)."""
         return tenant_session(self.state.factory, tenant_id=self.user.tenant_id)
+
+    def scoped(self) -> AbstractAsyncContextManager[AsyncSession]:
+        """A transaction for reading in the current client context.
+
+        A client user (or a platform admin who picked a client) is bound to one tenant by RLS.
+        "All clients" gets the platform-admin read flag instead, which RLS only honours for
+        SELECT.
+        """
+        return tenant_session(
+            self.state.factory,
+            tenant_id=self.scope.tenant_id,
+            platform_admin=self.scope.all_clients,
+        )
+
+    @asynccontextmanager
+    async def writing(self) -> AsyncIterator[AsyncSession]:
+        """A transaction for writing in the current client. "All clients" is read-only."""
+        if self.scope.tenant_id is None:
+            raise api_error(409, "client_context_required")
+        async with tenant_session(self.state.factory, tenant_id=self.scope.tenant_id) as db:
+            yield db
 
 
 _USER_SQL = text(
@@ -105,7 +134,9 @@ def _unauthorized() -> HTTPException:
     return api_error(401, "not_authenticated")
 
 
-async def authenticate(request: Request, stages: tuple[str, ...]) -> Auth:
+async def authenticate(
+    request: Request, stages: tuple[str, ...], permission: Permission | None = None
+) -> Auth:
     state = get_state(request)
     settings = state.settings
     token = request.cookies.get(SESSION_COOKIE)
@@ -153,6 +184,18 @@ async def authenticate(request: Request, stages: tuple[str, ...]) -> Auth:
     if found["stage"] not in stages:
         raise api_error(403, "session_stage", stage=found["stage"])
 
+    if permission is not None and not has_permission(
+        role=row["role"], is_platform_admin=row["is_platform_admin"], permission=permission
+    ):
+        raise api_error(403, "forbidden")
+
+    scope = await resolve_scope(
+        request,
+        state.factory,
+        is_platform_admin=row["is_platform_admin"],
+        own_tenant_id=row["tenant_id"],
+        own_tenant_name=row["tenant_name"],
+    )
     user = CurrentUser(
         id=row["id"],
         tenant_id=row["tenant_id"],
@@ -176,6 +219,7 @@ async def authenticate(request: Request, stages: tuple[str, ...]) -> Auth:
         session=SessionInfo(
             id=found["session_id"], stage=found["stage"], last_seen_at=found["last_seen_at"]
         ),
+        scope=scope,
         state=state,
         ip=client_ip(request, settings),
         user_agent=request.headers.get("user-agent"),
@@ -216,3 +260,15 @@ class SelfService(RequireStage):
 
     def __init__(self) -> None:
         super().__init__("active")
+
+
+class Require(RouteMarker):
+    """Active session whose role grants `permission` (403 `forbidden` otherwise)."""
+
+    kind = "permission"
+
+    def __init__(self, permission: Permission) -> None:
+        self.permission = permission
+
+    async def __call__(self, request: Request) -> Auth:
+        return await authenticate(request, ("active",), self.permission)

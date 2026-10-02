@@ -10,18 +10,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from regista_api.audit import service as audit
 from regista_api.auth import mfa
+from regista_api.auth.context import ALL_CLIENTS, ClientScope, selectable_client
 from regista_api.auth.deps import (
     Auth,
     PublicRoute,
+    Require,
     RequireStage,
     api_error,
     get_state,
 )
 from regista_api.auth.lockout import is_locked, record_failure
+from regista_api.auth.permissions import Permission
 from regista_api.auth.rate_limit import client_ip, rate_limited
 from regista_api.auth.schemas import (
     AcceptInvitationRequest,
     CodeRequest,
+    ContextInfo,
+    ContextRequest,
     InvitationInspectResponse,
     InvitationTokenRequest,
     LoginRequest,
@@ -32,6 +37,7 @@ from regista_api.auth.schemas import (
     StageResponse,
 )
 from regista_api.auth.sessions import (
+    CLIENT_COOKIE,
     IssuedSession,
     apply_cookies,
     clear_cookies,
@@ -346,7 +352,56 @@ async def me(auth: Annotated[Auth, Depends(RequireStage())]) -> MeResponse:
         mfa_enabled=user.mfa_enabled,
         mfa_enabled_at=user.mfa_enabled_at,
         recovery_codes_remaining=remaining,
+        context=_scope_info(auth.scope),
     )
+
+
+def _scope_info(scope: ClientScope) -> ContextInfo:
+    return ContextInfo(
+        all_clients=scope.all_clients,
+        client_id=str(scope.tenant_id) if scope.tenant_id else None,
+        client_name=scope.name,
+    )
+
+
+@router.put("/context", response_model=ContextInfo)
+async def set_context(
+    body: ContextRequest,
+    response: Response,
+    auth: Annotated[Auth, Depends(Require(Permission.CLIENTS_VIEW_ALL))],
+) -> ContextInfo:
+    """Platform admins pick the client they work on (null = all clients)."""
+    s = auth.state.settings
+    if body.client_id is None:
+        scope = ALL_CLIENTS
+        response.delete_cookie(
+            CLIENT_COOKIE, path="/", secure=s.cookie_secure, httponly=True, samesite="lax"
+        )
+    else:
+        selected = await selectable_client(auth.state.factory, body.client_id)
+        if selected is None:
+            raise api_error(404, "client_not_found")
+        scope = selected
+        response.set_cookie(
+            CLIENT_COOKIE,
+            str(body.client_id),
+            max_age=s.session_absolute_days * 86400,
+            secure=s.cookie_secure,
+            httponly=True,
+            samesite="lax",
+            path="/",
+        )
+    async with auth.own() as db:
+        await audit.record(
+            db,
+            tenant_id=auth.user.tenant_id,
+            actor_type="user",
+            actor_id=auth.user.id,
+            action="auth.context_changed",
+            metadata={"client_id": str(scope.tenant_id) if scope.tenant_id else None},
+            ip=auth.ip,
+        )
+    return _scope_info(scope)
 
 
 @router.post("/logout", status_code=204)
