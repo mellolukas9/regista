@@ -2,13 +2,16 @@ import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+import httpx
 import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
@@ -39,6 +42,15 @@ class DbUrls:
 class Seed:
     tenant_a: uuid.UUID
     tenant_b: uuid.UUID
+
+
+@asynccontextmanager
+async def api_client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    """Runs the app lifespan (ASGITransport doesn't) and yields a client bound to it."""
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
 
 
 @pytest.fixture(scope="session")
