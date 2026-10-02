@@ -109,7 +109,16 @@
     box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent-text);
   }
   .tabular { font-variant-numeric: tabular-nums; }
+  /* Tailwind v4 usa currentColor por padrão; as bordas do sistema têm token próprio. */
+  *, ::before, ::after { border-color: var(--color-border); }
 }
+
+/* Skeleton (design-system.md §5): shimmer entre panel-active e #1E242D. */
+@keyframes skeleton-shimmer {
+  0%, 100% { background-color: var(--color-panel-active); }
+  50% { background-color: #1E242D; }
+}
+.animate-skeleton { animation: skeleton-shimmer 1.4s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-dot, .animate-skeleton { animation: none !important; }
