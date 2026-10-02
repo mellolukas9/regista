@@ -1062,7 +1062,56 @@ As telas assumem os comportamentos abaixo. Eles precisam existir na API e no age
 Estas escolhas estão nos itens acima como padrão, mas ainda não foram validadas:
 
 1. **Limite de "Sem sinal":** 2 min para o status. O alerta só sai depois de 15 min.
-2. **Senha esquecida:** não há fluxo de autoatendimento. Proposta: o Admin do cliente (ou a Artemisys) usa "Reenviar convite", que permite definir nova senha. O texto do login já orienta a falar com o administrador.
+2. **Senha esquecida (decidido no M1):** não há fluxo de autoatendimento. O Admin do cliente (ou a Artemisys) usa "Reenviar convite", que invalida a senha e o MFA atuais, encerra as sessões e obriga a definir senha e MFA de novo. O texto do login já orienta a falar com o administrador.
 3. **Concorrência:** uma execução por máquina. Execuções do mesmo bot podem rodar em paralelo se houver mais de uma máquina livre no pool.
 4. **Limites de retenção:** proposta de 7 a 365 dias.
 5. **Notificações:** guardadas por 30 dias.
+
+---
+
+## 12. Textos complementares do M1
+
+Telas e estados que o M1 precisa e que as seções 7 e 9 não trazem. Mesma regra: usar exatamente estes textos.
+
+**Convite — `/invite` (token no fragmento da URL)**
+- Título "Crie sua senha", subtítulo "Você vai entrar no Regista com o e-mail <e-mail> e esta senha."
+- Campos "Nova senha" (ajuda "Pelo menos 12 caracteres. Evite senhas comuns.") e "Repita a senha"; botão "Criar senha".
+- Convite inválido: "Este convite não vale mais" / "O link expirou ou já foi usado. Peça um novo convite ao administrador do seu escritório."
+
+**Erros de senha**
+- "Use pelo menos 12 caracteres." · "Essa senha é muito comum. Escolha outra." · "As senhas não são iguais." · "A nova senha precisa ser diferente da atual." · "Senha atual incorreta."
+
+**Login bloqueado ou com limite de tentativas** (banner danger)
+- "Muitas tentativas" / "Espere alguns minutos e tente de novo. Se esqueceu a senha, peça ao administrador do seu escritório."
+
+**Código de recuperação — `/login/mfa`**
+- Título "Use um código de recuperação", subtítulo "Digite um dos códigos que você guardou ao ativar a verificação. Cada um funciona uma vez."
+- Campo "Código de recuperação", botão "Confirmar", link "Usar o app autenticador".
+- Erro "Código de recuperação inválido ou já usado."
+
+**Usuários (7.17)**
+- Ação "Reenviar convite" na linha (oculta na própria linha).
+- AlertDialog "Reenviar convite para <e-mail>?" / "A senha e a verificação em duas etapas atuais deixam de valer e a pessoa sai de todos os aparelhos. Ela recebe um e-mail para criar uma nova senha. Robôs em execução não param." / "Voltar" + "Reenviar convite". Para convite pendente: "O link anterior deixa de valer e a pessoa recebe um novo e-mail."
+- Toast "Convite reenviado".
+- Erros: "Esta pessoa já tem acesso a este cliente." · "Este e-mail já é usado em outra conta do Regista. Use outro e-mail." · "O cliente precisa de pelo menos um Admin do cliente ativo."
+
+**Minhas sessões (7.18)**
+- A lista mostra aparelho, navegador e "ativa agora" / "último uso há X". A cidade aproximada fica para depois (exige GeoIP).
+- "Configurar MFA" no menu do rodapé leva ao card "Verificação em duas etapas".
+- Card "Senha": "Ao trocar, você continua conectado aqui e sai dos outros aparelhos." + ação "Trocar senha".
+- Dialog "Trocar senha": campos "Senha atual", "Nova senha" (mesma ajuda do convite), "Repita a nova senha", "Código de 6 dígitos que aparece no app"; botões "Voltar" + "Trocar senha". Toast "Senha alterada. Os outros aparelhos foram desconectados."
+- Dialog "Gerar novos códigos de recuperação?" / "Os códigos atuais deixam de valer. Confirme sua senha para continuar." / campo "Senha" / "Voltar" + "Gerar novos códigos".
+- AlertDialog "Encerrar todas as outras sessões?" / "Os outros aparelhos saem do Regista e precisam entrar de novo. Robôs em execução não param." / "Voltar" + "Encerrar todas as outras".
+
+**Clientes (7.16) no M1:** só as colunas Cliente (+ "desde"), Usuários e "Entrar no cliente"; Máquinas, Bots, Última execução e Atenção entram nos marcos que criam esses dados.
+
+**Sem acesso (EmptyState `forbidden`)**
+- "Você não tem acesso a esta tela" / "Se precisar dela, peça ao administrador do seu escritório."
+
+**Erros de lista**
+- "Não foi possível carregar os clientes" / "…os usuários" / "…as sessões", com "O servidor não respondeu. Tente de novo em alguns segundos." e a ação "Tentar de novo".
+
+**E-mails**
+- "Seu acesso ao Regista": convite com o link e a validade de 7 dias.
+- "Novo convite para o Regista": o link anterior deixa de valer.
+- "Sua senha do Regista foi alterada": "Se não foi você, fale com o administrador do seu escritório."

@@ -68,7 +68,10 @@ Regras:
 - CSRF: token por sessão enviado no header `X-CSRF-Token` em toda requisição que altera dados.
 - MFA por TOTP (`pyotp`) **obrigatório para todos os usuários**; 10 códigos de recuperação de uso único (gerar novos invalida os anteriores e exige confirmar a senha).
 - Entrada de usuários só por **convite** (link com token de uso único → definir senha → configurar MFA). Não há autocadastro.
-- Senha esquecida: sem autoatendimento no MVP; o Admin do cliente (ou a Artemisys) usa "Reenviar convite" (decisão a confirmar, `design-system.md` §11.8).
+- Senha esquecida: sem autoatendimento no MVP; o Admin do cliente (ou a Artemisys) usa "Reenviar convite", que invalida senha, MFA, códigos e sessões (ADR 0017).
+- Troca de senha pelo próprio usuário exige senha atual, nova senha e código TOTP; encerra as outras sessões.
+- Busca antes do tenant (login, convite, sessão, rate limit): funções `SECURITY DEFINER` mínimas, `search_path` fixo, `EXECUTE` só para `regista_app`; nada de role owner nem `BYPASSRLS` na aplicação (ADR 0017).
+- Respostas de `/auth/*` e `/account/*` levam `Cache-Control: no-store`; a API envia `X-Content-Type-Options: nosniff`.
 - "Remover acesso" desativa o usuário e encerra as sessões na hora. Encerrar sessões nunca interrompe robôs.
 - Bloqueio progressivo após tentativas erradas e rate limit por IP e por e-mail no login.
 - Sessões revogáveis; expiração por inatividade e absoluta.

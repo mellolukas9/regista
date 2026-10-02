@@ -19,6 +19,7 @@ O marco em que cada tabela nasce está entre parênteses. Comportamentos de prod
 | slug | text unique | |
 | data_region | text | ex.: `sa-east-1` |
 | is_active | bool | |
+| is_internal | bool | tenant da equipe Artemisys (M1): só um, nunca desativado, oculto de listas, seletor e visões consolidadas |
 
 Na interface, tenant se chama **Cliente**. Só a equipe Artemisys cria clientes (nome + e-mail do primeiro Admin do cliente, que recebe convite).
 
@@ -28,28 +29,35 @@ A política de `tenants` usa `id` no lugar de `tenant_id`: a sessão enxerga ape
 | Coluna | Tipo | Notas |
 |---|---|---|
 | tenant_id | uuid | |
-| email | citext | único por tenant |
-| password_hash | text | argon2id |
+| email | citext | **único global** (ADR 0017) |
+| password_hash | text | argon2id; nulo até definir a senha |
+| display_name | text | nome exibido; só para a equipe Artemisys |
 | role | text | `tenant_admin`, `operator`, `viewer` |
-| is_platform_admin | bool | equipe Artemisys |
-| mfa_secret_enc | bytea | criptografado via KeyProvider |
+| is_platform_admin | bool | equipe Artemisys; só no tenant interno, e todo usuário dele é platform admin (trigger) |
+| mfa_secret_enc | bytea | criptografado via KeyProvider (AAD = tenant_id\|user_id) |
+| mfa_key_id | text | chave usada na criptografia |
+| mfa_enabled_at | timestamptz | |
+| mfa_last_step | bigint | último passo TOTP aceito (impede reuso do código) |
 | mfa_enabled | bool | MFA é obrigatório para todos; `false` só até concluir o primeiro acesso |
-| status | text | `invited`, `active`, `disabled` ("Remover acesso" desativa na hora) |
+| status | text | `invited` (convite não aceito), `active` (senha definida), `disabled` ("Remover acesso" desativa na hora) |
 | failed_logins | int | |
 | locked_until | timestamptz | |
 | last_login_at | timestamptz | |
 
 ### `invitations` (M1)
-id, tenant_id, user_id, token_hash, expires_at, used_at, created_by. O convite leva a definir senha e configurar MFA. "Reenviar convite" invalida o anterior.
+id, tenant_id, user_id, token_hash, expires_at, used_at, created_by. O convite leva a definir senha e configurar MFA (validade padrão de 7 dias; `revoked_at` quando substituído). "Reenviar convite" invalida o anterior, a senha, o MFA, os códigos de recuperação e as sessões do usuário.
 
 ### `recovery_codes` (M1)
 id, tenant_id, user_id, code_hash, used_at. 10 por usuário, uso único; gerar novos invalida os anteriores.
 
 ### `sessions` (M1)
-id, tenant_id, user_id, token_hash (sha256 do token do cookie), csrf_token_hash, created_at, last_seen_at, expires_at, revoked_at, ip, user_agent, active_tenant_id (contexto escolhido por administradores da plataforma).
+id, tenant_id, user_id, token_hash (sha256 do token do cookie), csrf_token_hash, created_at, last_seen_at, expires_at, revoked_at, ip, user_agent, stage (`mfa_required`, `mfa_setup`, `recovery_codes`, `active`). O contexto de cliente do admin da plataforma vem só do cookie `rg_client`.
 
 ### `audit_log` (M1)
-id, tenant_id, actor_type (`user`, `machine`, `system`), actor_id, action (ex.: `job.triggered`, `machine.revoked`), target_type, target_id, metadata jsonb, ip, created_at. Somente inserção (o role da aplicação não tem `UPDATE`/`DELETE`).
+id, tenant_id, actor_type (`user`, `machine`, `system`), actor_id, action (ex.: `job.triggered`, `machine.revoked`), target_type, target_id, metadata jsonb, ip, created_at. Somente inserção: o role da aplicação tem apenas `INSERT` (sem `SELECT`, `UPDATE` nem `DELETE`).
+
+### `auth_rate_limits` (M1)
+key_hash bytea, window_start, count; PK `(key_hash, window_start)`. Sem `tenant_id` (dado de plataforma). Nenhum grant ao `regista_app`: só a função `app.rate_limit_hit` acessa.
 
 ## Execução
 
