@@ -25,7 +25,12 @@ export default function InvitePage() {
   const [repeat, setRepeat] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const started = useRef(false);
+
   useEffect(() => {
+    // O efeito roda duas vezes em dev (modo estrito): a segunda já não encontra o fragmento.
+    if (started.current) return;
+    started.current = true;
     token.current = window.location.hash.replace(/^#/, "");
     window.history.replaceState(null, "", window.location.pathname);
     if (!token.current) {

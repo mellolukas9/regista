@@ -97,9 +97,9 @@ export function DataTable<T>({
   const pageCount = Math.max(1, Math.ceil(rowCount / state.perPage));
 
   return (
-    <div className="grid gap-3">
+    <div className="grid min-w-0 grid-cols-1 gap-3">
       {/* Desktop */}
-      <div className={cn("max-[899px]:hidden", isFetching && !isLoading && "opacity-50")}>
+      <div className={cn("min-w-0 max-[899px]:hidden", isFetching && !isLoading && "opacity-50")}>
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((group) => (

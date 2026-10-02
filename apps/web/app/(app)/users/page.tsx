@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Search } from "lucide-react";
+import { MoreHorizontal, Search } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DataTable } from "@/components/DataTable";
@@ -20,6 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { RadioCard, RadioGroup } from "@/components/ui/radio-group";
 import { api } from "@/lib/api";
@@ -312,7 +318,7 @@ function RowActions({
 }: Readonly<{ user: User; onAction: (action: Action) => void; stacked?: boolean }>) {
   const size = stacked ? "lg" : "default";
   return (
-    <div className={stacked ? "grid gap-2" : "flex flex-wrap justify-end gap-2"}>
+    <div className={stacked ? "grid gap-2" : "flex flex-nowrap items-center justify-end gap-2"}>
       <Button
         variant="secondary"
         size={size}
@@ -329,11 +335,26 @@ function RowActions({
       >
         Encerrar sessões
       </Button>
-      {!user.is_self && (
-        <Button variant="secondary" size={size} onClick={() => onAction({ kind: "reinvite", user })}>
-          Reenviar convite
-        </Button>
-      )}
+      {!user.is_self &&
+        (stacked ? (
+          <Button variant="secondary" size={size} onClick={() => onAction({ kind: "reinvite", user })}>
+            Reenviar convite
+          </Button>
+        ) : (
+          // Na tabela, a terceira ação cabe num menu para a linha continuar com 56px.
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" size="icon" aria-label={`Mais ações para ${user.email}`}>
+                <MoreHorizontal aria-hidden className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => onAction({ kind: "reinvite", user })}>
+                Reenviar convite
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ))}
     </div>
   );
 }
