@@ -36,7 +36,7 @@ O painel nunca fala com o agente. O agente nunca fala com o banco. Toda regra de
 | API (`apps/api`) | Artemisys | Autenticação, regras de negócio, distribuição de jobs e itens, agendador, alertas |
 | PostgreSQL | Artemisys | Estado de tudo, com RLS por tenant |
 | Tarefas internas (Procrastinate) | Artemisys | Alertas, itens abandonados, máquinas offline, consolidação, retenção |
-| S3 + KMS | AWS (MinIO em dev) | Artefatos por URL pré-assinada; chaves de criptografia por tenant |
+| S3 + KMS | AWS (S3 local compatível em dev, definido no M3) | Artefatos por URL pré-assinada; chaves de criptografia por tenant |
 | Agente (`agent`) | Cliente | Identidade da máquina, heartbeat, busca de jobs, execução isolada, envio de logs |
 | SDK (`sdk`) | Dentro do robô e do agente | API dos robôs: itens, lotes, logs |
 
@@ -48,8 +48,8 @@ O painel nunca fala com o agente. O agente nunca fala com o banco. Toda regra de
 | Tarefas internas | Procrastinate (sobre Postgres) |
 | Agendamento | croniter + `pg_advisory_lock` |
 | Criptografia | `cryptography` (Ed25519, AES-GCM), argon2-cffi, pyotp; AWS KMS em produção |
-| Banco | PostgreSQL 16+ |
-| Frontend | Next.js (App Router, TS strict), Tailwind, shadcn/ui, TanStack Query e Table, Recharts, fonte Geist |
+| Banco | PostgreSQL 18 (`uuidv7()` nativo) |
+| Frontend | Next.js (App Router, TS strict), Tailwind v4, shadcn/ui, TanStack Query e Table, Recharts, lucide-react, fonte Geist (ver `docs/specs/design-system.md`) |
 | Agente | Python 3.12+, httpx, uv (ambientes por versão de robô), PyInstaller + WinSW + WiX (MSI) |
 | Robôs | Python + Playwright (API async) |
 | Testes | pytest, Testcontainers (Postgres real), pytest-asyncio |
@@ -127,4 +127,5 @@ regista/
 - `docs/specs/orchestration.md` — jobs, itens, retry, lotes, agendamento
 - `docs/specs/agent.md` — cadastro, protocolo, modos, execução
 - `docs/specs/security.md` — RLS, autenticação, ameaças, modos de dados
-- `docs/specs/frontend.md` — tema, telas e componentes
+- `docs/specs/frontend.md` — como usar o handoff e telas por marco
+- `docs/specs/design-system.md` — handoff de interface (tokens, componentes, telas, textos, decisões de produto)

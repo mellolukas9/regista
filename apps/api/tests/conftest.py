@@ -1,0 +1,135 @@
+import asyncio
+import os
+import uuid
+from collections.abc import AsyncIterator, Iterator
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+import pytest_asyncio
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from testcontainers.community.postgres import PostgresContainer
+
+from regista_api.core.db import create_engine, create_session_factory, tenant_session
+from regista_api.core.rls import tenant_rls_statements
+
+# The Ryuk reaper container races with Docker Desktop port publishing on Windows. The
+# container below is stopped by its context manager instead.
+os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+INITDB_SCRIPT = REPO_ROOT / "infra" / "compose" / "initdb" / "01-roles.sh"
+ALEMBIC_INI = REPO_ROOT / "apps" / "api" / "alembic.ini"
+
+SUPERUSER_PASSWORD = "test-superuser"
+OWNER_PASSWORD = "test-owner"
+APP_PASSWORD = "test-app"
+
+
+@dataclass(frozen=True)
+class DbUrls:
+    owner: str
+    app: str
+
+
+@dataclass(frozen=True)
+class Seed:
+    tenant_a: uuid.UUID
+    tenant_b: uuid.UUID
+
+
+@pytest.fixture(scope="session")
+def db_urls() -> Iterator[DbUrls]:
+    """Real Postgres 18; roles are created by the same init script used in dev."""
+    container = (
+        PostgresContainer(
+            "postgres:18",
+            username="postgres",
+            password=SUPERUSER_PASSWORD,
+            dbname="regista",
+            driver=None,
+        )
+        .with_env("REGISTA_OWNER_PASSWORD", OWNER_PASSWORD)
+        .with_env("REGISTA_APP_PASSWORD", APP_PASSWORD)
+        .with_volume_mapping(str(INITDB_SCRIPT), "/docker-entrypoint-initdb.d/01-roles.sh", "ro")
+    )
+    with container:
+        host = container.get_container_host_ip()
+        port = container.get_exposed_port(5432)
+
+        def url(user: str, password: str) -> str:
+            return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/regista"
+
+        yield DbUrls(
+            owner=url("regista_owner", OWNER_PASSWORD), app=url("regista_app", APP_PASSWORD)
+        )
+
+
+@pytest_asyncio.fixture(scope="session")
+async def owner_engine(db_urls: DbUrls) -> AsyncIterator[AsyncEngine]:
+    config = Config(str(ALEMBIC_INI))
+    config.set_main_option("sqlalchemy.url", db_urls.owner)
+    # env.py drives its own event loop, so run it off the test loop.
+    await asyncio.to_thread(command.upgrade, config, "head")
+
+    engine = create_engine(db_urls.owner)
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "CREATE TABLE rls_probe ("
+                " id uuid PRIMARY KEY DEFAULT uuidv7(),"
+                " tenant_id uuid NOT NULL REFERENCES tenants(id),"
+                " label text NOT NULL)"
+            )
+        )
+        for statement in tenant_rls_statements("rls_probe"):
+            await conn.execute(text(statement))
+        await conn.execute(text("GRANT SELECT, INSERT, UPDATE, DELETE ON rls_probe TO regista_app"))
+    yield engine
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def app_engine(db_urls: DbUrls, owner_engine: AsyncEngine) -> AsyncIterator[AsyncEngine]:
+    # Single connection on purpose: proves tenant context never leaks through the pool.
+    engine = create_engine(db_urls.app, pool_size=1, max_overflow=0)
+    yield engine
+    await engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def app_factory(app_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    return create_session_factory(app_engine)
+
+
+@pytest.fixture(scope="session")
+def owner_factory(owner_engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    return create_session_factory(owner_engine)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def seed(app_factory: async_sessionmaker[AsyncSession]) -> Seed:
+    """Two tenants (created as platform admin) with two probe rows each."""
+    ids: dict[str, uuid.UUID] = {}
+    async with tenant_session(app_factory, platform_admin=True) as session:
+        for slug in ("a", "b"):
+            result = await session.execute(
+                text(
+                    "INSERT INTO tenants (name, slug, data_region)"
+                    " VALUES (:name, :slug, 'sa-east-1') RETURNING id"
+                ),
+                {"name": f"Tenant {slug.upper()}", "slug": slug},
+            )
+            ids[slug] = result.scalar_one()
+
+    for slug, tid in ids.items():
+        async with tenant_session(app_factory, tenant_id=tid) as session:
+            for n in (1, 2):
+                await session.execute(
+                    text("INSERT INTO rls_probe (tenant_id, label) VALUES (:t, :l)"),
+                    {"t": tid, "l": f"{slug}{n}"},
+                )
+    return Seed(tenant_a=ids["a"], tenant_b=ids["b"])

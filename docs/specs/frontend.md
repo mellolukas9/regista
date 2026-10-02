@@ -1,55 +1,46 @@
 # Frontend
 
-Painel em Next.js (App Router, TypeScript strict) com tema escuro. Tailwind com os tokens abaixo como variáveis CSS. Componentes base com shadcn/ui ajustados ao tema. Dados com TanStack Query; tabelas grandes com TanStack Table e paginação no servidor; gráficos com Recharts.
+A referência completa da interface é **`docs/specs/design-system.md`** (handoff de design): tokens prontos para o `@theme` do Tailwind v4, status e rótulos, matriz de permissões, inventário de componentes com base shadcn/ui, shell, todas as telas com rotas e textos exatos, versão mobile, glossário de ações, dados de exemplo e decisões de produto (seção 11).
 
-## Tokens
-
-| Token | Valor | Uso |
-|---|---|---|
-| `--bg` | `#0A0C0F` | Fundo da página |
-| `--sidebar` | `#0D1014` | Barra lateral, cabeçalhos de tabela |
-| `--panel` | `#111419` | Cards e painéis |
-| `--panel-2` | `#161A21` | Item ativo, hover |
-| `--border` | `#1C2129` | Bordas de cards |
-| `--border-strong` | `#232A34` | Bordas de controles |
-| `--text` | `#E7EAEE` | Texto principal |
-| `--text-2` | `#C9CFD8` | Texto secundário em tabelas |
-| `--muted` | `#98A2B3` | Rótulos |
-| `--faint` | `#7D8796` | Metadados |
-| `--accent` | `#C8F169` | Ação principal, item ativo (texto escuro `#0A0C0F` sobre ele) |
-| `--ok` | `#4ADE80` | Sucesso, online |
-| `--warn` | `#F5C451` | Pendente, atenção |
-| `--info` | `#7AB8FF` | Executando |
-| `--danger` | `#FF8A7A` | Falha (barras de gráfico: `#E5604F`) |
-
-Status usam texto + ponto colorido + fundo com 10% de opacidade da cor + borda com 24%; nunca só a cor.
-
-Tipografia: **Geist** (interface) e **Geist Mono** (filas, horários, IDs, logs). Raio: 10px em controles, 14px em cards. Alvos de toque com no mínimo 44px.
-
-## Layout
-
-- Barra lateral fixa de 248px: marca, seletor de cliente (administradores da plataforma), navegação "Operação" (Dashboard, Bots, Execuções, Filas, Lotes, Agendamentos, Máquinas, Alertas), usuário e sair.
-- Conteúdo com largura máxima de ~1240px; cabeçalho com caminho (cliente / página), título, indicador de sincronização, busca e notificações.
-- Abaixo de 900px a barra lateral vira menu recolhível.
-
-## Telas e marco correspondente
-
-| Tela | Marco | Conteúdo principal |
-|---|---|---|
-| Login, MFA | M1 | Formulário; configuração de TOTP com QR code; códigos de recuperação |
-| Usuários | M1 | Lista, convite, papéis, MFA, revogar sessões |
-| Máquinas e pools | M2 | Status online/offline, último sinal, versão do agente, gerar chave de registro (exibida uma vez), revogar |
-| Bots | M3 | Cards com fila, pool, última execução, faixa das últimas 10 execuções, "Executar agora", "Agendar" |
-| Execuções | M3 | Filtros por status; tabela; painel lateral com linha do tempo (Criada, Na fila, Executando, Finalizada), logs estilo terminal, reexecutar, cancelar |
-| Filas e itens | M5 | Contagem por status; tabela paginada de itens; detalhe com tentativas, logs do item e evidências; reprocessar |
-| Lotes | M6 | Resumo reconciliado (lidas, enfileiradas, rejeitadas, sucesso, falha); relatório por referência; exportar; reprocessar falhas |
-| Agendamentos | M7 | Atalhos (De hora em hora, Diário, Dias úteis, Personalizado), cron gerado, descrição em português, próximas 3 execuções |
-| Alertas | M7 | Regras por alvo e evento, destino de e-mail |
-| Dashboard | M3+ (evolui a cada marco) | Indicadores, execuções por dia, máquinas, últimas execuções, alerta de itens ou execuções paradas |
+Este arquivo só registra como usar o handoff.
 
 ## Regras
 
-- Nenhum token ou segredo em `localStorage`; autenticação só por cookie httpOnly.
-- Todo texto vindo de logs, erros ou payloads é exibido escapado (nunca `dangerouslySetInnerHTML`).
-- Estados vazios explicam o que fazer a seguir; erros dizem o que aconteceu e como corrigir.
-- Textos da interface em português, frases curtas, sem jargão interno.
+- Visual e textos: siga o `design-system.md` **exatamente** (tokens, rótulos, nomes de ações, estados vazios e de erro). Não invente cores, rótulos ou textos.
+- A cor de destaque é o **azul Artemisys** (`--color-accent: #2577B8`). Qualquer menção a verde-limão em material antigo (como `docs/apresentacao/`) está superada.
+- Stack: Next.js (App Router) + Tailwind v4 (CSS-first, `@theme`) + shadcn/ui + TanStack Table + Recharts + lucide-react + fontes Geist via `next/font`.
+- Implemente as telas **junto com o marco** que entrega o backend delas (ver `ROADMAP.md`), não em bloco separado.
+- O M0 entrega só os tokens, as fontes e o shell vazio (sidebar + topbar sem dados). Componentes shadcn entram conforme as telas pedirem.
+- Permissões aparecem na interface (botão oculto sem permissão), mas **são aplicadas no servidor**. Esconder botão não substitui a checagem na API.
+- Detalhes abrem em página própria (sem drawer). Filtros, ordenação e paginação ficam na URL e são processados no servidor.
+- Atualização por polling a cada 15 s (TanStack Query), com o indicador "Sincronizado · há Ns".
+- Nenhum token ou segredo em `localStorage`; autenticação só por cookie httpOnly. Todo texto vindo de logs, erros ou payloads é exibido escapado.
+
+## Termos da interface x entidades do código
+
+| Interface | Código / API |
+|---|---|
+| Cliente | `tenant` |
+| Execução | `job` (rotas da interface em `/runs`) |
+| Máquina | `machine` |
+| Pool | `pool` |
+| Fila | `queue` (fila de itens) |
+| Item | `queue_item` |
+| Tentativa | `item_attempt` |
+| Lote | `batch` |
+| Agendamento | `schedule` |
+| Admin do cliente / Operador / Leitor | `tenant_admin` / `operator` / `viewer` |
+| Equipe Artemisys | usuário com `is_platform_admin` |
+
+## Telas por marco
+
+| Marco | Telas (seção 7 do design-system) |
+|---|---|
+| M0 | Shell vazio (sidebar, topbar), tokens, fontes |
+| M1 | Login e MFA (7.1), Clientes (7.16), Usuários (7.17), Minhas sessões (7.18) |
+| M2 | Máquinas e pools (7.13), Detalhe da máquina (7.14) |
+| M3 | Bots (7.5), Detalhe do bot (7.6, sem versões), Execuções (7.3), Detalhe da execução (7.4), Dashboard inicial (7.2) |
+| M4 | Aba de versões do Detalhe do bot (7.6) |
+| M5 | Filas (7.8), Detalhe da fila (7.9), Detalhe do item (7.10) |
+| M6 | Lotes (7.11), Relatório do lote (7.12) |
+| M7 | Agendamentos (7.7 e aba do bot), Alertas (7.15), notificações do sino, Dashboard completo |

@@ -1,0 +1,116 @@
+/* Tokens de docs/specs/design-system.md, seção 2. Mudou lá? Atualize aqui igual. */
+@import "tailwindcss";
+
+@theme {
+  /* Fontes */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Superfícies */
+  --color-bg: #0A0C0F;              /* fundo da aplicação */
+  --color-sidebar: #0D1014;         /* sidebar, fundo de campo, cabeçalho de tabela */
+  --color-panel: #111419;           /* cards, tabelas, dialogs */
+  --color-panel-active: #161A21;    /* item ativo, botão secundário, menus */
+  --color-row-hover: #13171D;       /* hover de linha */
+  --color-control-hover: #1C212A;   /* hover de botão secundário */
+  --color-log: #07090C;             /* fundo do LogViewer */
+
+  /* Bordas */
+  --color-border: #1C2129;
+  --color-border-control: #232A34;
+  --color-border-hover: #2E3642;
+  --color-border-strong: #3A4351;   /* checkbox vazio, ponto de etapa futura */
+
+  /* Texto (contraste sobre bg / panel) */
+  --color-text: #E7EAEE;            /* 16.2 / 15.3 */
+  --color-text-secondary: #C9CFD8;  /* 12.5 / 11.8 */
+  --color-text-label: #98A2B3;      /*  7.6 /  7.2 */
+  --color-text-muted: #7D8796;      /*  5.4 /  5.1 — mínimo 11px */
+
+  /* Destaque (azul Artemisys) */
+  --color-accent: #2577B8;          /* só preenchimento, texto branco por cima (4.8:1) */
+  --color-accent-hover: #1F6FA8;    /* azul exato do site (5.4:1 com branco) */
+  --color-accent-fg: #FFFFFF;
+  --color-accent-text: #5AA9E6;     /* links, ícone/aba ativa, foco (7.7:1) */
+  --color-accent-text-hover: #8CC4F0;
+
+  /* Status */
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-running: #9B7BFF;
+  --color-danger: #F2564B;
+  --color-danger-hover: #F46B61;
+  --color-danger-fg: #0A0C0F;       /* texto sobre botão de perigo (5.8:1) */
+  --color-danger-chart: #EF4444;    /* só barras de gráfico */
+  --color-neutral: #98A2B3;
+
+  /* Textos claros sobre fundos tingidos (banners e logs) */
+  --color-warning-text: #FBBF24;
+  --color-warning-body: #D2C29A;
+  --color-danger-text: #FF8F86;
+  --color-log-warn: #FCD34D;
+  --color-log-error: #FFB3AB;
+
+  /* Raio */
+  --radius-sm: 6px;       /* badge, kbd, segmento interno */
+  --radius-control: 10px; /* botões, campos, menus, toasts */
+  --radius-card: 14px;    /* cards, tabelas, dialogs */
+  --radius-pill: 999px;   /* StatusPill */
+
+  /* Elevação */
+  --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.45);  /* menu, select, tooltip, toast */
+  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.60); /* dialog */
+  --color-scrim: rgba(5, 6, 8, 0.72);
+
+  /* Escala tipográfica: tamanho / altura de linha / peso / tracking */
+  --text-kpi: 36px;      --text-kpi--line-height: 40px;      --text-kpi--font-weight: 600;  --text-kpi--letter-spacing: -0.03em;
+  --text-display: 28px;  --text-display--line-height: 34px;  --text-display--font-weight: 600; --text-display--letter-spacing: -0.02em;
+  --text-title-lg: 20px; --text-title-lg--line-height: 28px; --text-title-lg--font-weight: 600;
+  --text-title: 15px;    --text-title--line-height: 22px;    --text-title--font-weight: 600;
+  --text-body: 14px;     --text-body--line-height: 20px;
+  --text-body-sm: 13px;  --text-body-sm--line-height: 18px;
+  --text-caption: 12px;  --text-caption--line-height: 16px;
+  --text-overline: 11px; --text-overline--line-height: 16px; --text-overline--letter-spacing: 0.08em; /* + uppercase, 500 */
+}
+
+/* Ponte para os nomes que o shadcn/ui espera */
+:root {
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --card: var(--color-panel);
+  --card-foreground: var(--color-text);
+  --popover: var(--color-panel-active);
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-fg);
+  --secondary: var(--color-panel-active);
+  --secondary-foreground: var(--color-text);
+  --muted: var(--color-panel-active);
+  --muted-foreground: var(--color-text-label);
+  --accent: var(--color-panel-active);
+  --accent-foreground: var(--color-text);
+  --destructive: var(--color-danger);
+  --border: var(--color-border);
+  --input: var(--color-border-control);
+  --ring: var(--color-accent-text);
+  --radius: 10px;
+}
+
+/* Tema claro futuro: redefinir apenas as variáveis do @theme aqui. */
+/* [data-theme="light"] { --color-bg: …; } */
+
+@layer base {
+  html { color-scheme: dark; }
+  body { @apply bg-bg text-text font-sans antialiased; }
+  a { color: var(--color-accent-text); }
+  a:hover { color: var(--color-accent-text-hover); }
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 4px var(--color-accent-text);
+  }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-dot, .animate-skeleton { animation: none !important; }
+}
