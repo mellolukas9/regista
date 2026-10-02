@@ -25,12 +25,12 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 - [x] Migration inicial: schema `app` com funções, tabela `tenants` e padrão de RLS de `docs/specs/security.md` (políticas separadas por comando, `FORCE ROW LEVEL SECURITY`, grants explícitos); helper `core/rls.py`
 - [x] Helper de sessão que abre transação e executa `set_config('app.tenant_id', ..., true)` (e `app.platform_admin`)
 - [x] Teste com Testcontainers provando o RLS (com tabela-sonda criada só no teste): role sem `BYPASSRLS`; sem tenant = zero linhas; tenant A sem `WHERE` vê só A; escrita cruzada bloqueada; admin da plataforma lê tudo mas não altera nem apaga fora do contexto; conexão reaproveitada não herda tenant; guarda que exige RLS em toda tabela com `tenant_id`
-- [ ] `apps/web`: Next.js (versão estável atual, App Router, TS strict) + Tailwind v4 com os tokens da seção 2 de `docs/specs/design-system.md` + Geist via `next/font` + shell vazio (sidebar de 248px e topbar, menu recolhível abaixo de 900px)
+- [x] `apps/web`: Next.js (versão estável atual, App Router, TS strict) + Tailwind v4 com os tokens da seção 2 de `docs/specs/design-system.md` + Geist via `next/font` + shell vazio (sidebar de 248px e topbar, menu recolhível abaixo de 900px)
 - [x] Proxy de desenvolvimento no Next (`/api/*` → FastAPI, removendo o prefixo: `/api/health` → `/health`)
 - [x] `sdk` e `agent`: pacotes com `pyproject`, módulo vazio e um teste trivial
 - [x] Lint e tipos: `ruff`, `mypy`, `eslint`, `tsc`; `pre-commit`; `.editorconfig`; `.gitignore`; `.env.example`; `.gitattributes` (LF padrão, CRLF para `*.bat`, `*.cmd`, `*.ps1`)
 - [x] CI (GitHub Actions): Python (ruff, mypy, pytest) e web (lint, typecheck, build)
-- [ ] Seção Comandos do `CLAUDE.md` conferida no PowerShell
+- [x] Seção Comandos do `CLAUDE.md` conferida no PowerShell
 
 **Pronto quando:** `docker compose ... up -d`, migrations, `uv run pytest` (com o teste de RLS) e `npm run build` funcionam no Windows; `/health` responde; CI verde no GitHub.
 

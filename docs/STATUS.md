@@ -4,9 +4,9 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 
 ## Agora
 
-- **Marco atual:** M0 — Fundação
-- **Situação:** a branch `m0-foundation` (PR #1) já entrega a infraestrutura, a API, o RLS provado por teste e o CI. Falta alinhar o frontend ao `docs/specs/design-system.md` (tokens azuis, shell com sidebar e topbar) e conferir o critério de pronto no Windows. O merge do PR #1 é feito pelo responsável do projeto depois da revisão.
-- **Próximo passo:** fechar o M0 (frontend do design system) e, depois do merge, abrir o M1 numa branch nova a partir da `main`. **No planejamento do M1, a leitura completa de todas as ADRs e de todas as specs (`agent.md`, `orchestration.md`, `data-model.md`, `security.md`, `design-system.md`) é obrigatória** antes de propor o plano.
+- **Marco atual:** M1 — Clientes, autenticação e usuários (o M0 está pronto, aguardando revisão e merge do PR #1 pelo responsável do projeto)
+- **Situação:** M0 concluído: infraestrutura, API com `/health`, RLS provado por teste, frontend com tokens e shell do design system, CI. Ainda não há autenticação, usuários nem telas com dados.
+- **Próximo passo:** depois do merge do PR #1, abrir a branch `m1-auth` a partir da `main`. **No planejamento do M1, a leitura completa de todas as ADRs e de todas as specs (`agent.md`, `orchestration.md`, `data-model.md`, `security.md`, `design-system.md`) é obrigatória** antes de propor o plano, que deve ser aprovado antes de implementar.
 
 ## Decisões já aprovadas para o M0 (não perguntar de novo)
 
@@ -54,3 +54,4 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 | 2026-10-02 | — | Pasta local perdida. Handoff de interface incorporado (`docs/specs/design-system.md`); specs, ROADMAP e ADR 0011 atualizados com as decisões de produto. |
 | 2026-09-30 | M0 | Primeira execução do M0 (branch `m0-foundation`, PR #1): workspace uv, FastAPI com `/health`, SQLAlchemy async + Alembic, Postgres 18 com roles `regista_owner`/`regista_app`, migration `0001` (`tenants` + RLS com `FORCE`), `tenant_session`, testes de RLS com Testcontainers, Next 16 com proxy `/api/*`, pre-commit e CI. PKs com `uuidv7()` nativo do PG18; TypeScript 6.0.3 e ESLint 9 (versões mais recentes suportadas pelo typescript-eslint e pelo eslint-config-next); Ryuk do Testcontainers desligado nos testes (falha de porta no Docker Desktop do Windows). |
 | 2026-10-02 | M0 | Pasta local recuperada a partir de `origin/m0-foundation`; docs reconciliados arquivo a arquivo (docs novos prevalecem; mantidos `.gitignore`, `uuidv7()` nativo, Comandos do `CLAUDE.md` e políticas `tenant_*` da branch). `ARCHITECTURE.md` passou a PostgreSQL 18. |
+| 2026-10-02 | M0 | Frontend alinhado ao `design-system.md`: tokens da seção 2 (azul Artemisys), Geist, shell com sidebar de 248px (itens não navegáveis), topbar (caminho, sincronização, busca e sino desabilitados) e menu recolhível abaixo de 900px; `lucide-react` adicionado. Critério de pronto conferido no Windows: 15 testes, ruff, mypy, lint, typecheck e build verdes; `/health` e `/api/health` (proxy) respondem. Sem `shadcn init` (adiado até o primeiro marco que precisar de componentes). |
