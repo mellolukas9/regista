@@ -2,7 +2,7 @@ import asyncio
 import os
 import uuid
 from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -79,9 +79,9 @@ async def api_client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
             yield client
 
 
-@pytest.fixture(scope="session")
-def db_urls() -> Iterator[DbUrls]:
-    """Real Postgres 18; roles are created by the same init script used in dev."""
+@contextmanager
+def _postgres() -> Iterator[DbUrls]:
+    """A throwaway Postgres 18; roles come from the same init script used in dev."""
     container = (
         PostgresContainer(
             "postgres:18",
@@ -104,6 +104,24 @@ def db_urls() -> Iterator[DbUrls]:
         yield DbUrls(
             owner=url("regista_owner", OWNER_PASSWORD), app=url("regista_app", APP_PASSWORD)
         )
+
+
+@pytest.fixture(scope="session")
+def db_urls() -> Iterator[DbUrls]:
+    """Real Postgres 18 shared by the whole test session."""
+    with _postgres() as urls:
+        yield urls
+
+
+@pytest_asyncio.fixture(scope="module")
+async def empty_db_urls() -> AsyncIterator[DbUrls]:
+    """A second, migrated and still empty database, for tests that need a clean slate
+    (the dev seed refuses to run when clients exist)."""
+    with _postgres() as urls:
+        config = Config(str(ALEMBIC_INI))
+        config.set_main_option("sqlalchemy.url", urls.owner)
+        await asyncio.to_thread(command.upgrade, config, "head")
+        yield urls
 
 
 @pytest_asyncio.fixture(scope="session")

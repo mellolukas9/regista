@@ -45,7 +45,11 @@ Trabalhe **somente no marco atual** indicado em `docs/STATUS.md`. Não antecipe 
 
 > Preenchidos e mantidos a partir do M0. Sempre atualize esta seção quando um comando mudar.
 
-Pré-requisitos: Docker Desktop em execução, `uv` e Node 24 LTS. Na primeira vez, `Copy-Item .env.example .env`.
+Pré-requisitos: Docker Desktop em execução, `uv` e Node 24 LTS. Na primeira vez, `Copy-Item .env.example .env` e preencha `REGISTA_MASTER_KEY` (a API não sobe sem ela; o `.env` não é versionado):
+
+```powershell
+uv run python -c "from regista_api.core.keys import LocalKeyProvider; print(LocalKeyProvider.generate_key())"
+```
 
 ```powershell
 # infraestrutura local (Postgres 18)
@@ -74,6 +78,17 @@ uv run alembic -c apps/api/alembic.ini upgrade head
 ```
 
 Migrations rodam como `regista_owner` (`REGISTA_DATABASE_OWNER_URL`); a API roda como `regista_app` (`REGISTA_DATABASE_URL`).
+
+**Equipe Artemisys e dados de exemplo.** A equipe vive num cliente interno oculto e se gerencia só pelo CLI `regista-admin` (sem tela no MVP; nunca aceita senha por argumento, sempre convite). Em dev, os e-mails (convites) são impressos no console:
+
+```powershell
+uv run regista-admin create-platform-admin --email pessoa@artemisys.com.br --name "Pessoa"
+uv run regista-admin resend-platform-admin-invite --email pessoa@artemisys.com.br   # invalida senha, MFA e sessões
+uv run regista-admin remove-platform-admin --email pessoa@artemisys.com.br          # recusa o último admin ativo
+uv run regista-admin seed-dev   # só em dev e banco vazio; imprime senhas e chaves TOTP aleatórias uma única vez
+```
+
+O seed cria os clientes e usuários do §10 de `docs/specs/design-system.md` (`admin@`, `operacao@`, `financeiro@` e `estagio@escritorio-exemplo.com.br`, mais `equipe@artemisys.example.com`). Cadastre a chave TOTP impressa em um app autenticador; nenhuma senha é versionada. Para recomeçar, recrie o banco de dev (bloco acima).
 
 ## Fluxo de trabalho esperado
 

@@ -17,6 +17,9 @@ dependencies = [
     "cryptography>=46.0",
 ]
 
+[project.scripts]
+regista-admin = "regista_api.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
