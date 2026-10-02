@@ -19,6 +19,12 @@ COUNT_SQL = {
     t: f"SELECT count(*) FROM {t}"  # noqa: S608  (fixed table names)
     for t in ("users", "invitations", "sessions", "recovery_codes")
 }
+# Rows of any tenant other than :t. Other test modules also create users in the shared tenants,
+# so "sees nothing" is asserted on the foreign rows, not on the whole table.
+FOREIGN_SQL = {
+    t: f"SELECT count(*) FROM {t} WHERE tenant_id <> :t"  # noqa: S608  (fixed table names)
+    for t in COUNT_SQL
+}
 
 
 def _email() -> str:
@@ -87,8 +93,10 @@ async def test_identity_rows_are_invisible_without_tenant_and_across_tenants(
 
     async with tenant_session(app_factory, tenant_id=seed.tenant_b) as session:
         for table in tables:
-            other_tenant_rows: int = (await session.execute(text(COUNT_SQL[table]))).scalar_one()
-            assert other_tenant_rows == 0, table
+            foreign: int = (
+                await session.execute(text(FOREIGN_SQL[table]), {"t": seed.tenant_b})
+            ).scalar_one()
+            assert foreign == 0, table
 
     async with tenant_session(app_factory, tenant_id=seed.tenant_a) as session:
         assert (await session.execute(text("SELECT count(*) FROM users"))).scalar_one() >= 1

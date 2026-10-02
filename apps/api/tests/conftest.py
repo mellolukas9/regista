@@ -16,10 +16,14 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
 
+from regista_api.auth import mfa
 from regista_api.core.config import Settings
 from regista_api.core.db import create_engine, create_session_factory, tenant_session
 from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.rls import tenant_rls_statements
+from regista_api.main import create_app
+
+from .helpers import Env, FakeClock
 
 # The Ryuk reaper container races with Docker Desktop port publishing on Windows. The
 # container below is stopped by its context manager instead.
@@ -51,6 +55,10 @@ def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
         "database_owner_url": db_urls.owner,
         "master_key": TEST_MASTER_KEY,
         "email_backend": "memory",
+        # Every test shares one client address, so the per-IP limits stay out of the way unless
+        # a test sets them on purpose.
+        "rate_login_ip_per_minute": 100_000,
+        "rate_invite_ip_per_minute": 100_000,
         **overrides,
     }
     return Settings.model_validate(values)
@@ -163,6 +171,26 @@ async def seed(app_factory: async_sessionmaker[AsyncSession]) -> Seed:
                     {"t": tid, "l": f"{slug}{n}"},
                 )
     return Seed(tenant_a=ids["a"], tenant_b=ids["b"])
+
+
+@asynccontextmanager
+async def open_env(db_urls: DbUrls, **overrides: object) -> AsyncIterator[Env]:
+    """A running app (lifespan included), an HTTP client and a controllable TOTP clock."""
+    clock = FakeClock()
+    original = mfa._clock
+    mfa._clock = clock
+    try:
+        app = create_app(make_settings(db_urls, **overrides))
+        async with api_client(app) as client:
+            yield Env(app=app, client=client, clock=clock)
+    finally:
+        mfa._clock = original
+
+
+@pytest_asyncio.fixture
+async def env(db_urls: DbUrls, seed: Seed) -> AsyncIterator[Env]:
+    async with open_env(db_urls) as e:
+        yield e
 
 
 @pytest_asyncio.fixture(scope="session")

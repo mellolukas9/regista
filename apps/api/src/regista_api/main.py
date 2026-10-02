@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from regista_api.auth.router import router as auth_router
 from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
 from regista_api.core.email import EmailSender, create_email_sender
@@ -61,6 +62,8 @@ def create_app(
         if _is_no_store(request.url.path):
             response.headers["Cache-Control"] = "no-store"
         return response
+
+    app.include_router(auth_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:

@@ -1,5 +1,6 @@
 """Password hashing, opaque tokens and the password policy (docs/specs/security.md)."""
 
+import asyncio
 import hashlib
 import re
 import secrets
@@ -28,6 +29,15 @@ def verify_password(password_hash: str | None, password: str) -> bool:
     except (VerifyMismatchError, VerificationError, InvalidHashError):
         return False
     return password_hash is not None
+
+
+async def hash_password_async(password: str) -> str:
+    """argon2 is deliberately slow; keep it off the event loop."""
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(password_hash: str | None, password: str) -> bool:
+    return await asyncio.to_thread(verify_password, password_hash, password)
 
 
 def needs_rehash(password_hash: str) -> bool:
