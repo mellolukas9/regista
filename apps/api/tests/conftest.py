@@ -145,3 +145,16 @@ async def seed(app_factory: async_sessionmaker[AsyncSession]) -> Seed:
                     {"t": tid, "l": f"{slug}{n}"},
                 )
     return Seed(tenant_a=ids["a"], tenant_b=ids["b"])
+
+
+@pytest_asyncio.fixture(scope="session")
+async def internal_tenant(app_factory: async_sessionmaker[AsyncSession], seed: Seed) -> uuid.UUID:
+    """The single hidden Artemisys tenant (created as platform admin)."""
+    async with tenant_session(app_factory, platform_admin=True) as session:
+        result = await session.execute(
+            text(
+                "INSERT INTO tenants (name, slug, data_region, is_internal)"
+                " VALUES ('Artemisys', 'artemisys-internal', 'sa-east-1', true) RETURNING id"
+            )
+        )
+        return result.scalar_one()

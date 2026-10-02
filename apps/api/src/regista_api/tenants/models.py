@@ -18,6 +18,7 @@ class Tenant(Base):
     slug: Mapped[str] = mapped_column(Text, unique=True)
     data_region: Mapped[str] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    is_internal: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )

@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from regista_api.auth import models as _auth  # noqa: F401  (registers tables)
 from regista_api.core.config import get_settings
 from regista_api.core.db import Base
 from regista_api.tenants import models as _tenants  # noqa: F401  (registers tables)
