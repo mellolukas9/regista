@@ -32,4 +32,10 @@ def no_acl(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
         monkeypatch.setattr(_windows, "resolve_sid", lambda account: "S-1-5-21-1-2-3-1000")
         monkeypatch.setattr(_windows, "restrict_directory", lambda directory, sid: None)
+    else:
+        # The accounts in these tests are made up; elsewhere the key is handed to the account
+        # with chown, which would look for a real user of the machine.
+        from regista_agent.keystore import KeyStore
+
+        monkeypatch.setattr(KeyStore, "_give_to_agent", lambda self, path: None)
     yield
