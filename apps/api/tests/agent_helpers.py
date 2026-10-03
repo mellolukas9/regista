@@ -102,3 +102,21 @@ class AgentSim:
             json=body,
             headers={"Authorization": f"Bearer {token or self.token}"},
         )
+
+    def _auth(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.token}"}
+
+    async def next_job(self, wait: int = 0, *, token: str | None = None) -> httpx.Response:
+        headers = {"Authorization": f"Bearer {token}"} if token else self._auth()
+        return await self.client.get(
+            "/agent/jobs/next", params={"wait": wait}, headers=headers, timeout=60
+        )
+
+    async def job_call(
+        self, job_id: str, action: str, body: dict[str, Any] | None = None
+    ) -> httpx.Response:
+        return await self.client.post(
+            f"/agent/jobs/{job_id}/{action}",
+            json=body if body is not None else {},
+            headers=self._auth(),
+        )

@@ -370,7 +370,11 @@ async def test_every_route_is_isolated_between_clients(
         label = f"B-admin {spec.label}"
         assert response.status_code < 500, f"{label}: {response.status_code} {response.text}"
         _assert_no_trace_of_a(w, spec, "B-admin", response)
-        if spec.path_params:
+        if spec.marker.kind == "machine":
+            # A person's session is not a machine: 401, whatever the route (the machine side is
+            # covered by `test_a_machine_of_b_reaches_nothing_of_a`).
+            assert response.status_code == 401, f"{label}: {response.status_code} {response.text}"
+        elif spec.path_params:
             assert response.status_code == 404, f"{label}: {response.status_code} {response.text}"
         if getattr(spec.marker, "permission", None) in PLATFORM_ONLY:
             assert response.status_code == 403, f"{label}: {response.status_code}"
@@ -390,7 +394,9 @@ async def test_every_route_is_isolated_between_clients(
         platform_wide = getattr(spec.marker, "permission", None) in PLATFORM_ONLY
         if not platform_wide:  # /clients legitimately lists every client, A included
             _assert_no_trace_of_a(w, spec, "staff-in-B", response)
-        if spec.path_params:
+        if spec.marker.kind == "machine":
+            assert response.status_code == 401, f"{label}: {response.status_code} {response.text}"
+        elif spec.path_params:
             assert response.status_code == 404, f"{label}: {response.status_code} {response.text}"
 
     assert await _snapshot(owner_factory, w.seed.tenant_a) == before
@@ -438,6 +444,9 @@ async def test_a_machine_of_b_reaches_nothing_of_a(world: World, owner_factory: 
         )
         assert r.status_code < 500, f"B-machine {spec.label}: {r.status_code} {r.text}"
         _assert_no_trace_of_a(w, spec, "B-machine", r)
+        if spec.path_params:
+            # A job, an artifact or a machine of A: not found, exactly like one that never existed.
+            assert r.status_code == 404, f"B-machine {spec.label}: {r.status_code} {r.text}"
     assert await _snapshot(owner_factory, w.seed.tenant_a) == before
 
 
