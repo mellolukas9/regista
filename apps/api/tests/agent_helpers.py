@@ -120,3 +120,8 @@ class AgentSim:
             json=body if body is not None else {},
             headers=self._auth(),
         )
+
+    async def send_logs(self, job_id: str, lines: list[dict[str, Any]]) -> httpx.Response:
+        return await self.client.post(
+            "/agent/logs", json={"job_id": job_id, "lines": lines}, headers=self._auth()
+        )

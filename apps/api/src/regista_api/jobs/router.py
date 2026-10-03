@@ -18,7 +18,7 @@ from regista_api.auth.deps import Auth, Require
 from regista_api.auth.permissions import Permission
 from regista_api.core.errors import api_error
 from regista_api.core.pagination import Pagination, like_pattern, order_by
-from regista_api.jobs import service
+from regista_api.jobs import logs, service
 from regista_api.jobs.schemas import (
     ACTIVE_STATUSES,
     CreateJobRequest,
@@ -234,6 +234,38 @@ async def jobs_summary(auth: Annotated[Auth, _VIEW]) -> JobsSummary:
 async def get_job(job_id: uuid.UUID, auth: Annotated[Auth, _VIEW]) -> JobDetail:
     async with auth.scoped() as db:
         return await load_detail(db, job_id)
+
+
+@router.get("/jobs/{job_id}/logs", response_model=logs.LogPage)
+async def get_job_logs(
+    job_id: uuid.UUID,
+    auth: Annotated[Auth, _VIEW],
+    after_seq: Annotated[int, Query(ge=0, le=9_999_999_999_999)] = 0,
+    level: Annotated[logs.Level | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 500,
+) -> logs.LogPage:
+    """Lines in order. The panel asks again with the last `seq` it has to follow a live run. The
+    text is untrusted: the panel shows it escaped, never as markup."""
+    async with auth.scoped() as db:
+        job = (
+            await db.execute(
+                text(
+                    "SELECT j.tenant_id FROM jobs j JOIN tenants t ON t.id = j.tenant_id"
+                    " WHERE j.id = :j AND NOT t.is_internal"
+                ),
+                {"j": job_id},
+            )
+        ).first()
+        if job is None:
+            raise api_error(404, "job_not_found")
+        return await logs.read_logs(
+            db,
+            tenant_id=job.tenant_id,
+            job_id=job_id,
+            after_seq=after_seq,
+            level=level,
+            limit=limit,
+        )
 
 
 # --- cancel and rerun -------------------------------------------------------------------------

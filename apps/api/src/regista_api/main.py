@@ -35,6 +35,8 @@ log = structlog.get_logger()
 _NO_STORE_PREFIXES = ("/auth", "/account", "/agent")
 # What the agent may send is a handful of short fields; anything bigger is refused unread.
 _AGENT_BODY_LIMIT = 16 * 1024
+# A batch of up to 200 log lines is the one thing that legitimately takes more.
+_AGENT_LOG_BODY_LIMIT = 256 * 1024
 
 
 class HealthResponse(BaseModel):
@@ -81,7 +83,12 @@ def create_app(
     # Registered before the `http` middleware below, so it sits inside it (the last one added is
     # the outermost). That matters: BaseHTTPMiddleware reads the body inside an anyio task group,
     # which would wrap the 413 in an ExceptionGroup that FastAPI turns into a generic 400.
-    app.add_middleware(BodyLimitMiddleware, prefix="/agent/", max_bytes=_AGENT_BODY_LIMIT)
+    app.add_middleware(
+        BodyLimitMiddleware,
+        prefix="/agent/",
+        max_bytes=_AGENT_BODY_LIMIT,
+        overrides={"/agent/logs": _AGENT_LOG_BODY_LIMIT},
+    )
 
     @app.middleware("http")
     async def http_middleware(

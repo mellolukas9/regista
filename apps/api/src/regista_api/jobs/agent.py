@@ -8,6 +8,7 @@ that belongs to someone else is simply not found (404), like one that does not e
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -19,7 +20,7 @@ from regista_api.audit import service as audit
 from regista_api.auth.machine import MachineAuth, MachineRoute
 from regista_api.core.errors import api_error
 from regista_api.core.redact import clean_line
-from regista_api.jobs import service
+from regista_api.jobs import logs, service
 from regista_api.jobs.waiters import JobWaiters, TooManyWaiters
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -246,6 +247,23 @@ async def fail_job(
             ip=machine.ip,
         )
     return JobAck(status=status, cancel_requested=False)
+
+
+@router.post("/logs", response_model=logs.LogBatchResult)
+async def send_logs(
+    body: logs.LogBatch, machine: Annotated[MachineAuth, Depends(MachineRoute())]
+) -> logs.LogBatchResult:
+    """A batch of log lines of a run of this machine. Re-sending a batch is harmless: a line that
+    is already stored (same job, `seq` and time) is not stored twice."""
+    async with machine.session() as db:
+        return await logs.store_batch(
+            db,
+            settings=machine.state.settings,
+            tenant_id=machine.tenant_id,
+            machine_id=machine.machine_id,
+            batch=body,
+            now=datetime.now(UTC),
+        )
 
 
 async def _why_not(machine: MachineAuth, db: AsyncSession, job_id: uuid.UUID) -> HTTPException:
