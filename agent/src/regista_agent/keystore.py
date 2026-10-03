@@ -72,7 +72,13 @@ class KeyStore:
         self.staged_path = keys_dir / STAGED_NAME
 
     def exists(self) -> bool:
-        return self.path.is_file()
+        try:
+            return self.path.is_file()
+        except PermissionError:
+            # The folder is there but this account may not look inside (a service running as
+            # the wrong account). The key counts as present, so `load` runs and fails with the
+            # message that says it cannot read it, instead of a bare traceback from here.
+            return True
 
     # --- writing ------------------------------------------------------------------------------
 

@@ -58,6 +58,25 @@ needs_admin = pytest.mark.skipif(
 # --- any system -------------------------------------------------------------------------------
 
 
+def test_an_account_that_may_not_look_inside_gets_a_message_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A service running as an account the folder does not allow: `is_file` itself raises
+    PermissionError on Windows, and the person must see "cannot read the key", not a traceback."""
+    store = KeyStore(tmp_path / "keys", agent_account=_current_account())
+
+    def denied(self: Path) -> bool:
+        raise PermissionError(5, "Acesso negado", str(self))
+
+    monkeypatch.setattr(Path, "is_file", denied)
+    assert store.exists()  # counted as there: it may well be
+    monkeypatch.setattr(
+        Path, "read_bytes", lambda self: (_ for _ in ()).throw(PermissionError(5, "Acesso negado"))
+    )
+    with pytest.raises(AgentError, match="ler a chave"):
+        store.load()
+
+
 def test_loading_before_enrolling_says_so(tmp_path: Path) -> None:
     store = KeyStore(tmp_path / "keys", agent_account=_current_account())
     assert not store.exists()
