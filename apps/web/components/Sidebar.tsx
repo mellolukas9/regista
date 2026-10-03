@@ -19,6 +19,7 @@ import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
 import { ClientSwitcher } from "@/components/ClientSwitcher";
 import { UserMenu } from "@/components/UserMenu";
+import { useJobsSummary } from "@/lib/jobs";
 import { useMachinesSummary } from "@/lib/machines";
 import { canManageUsers } from "@/lib/me";
 import { useCurrentUser } from "@/lib/me-context";
@@ -30,7 +31,7 @@ type Item = {
   /** Sem `href` o item ainda não tem tela: pertence a um marco futuro. */
   href?: string;
   /** Contador de atenção ao lado do rótulo (design-system.md 11.6, "Contadores da navegação"). */
-  counter?: "machines";
+  counter?: "machines" | "jobs";
   visible?: (me: ReturnType<typeof useCurrentUser>) => boolean;
 };
 type Group = { title: string; items: Item[]; visible?: Item["visible"] };
@@ -47,7 +48,7 @@ const GROUPS: Group[] = [
     title: "Operação",
     items: [
       { label: "Dashboard", icon: LayoutDashboard },
-      { label: "Execuções", icon: Play },
+      { label: "Execuções", icon: Play, href: "/runs", counter: "jobs" },
       { label: "Filas", icon: ListChecks },
       { label: "Lotes", icon: Layers },
     ],
@@ -55,7 +56,7 @@ const GROUPS: Group[] = [
   {
     title: "Automação",
     items: [
-      { label: "Bots", icon: Bot },
+      { label: "Bots", icon: Bot, href: "/bots" },
       { label: "Agendamentos", icon: CalendarClock },
       { label: "Alertas", icon: Bell },
     ],
@@ -75,7 +76,9 @@ export function Sidebar({ onClose }: Readonly<{ onClose: () => void }>) {
   const me = useCurrentUser();
   const pathname = usePathname();
   const machines = useMachinesSummary();
-  const counters = { machines: machines.data?.no_signal ?? 0 };
+  const jobs = useJobsSummary();
+  // Só contam o que pede ação: máquinas sem sinal (perigo) e execuções esperando máquina (atenção).
+  const counters = { machines: machines.data?.no_signal ?? 0, jobs: jobs.data?.pending ?? 0 };
 
   return (
     <div className="flex h-full flex-col">
@@ -123,8 +126,11 @@ export function Sidebar({ onClose }: Readonly<{ onClose: () => void }>) {
                           {label}
                           {counter && counters[counter] > 0 && (
                             <span
-                              aria-label={`${counters[counter]} ${counters[counter] === 1 ? "máquina sem sinal" : "máquinas sem sinal"}`}
-                              className="ml-auto grid h-5 min-w-5 place-items-center rounded-pill bg-danger px-1.5 font-mono text-caption font-medium text-danger-fg"
+                              aria-label={counterLabel(counter, counters[counter])}
+                              className={cn(
+                                "ml-auto grid h-5 min-w-5 place-items-center rounded-pill px-1.5 font-mono text-caption font-medium text-danger-fg",
+                                counter === "machines" ? "bg-danger" : "bg-warning",
+                              )}
                             >
                               {counters[counter]}
                             </span>
@@ -152,6 +158,11 @@ export function Sidebar({ onClose }: Readonly<{ onClose: () => void }>) {
       </div>
     </div>
   );
+}
+
+function counterLabel(counter: "machines" | "jobs", n: number): string {
+  if (counter === "machines") return `${n} ${n === 1 ? "máquina sem sinal" : "máquinas sem sinal"}`;
+  return `${n} ${n === 1 ? "execução pendente" : "execuções pendentes"}`;
 }
 
 function NavLink({

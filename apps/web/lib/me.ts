@@ -92,3 +92,13 @@ export function canManageUsers(me: Pick<Me, "role" | "is_platform_admin">): bool
 export function canManageMachines(me: Pick<Me, "role" | "is_platform_admin">): boolean {
   return me.is_platform_admin || me.role === "tenant_admin";
 }
+
+/** Cadastrar bot: só a equipe Artemisys (design-system.md §4). */
+export function canManageBots(me: Pick<Me, "is_platform_admin">): boolean {
+  return me.is_platform_admin;
+}
+
+/** Executar agora, Reexecutar e Cancelar execução: todos menos o Leitor (design-system.md §4). */
+export function canRunJobs(me: Pick<Me, "role" | "is_platform_admin">): boolean {
+  return me.is_platform_admin || me.role === "tenant_admin" || me.role === "operator";
+}

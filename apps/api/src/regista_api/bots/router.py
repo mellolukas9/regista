@@ -89,6 +89,7 @@ async def _items(db: AsyncSession, rows: list[Row[Any]]) -> list[BotItem]:
                     finished_at=last.finished_at,
                 ),
                 recent_statuses=[x.status for x in reversed(runs)],
+                recent_ids=[x.id for x in reversed(runs)],
                 has_active_run=r.has_active_run,
             )
         )

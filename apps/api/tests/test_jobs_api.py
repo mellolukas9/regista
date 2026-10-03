@@ -59,6 +59,7 @@ async def test_running_while_another_run_is_active_creates_another_pending(
     listed = (await panel.admin_a.get(f"/bots/{bot['id']}")).json()
     assert listed["has_active_run"] is True
     assert listed["recent_statuses"] == ["running", "pending", "pending"]  # oldest first
+    assert listed["recent_ids"] == [first["id"], second["id"], third["id"]]
 
 
 async def test_create_refusals(panel: Panel) -> None:

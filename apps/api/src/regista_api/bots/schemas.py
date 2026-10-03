@@ -55,6 +55,8 @@ class BotItem(BaseModel):
     last_run: LastRun | None
     # Status of the last 10 runs, oldest first (the "Últimas 10" strip).
     recent_statuses: list[str]
+    # The ids of those runs, in the same order (the strip links to each of them).
+    recent_ids: list[uuid.UUID]
     # True while a run of this bot is pending, assigned or running ("Executar agora" tooltip).
     has_active_run: bool
 

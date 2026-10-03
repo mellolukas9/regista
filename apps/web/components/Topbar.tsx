@@ -8,6 +8,9 @@ const PAGE_NAMES: Record<string, string> = {
   "/": "Início",
   "/clients": "Clientes",
   "/users": "Usuários",
+  "/bots": "Bots",
+  "/runs": "Execuções",
+  "/machines": "Máquinas e pools",
   "/account/sessions": "Minhas sessões",
 };
 
