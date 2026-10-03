@@ -1,6 +1,6 @@
 # ADR 0005: Autenticação própria no FastAPI
 
-- **Status:** aceita
+- **Status:** aceita, ajustada pela [0017](0017-ajustes-na-autenticacao.md)
 - **Data:** 2026-10
 
 ## Contexto

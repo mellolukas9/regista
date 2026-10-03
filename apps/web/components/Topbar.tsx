@@ -1,9 +1,28 @@
+"use client";
+
 import { Bell, Menu, Search } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { contextName, useCurrentUser } from "@/lib/me-context";
+
+const PAGE_NAMES: Record<string, string> = {
+  "/": "Início",
+  "/clients": "Clientes",
+  "/users": "Usuários",
+  "/account/sessions": "Minhas sessões",
+};
+
+/** Caminho em mono: `Cliente / Página` (design-system.md §5, Topbar). */
+function useTrail(): string {
+  const me = useCurrentUser();
+  const pathname = usePathname();
+  return `${contextName(me)} / ${PAGE_NAMES[pathname] ?? "Regista"}`;
+}
 
 export function Topbar({
   menuOpen,
   onMenu,
 }: Readonly<{ menuOpen: boolean; onMenu: () => void }>) {
+  const trail = useTrail();
   return (
     <div className="flex min-h-11 flex-wrap items-center gap-3 max-[899px]:min-h-[60px]">
       <button
@@ -17,7 +36,7 @@ export function Topbar({
         <Menu aria-hidden className="size-5" />
       </button>
 
-      <p className="mr-auto font-mono text-caption text-text-label">Regista / Início</p>
+      <p className="mr-auto min-w-0 truncate font-mono text-caption text-text-label">{trail}</p>
 
       <p className="flex items-center gap-2 text-caption text-text-label">
         <span aria-hidden className="size-2 rounded-full bg-success" />

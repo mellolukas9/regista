@@ -1,31 +1,56 @@
-from collections.abc import AsyncIterator
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Literal
 
 import structlog
-from fastapi import FastAPI, Response, status
+from fastapi import Depends, FastAPI, Request, Response, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from regista_api.auth.account import router as account_router
+from regista_api.auth.deps import PublicRoute
+from regista_api.auth.router import router as auth_router
 from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
+from regista_api.core.email import EmailSender, create_email_sender
+from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.logging import configure_logging
+from regista_api.tenants.clients import router as clients_router
+from regista_api.tenants.users import router as users_router
 
 log = structlog.get_logger()
+
+# Responses under these prefixes carry session state, TOTP secrets or recovery codes.
+_NO_STORE_PREFIXES = ("/auth", "/account")
 
 
 class HealthResponse(BaseModel):
     status: Literal["ok", "unavailable"]
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def _is_no_store(path: str) -> bool:
+    return any(path == p or path.startswith(f"{p}/") for p in _NO_STORE_PREFIXES)
+
+
+def create_app(
+    settings: Settings | None = None, *, email_sender: EmailSender | None = None
+) -> FastAPI:
     settings = settings or get_settings()
+    settings.validate_for_runtime()
+    key_provider = LocalKeyProvider(settings.master_key)
+    sender = email_sender or create_email_sender(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configure_logging(settings.log_level, json=settings.environment == "prod")
         engine = create_engine(settings.database_url)
+        app.state.settings = settings
         app.state.session_factory = create_session_factory(engine)
+        app.state.key_provider = key_provider
+        app.state.email_sender = sender
         try:
             yield
         finally:
@@ -33,7 +58,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Regista API", lifespan=lifespan)
 
-    @app.get("/health", response_model=HealthResponse)
+    @app.middleware("http")
+    async def http_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        started = time.perf_counter()
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        if _is_no_store(request.url.path):
+            response.headers["Cache-Control"] = "no-store"
+        # Access log: method, path and outcome only. Secrets never travel in the URL, and
+        # bodies, headers and cookies are never logged.
+        log.info(
+            "http_request",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            ms=round((time.perf_counter() - started) * 1000, 1),
+        )
+        return response
+
+    app.include_router(auth_router)
+    app.include_router(account_router)
+    app.include_router(clients_router)
+    app.include_router(users_router)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
+        # FastAPI's default body echoes the rejected input, which would put passwords and
+        # tokens in responses and logs. Keep only where and why.
+        errors = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": errors})
+
+    @app.get("/health", response_model=HealthResponse, dependencies=[Depends(PublicRoute())])
     async def health(response: Response) -> HealthResponse:
         # Uses the runtime role (regista_app) with no tenant: only checks connectivity.
         try:

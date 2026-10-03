@@ -20,6 +20,7 @@ Cada arquivo registra uma decisão: contexto, decisão, consequências e alterna
 | [0014](0014-execucao-no-ambiente-do-cliente.md) | Execução no ambiente do cliente primeiro |
 | [0015](0015-agendador-proprio.md) | Agendador próprio com croniter e advisory lock |
 | [0016](0016-tarefas-internas-procrastinate.md) | Tarefas internas com Procrastinate |
+| [0017](0017-ajustes-na-autenticacao.md) | Ajustes na autenticação (MFA para todos, convite como recuperação, tenant interno) |
 
 ## Modelo
 

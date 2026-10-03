@@ -1,30 +1,24 @@
-from fastapi.testclient import TestClient
-
 from regista_api.core.config import Settings
 from regista_api.main import create_app
 
-from .conftest import DbUrls
+from .conftest import DbUrls, api_client, make_settings
 
 
 def _settings(db_urls: DbUrls, app_url: str | None = None) -> Settings:
-    return Settings(
-        environment="test",
-        database_url=app_url or db_urls.app,
-        database_owner_url=db_urls.owner,
-    )
+    return make_settings(db_urls, database_url=app_url or db_urls.app)
 
 
-def test_health_ok_when_database_is_reachable(db_urls: DbUrls) -> None:
-    with TestClient(create_app(_settings(db_urls))) as client:
-        response = client.get("/health")
+async def test_health_ok_when_database_is_reachable(db_urls: DbUrls) -> None:
+    async with api_client(create_app(_settings(db_urls))) as client:
+        response = await client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_health_503_without_leaking_details_when_database_is_down(db_urls: DbUrls) -> None:
+async def test_health_503_without_leaking_details_when_database_is_down(db_urls: DbUrls) -> None:
     unreachable = "postgresql+asyncpg://regista_app:secret-pw@127.0.0.1:1/regista"
-    with TestClient(create_app(_settings(db_urls, unreachable))) as client:
-        response = client.get("/health")
+    async with api_client(create_app(_settings(db_urls, unreachable))) as client:
+        response = await client.get("/health")
     assert response.status_code == 503
     assert response.json() == {"status": "unavailable"}
     assert "secret-pw" not in response.text

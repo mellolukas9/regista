@@ -19,7 +19,9 @@ async def _labels(session: AsyncSession) -> list[str]:
 
 
 async def _slugs(session: AsyncSession) -> list[str]:
-    rows = await session.execute(text("SELECT slug FROM tenants ORDER BY slug"))
+    rows = await session.execute(
+        text("SELECT slug FROM tenants WHERE slug IN ('a', 'b') ORDER BY slug")
+    )
     return [r[0] for r in rows]
 
 

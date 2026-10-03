@@ -36,7 +36,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       )}
 
       <main className="min-[900px]:pl-[248px]">
-        <div className="mx-auto flex max-w-[1240px] flex-col gap-6 px-10 pb-14 pt-6 max-[899px]:px-4">
+        <div className="mx-auto flex min-w-0 max-w-[1240px] flex-col gap-6 px-10 pb-14 pt-6 max-[899px]:px-4">
           <Topbar menuOpen={open} onMenu={() => setOpen((value) => !value)} />
           {children}
         </div>

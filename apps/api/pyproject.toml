@@ -12,7 +12,13 @@ dependencies = [
     "pydantic>=2.13",
     "pydantic-settings>=2.15",
     "structlog>=26.1",
+    "argon2-cffi>=25.1",
+    "pyotp>=2.9",
+    "cryptography>=46.0",
 ]
+
+[project.scripts]
+regista-admin = "regista_api.cli:main"
 
 [build-system]
 requires = ["hatchling"]
