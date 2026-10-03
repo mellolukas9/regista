@@ -169,25 +169,22 @@ async def test_machine_constraints(app_factory: Factory, seed: Seed) -> None:
         )
         await _machine(session, seed.tenant_a, pool_id, name=name)
 
-    # status <=> revoked_at, and a non-pending machine always has a key of 32 bytes.
-    with pytest.raises(DBAPIError, match="ck_machines_revoked"):
-        async with tenant_session(app_factory, tenant_id=seed.tenant_a) as session:
-            await session.execute(
-                text("UPDATE machines SET revoked_at = now() WHERE tenant_id = :t"),
-                {"t": seed.tenant_a},
-            )
-    with pytest.raises(DBAPIError, match="ck_machines_enrolled_key"):
-        async with tenant_session(app_factory, tenant_id=seed.tenant_a) as session:
-            await session.execute(
-                text("UPDATE machines SET status = 'online' WHERE tenant_id = :t"),
-                {"t": seed.tenant_a},
-            )
-    with pytest.raises(DBAPIError, match="ck_machines_public_key_size"):
-        async with tenant_session(app_factory, tenant_id=seed.tenant_a) as session:
-            await session.execute(
-                text("UPDATE machines SET public_key = :k WHERE tenant_id = :t"),
-                {"k": os.urandom(31), "t": seed.tenant_a},
-            )
+    # status <=> revoked_at, and a non-pending machine always has a key of 32 bytes. The database
+    # is shared by the whole session, so each statement targets this test's own machine.
+    async with tenant_session(app_factory, tenant_id=seed.tenant_a) as session:
+        own = await _machine(session, seed.tenant_a, pool_id)
+    for pattern, statement, params in (
+        ("ck_machines_revoked", "UPDATE machines SET revoked_at = now() WHERE id = :m", {}),
+        ("ck_machines_enrolled_key", "UPDATE machines SET status = 'online' WHERE id = :m", {}),
+        (
+            "ck_machines_public_key_size",
+            "UPDATE machines SET public_key = :k WHERE id = :m",
+            {"k": os.urandom(31)},
+        ),
+    ):
+        with pytest.raises(DBAPIError, match=pattern):
+            async with tenant_session(app_factory, tenant_id=seed.tenant_a) as session:
+                await session.execute(text(statement), {"m": own, **params})
 
 
 async def test_pool_names_are_unique_per_tenant_ignoring_case(

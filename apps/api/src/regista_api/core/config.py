@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     rate_mfa_per_5min: int = 10
     rate_invite_ip_per_minute: int = 20
 
+    # Machine access token (docs/adr/0018). Renewal is the agent's job, on its own monotonic clock.
+    agent_token_minutes: int = 15
+
     # Peers allowed to set X-Forwarded-For (comma separated). Dev: the Next.js proxy.
     trusted_proxies: str = "127.0.0.1,::1"
 

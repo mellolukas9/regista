@@ -21,6 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from regista_api.auth.deps import PublicRoute, Require, RequireStage, SelfService
+from regista_api.auth.machine import MachineRoute
 from regista_api.auth.permissions import PLATFORM_ONLY
 from regista_api.core.db import tenant_session
 from regista_api.main import create_app
@@ -323,6 +324,53 @@ def test_a_mounted_sub_app_fails_the_sweep(db_urls: DbUrls) -> None:
     app.mount("/shadow", FastAPI())
     with pytest.raises(Uncovered, match="not an APIRoute"):
         _specs(app)
+
+
+def test_an_agent_route_without_marker_fails_the_sweep(bare_app: FastAPI) -> None:
+    @bare_app.post("/agent/oops")
+    async def oops() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="exactly one route marker"):
+        _specs(bare_app)
+
+
+def test_an_agent_route_with_a_user_marker_fails_the_sweep(bare_app: FastAPI) -> None:
+    @bare_app.get("/agent/oops", dependencies=[Depends(SelfService())])
+    async def oops() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="must be a MachineRoute"):
+        _specs(bare_app)
+
+
+def test_a_new_public_agent_route_fails_the_sweep(bare_app: FastAPI) -> None:
+    """The list of agent routes that take no token is closed: adding one is a deliberate edit."""
+
+    @bare_app.post("/agent/oops", dependencies=[Depends(PublicRoute())])
+    async def oops() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="must be a MachineRoute"):
+        _specs(bare_app)
+
+
+def test_a_user_route_with_the_machine_marker_fails_the_sweep(bare_app: FastAPI) -> None:
+    @bare_app.get("/clients/oops", dependencies=[Depends(MachineRoute())])
+    async def oops() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="only allowed under /agent/"):
+        _specs(bare_app)
+
+
+def test_a_token_less_agent_path_must_stay_public(bare_app: FastAPI) -> None:
+    @bare_app.post("/agent/enroll", dependencies=[Depends(MachineRoute())])
+    async def enroll() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="must be a PublicRoute"):
+        _specs(bare_app)
 
 
 def test_require_marker_is_discovered_with_its_permission(db_urls: DbUrls) -> None:
