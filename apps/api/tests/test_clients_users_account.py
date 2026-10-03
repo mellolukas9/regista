@@ -691,3 +691,76 @@ async def test_change_password_failures_feed_the_lockout(env: Env, seed: Seed) -
             "/auth/login", json={"email": person.email, "password": PASSWORD}
         )
         assert locked.status_code == 429
+
+
+async def test_api_refuses_actions_on_your_own_row_and_changes_nothing(
+    env: Env, seed: Seed, internal_tenant: uuid.UUID
+) -> None:
+    """The panel hides these buttons, but the rule lives in the API: calling it directly is refused
+    and neither the row, the credentials, the sessions nor the e-mail outbox move."""
+    admin = await onboard(env.app, env.client, seed.tenant_a, env.clock, role="tenant_admin")
+    me = await _user_id(env, seed.tenant_a, admin.email)
+    sent_before = len(env.mail.outbox)
+
+    async def snapshot() -> dict[str, object]:
+        async with tenant_session(env.app.state.session_factory, tenant_id=seed.tenant_a) as db:
+            row = (
+                (
+                    await db.execute(
+                        text(
+                            "SELECT role, status, password_hash, mfa_enabled, mfa_secret_enc,"
+                            " (SELECT count(*) FROM sessions s WHERE s.user_id = u.id"
+                            "  AND s.revoked_at IS NULL) AS live_sessions,"
+                            " (SELECT count(*) FROM recovery_codes r WHERE r.user_id = u.id"
+                            "  AND r.used_at IS NULL) AS codes,"
+                            " (SELECT count(*) FROM invitations i"
+                            "  WHERE i.user_id = u.id) AS invites"
+                            " FROM users u WHERE u.id = :u"
+                        ),
+                        {"u": me},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        return dict(row)
+
+    before = await snapshot()
+    attempts = [
+        (
+            await env.client.patch(
+                f"/users/{me}", json={"role": "viewer"}, headers=csrf(env.client)
+            ),
+            "cannot_change_own_role",
+        ),
+        (await _post(env.client, f"/users/{me}/remove-access"), "cannot_remove_own_access"),
+        (await _post(env.client, f"/users/{me}/resend-invitation"), "cannot_reinvite_self"),
+    ]
+    for response, code in attempts:
+        assert response.status_code == 409, code
+        assert response.json()["detail"] == {"code": code}
+
+    assert await snapshot() == before  # role, status, password, MFA, sessions, codes, invitations
+    assert len(env.mail.outbox) == sent_before  # no invitation e-mail went out
+    assert (await env.client.get("/auth/me")).json()["role"] == "tenant_admin"  # still signed in
+
+    # The Artemisys team: their own user lives in the hidden internal tenant, so from inside a
+    # client it is simply not there, and in "all clients" writes are refused before anything runs.
+    async with new_client(env.app) as staff:
+        me_staff = await onboard(
+            env.app, staff, internal_tenant, env.clock, role="tenant_admin", platform_admin=True
+        )
+        staff_id = me_staff.user_id
+        await _pick(staff, seed.tenant_a)
+        for method, path, body in (
+            ("PATCH", f"/users/{staff_id}", {"role": "viewer"}),
+            ("POST", f"/users/{staff_id}/remove-access", None),
+            ("POST", f"/users/{staff_id}/resend-invitation", None),
+        ):
+            r = await staff.request(method, path, json=body, headers=csrf(staff))
+            assert r.status_code == 404, (method, path)
+        await _pick(staff, None)
+        r = await _post(staff, f"/users/{staff_id}/remove-access")
+        assert r.status_code == 409
+        assert r.json()["detail"] == {"code": "client_context_required"}
+        assert (await staff.get("/auth/me")).json()["is_platform_admin"] is True
