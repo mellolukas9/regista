@@ -125,6 +125,8 @@ class IssuedKey(BaseModel):
     name: str
     enrollment_key: str
     expires_at: datetime
+    # The address the agent must use in `enroll --url`: the audience the server verifies against.
+    server_url: str
 
 
 class MachineEvent(BaseModel):

@@ -107,8 +107,8 @@ export default function MachinesPage() {
 
       {allClients && (
         <p className="text-body-sm text-text-label">
-          Todos os clientes. Escolha um cliente no topo da barra lateral para cadastrar máquinas ou
-          criar pools.
+          Você está vendo todos os clientes. Para cadastrar máquinas ou criar pools, escolha um
+          cliente no topo da barra lateral.
         </p>
       )}
 

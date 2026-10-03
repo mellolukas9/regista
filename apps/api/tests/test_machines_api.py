@@ -180,6 +180,10 @@ async def test_a_machine_starts_pending_with_a_key_that_is_stored_only_as_a_hash
     created = response.json()
     key = created["enrollment_key"]
     assert key.startswith("rgk_") and len(key) > 40
+    # The panel shows this address beside the key: it must be what the server verifies
+    # (the audience), whatever trailing slash the setting was written with.
+    expected = b.env.app.state.settings.api_public_url.rstrip("/")
+    assert created["server_url"] == expected and not created["server_url"].endswith("/")
 
     async with tenant_session(owner_factory, tenant_id=b.seed.tenant_a) as db:
         row = (
@@ -251,6 +255,7 @@ async def test_a_new_key_replaces_the_live_one_and_changes_nothing_else(
     again = await _post(b.admin_a, f"/machines/{machine_id}/enrollment-key")
     assert again.status_code == 201 and again.headers["cache-control"] == "no-store"
     assert again.json()["enrollment_key"] != created["enrollment_key"]
+    assert again.json()["server_url"] == created["server_url"]
 
     async with tenant_session(owner_factory, tenant_id=b.seed.tenant_a) as db:
         keys = (

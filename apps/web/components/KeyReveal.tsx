@@ -43,8 +43,8 @@ function KeyRevealContent({ issued, onDone }: Readonly<{ issued: IssuedKey; onDo
         </div>
         <DialogTitle>Copie a chave de registro</DialogTitle>
         <DialogDescription>
-          Use esta chave no computador para cadastrar o agente. Ela vale uma vez, até{" "}
-          {formatDateTime(issued.expires_at)}.
+          Use o endereço e a chave no computador onde o agente será instalado. A chave vale uma
+          vez, até {formatDateTime(issued.expires_at)}.
         </DialogDescription>
       </DialogHeader>
 
@@ -60,6 +60,15 @@ function KeyRevealContent({ issued, onDone }: Readonly<{ issued: IssuedKey; onDo
       </div>
 
       <div>
+        <p className="mb-1.5 text-body-sm font-medium text-text">Endereço do Regista</p>
+        <p className="break-all rounded-control border border-border-control bg-sidebar p-3 font-mono text-body-sm text-text select-all">
+          {issued.server_url}
+        </p>
+        <CopyButton value={issued.server_url} label="Copiar endereço" copiedLabel="Copiado" className="mt-3" />
+      </div>
+
+      <div>
+        <p className="mb-1.5 text-body-sm font-medium text-text">Chave de registro</p>
         <p className="break-all rounded-control border border-border-control bg-sidebar p-3 font-mono text-body-sm text-text select-all">
           {issued.enrollment_key}
         </p>

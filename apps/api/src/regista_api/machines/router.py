@@ -240,7 +240,11 @@ async def create_machine(
             raise api_error(409, "machine_name_taken") from None
         raise
     return IssuedKey(
-        machine_id=machine_id, name=body.name, enrollment_key=key, expires_at=expires_at
+        machine_id=machine_id,
+        name=body.name,
+        enrollment_key=key,
+        expires_at=expires_at,
+        server_url=service.server_url(auth.state.settings),
     )
 
 
@@ -351,7 +355,11 @@ async def new_enrollment_key(
             {"replaces_agent": target.status != "pending", "expires_at": expires_at.isoformat()},
         )
     return IssuedKey(
-        machine_id=machine_id, name=target.name, enrollment_key=key, expires_at=expires_at
+        machine_id=machine_id,
+        name=target.name,
+        enrollment_key=key,
+        expires_at=expires_at,
+        server_url=service.server_url(auth.state.settings),
     )
 
 

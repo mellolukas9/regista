@@ -15,6 +15,12 @@ from regista_api.core.security import hash_token
 KEY_PREFIX = "rgk_"
 
 
+def server_url(settings: Settings) -> str:
+    """The address an agent enrolls against. It is the audience the server verifies, so the panel
+    shows exactly this (no trailing slash) next to the key."""
+    return settings.api_public_url.rstrip("/")
+
+
 async def record_event(
     db: AsyncSession,
     *,

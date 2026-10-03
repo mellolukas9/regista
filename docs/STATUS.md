@@ -56,7 +56,7 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 | Procrastinate | Versão fixa; atualizar por migration Alembic (procedimento no `CLAUDE.md`) |
 | Relógio do agente | Renovação e backoff com `time.monotonic` |
 | Nome da máquina | `[a-z0-9][a-z0-9-]{0,62}`, único por cliente entre as não revogadas |
-| Textos | `design-system.md` §13 (alguns marcados "proposto", ainda sem confirmação) |
+| Textos | `design-system.md` §13, aprovados pelo responsável com ajustes (banner por modo, endereço no KeyReveal, plural do contador) |
 | Fluxo | Ao final de cada passo: commit **e** push (regra registrada no `CLAUDE.md`) |
 
 **Risco aceito no MVP (ADR 0018):** com DPAPI `LocalMachine`, um administrador da máquina consegue extrair a chave privada e usá-la. Mitigação: revogar a máquina no painel invalida a identidade na hora. Evolução: guardar a chave no TPM (provedor de chaves da plataforma); o resto do agente não muda.
@@ -116,6 +116,5 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 - **Não conferido no navegador:** a visão de Operador/Leitor (sem botões; coberta pela matriz de permissões do servidor) e "Gerar nova chave" numa máquina já cadastrada (coberto pelo teste da API; o botão e o diálogo foram escritos mas não exercitados na tela).
 - **A API ganhou dois campos para as telas:** `key_created_at` em máquinas ("Chave gerada há 10 min, ainda não usada") e `machines_total`/`machines_online` em Clientes.
 - **Aba Execuções, coluna "Agora" e linha "Roda: …"** ficam para o M3 (dependem de `bots` e `jobs`); a aba na URL (`?tab=`) também, pois por ora só existe o Histórico.
-- **Textos "propostos"** em `design-system.md` §13 (KeyReveal, estados vazios, Histórico) esperam confirmação.
 - **`enroll` sem elevação** passou a explicar o que fazer (antes mostrava um traceback).
 - **Erro no processo:** a pasta `.playwright-mcp/` (capturas da conferência) foi commitada por engano e removida no commit seguinte. **Decidido manter no histórico, sem force-push.** Conferido: as capturas só têm dados de uma conta temporária de dev (segredo TOTP, códigos de recuperação e uma chave de registro), e todos estão mortos: o usuário está `disabled` e sem sessão, a chave foi usada e a máquina está revogada. Nenhum cookie de sessão, CSRF, token `rga1` ou link de convite aparece nelas.

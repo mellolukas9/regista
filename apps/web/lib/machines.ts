@@ -47,6 +47,8 @@ export type IssuedKey = {
   name: string;
   enrollment_key: string;
   expires_at: string;
+  /** O endereço que o agente usa no `enroll --url` (o que o servidor confere na assinatura). */
+  server_url: string;
 };
 
 type MachinePage = {

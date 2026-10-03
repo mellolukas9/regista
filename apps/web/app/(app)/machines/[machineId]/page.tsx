@@ -116,7 +116,7 @@ export default function MachineDetailPage() {
         title={missing ? "Máquina não encontrada" : "Não foi possível carregar a máquina"}
         description={
           missing
-            ? "Ela pode ter sido removida ou pertencer a outro cliente. Volte para a lista."
+            ? "Confira o endereço ou volte para a lista de máquinas."
             : "O servidor não respondeu. Tente de novo em alguns segundos."
         }
         action={
@@ -180,10 +180,10 @@ export default function MachineDetailPage() {
       {data.status === "offline" && (
         <Banner tone="danger" title="O agente parou de responder">
           {otherOnline
-            ? `Enquanto isso, as execuções do pool vão para a ${otherOnline.name}. `
-            : "Enquanto isso, as execuções do pool ficam pendentes. "}
-          Confira se o computador está ligado, com internet, e se o usuário do Windows continua
-          logado (modo Sessão).
+            ? `Até o agente voltar, as execuções do pool vão para a máquina ${otherOnline.name}. `
+            : "Até o agente voltar, as execuções do pool ficam pendentes. "}
+          Confira se o computador está ligado e com internet.
+          {data.mode === "session" && " Confira também se o usuário do Windows continua logado."}
         </Banner>
       )}
 
