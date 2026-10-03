@@ -14,6 +14,9 @@ regista-sdk = { workspace = true }
 regista-agent = { workspace = true }
 
 [dependency-groups]
+bots = [
+    "playwright>=1.63.0",
+]
 dev = [
     "regista-api",
     "regista-sdk",

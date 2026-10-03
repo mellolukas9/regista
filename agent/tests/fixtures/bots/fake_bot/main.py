@@ -26,6 +26,7 @@ def shot(name: str = "tela.png") -> None:
 
 
 print("INFO robo iniciado", flush=True)
+print(f"INFO pid {os.getpid()}", flush=True)
 
 if mode == "ok":
     print("passo um", flush=True)
