@@ -62,18 +62,20 @@ key_hash bytea, window_start, count; PK `(key_hash, window_start)`. Sem `tenant_
 ## Execução
 
 ### `pools` (M2)
-id, tenant_id, name, kind (`on_prem`, `client_cloud`, `internal`), description.
+id, tenant_id, name (único por cliente, sem diferenciar maiúsculas), kind (`on_prem`, `client_cloud`, `internal`; a interface não tem campo e usa `on_prem`), description, created_by, created_at, updated_at.
 
 ### `machines` (M2)
-id, tenant_id, pool_id, name, public_key (bytea, Ed25519), mode (`service`, `session`, `oneshot`), status (`pending`, `online`, `offline`, `revoked`), last_seen_at, agent_version, os_info jsonb, max_concurrency int (paralelismo de itens dentro de uma execução), revoked_at.
+id, tenant_id, pool_id, name, public_key (bytea, Ed25519), mode (`service`, `session`, `oneshot`), status (`pending`, `online`, `offline`, `revoked`), last_seen_at, agent_version, os_info jsonb, max_concurrency int (paralelismo de itens dentro de uma execução), enrolled_at, revoked_at, revoked_by, created_by, created_at, updated_at.
+
+Identidade e autenticação do agente: `credential_version` int (sobe a cada cadastro; um token com versão antiga é recusado, o que derruba o agente anterior no recadastro) e o desafio em andamento, `challenge_hash` (sha256 do nonce) e `challenge_expires_at` (60 s), limpos no primeiro uso. `public_key` é nula até o cadastro. O nome segue `[a-z0-9][a-z0-9-]{0,62}` e é único por cliente entre as máquinas não revogadas. A API só aceita os modos `service` e `session`.
 
 Regras: `offline` após **2 minutos** sem sinal; volta a `online` no próximo sinal. **Uma execução por máquina por vez.**
 
 ### `machine_events` (M2)
-id, tenant_id, machine_id, kind (`enrolled`, `first_signal`, `went_offline`, `came_back`, `agent_updated`, `revoked`), metadata jsonb, created_at. Alimenta o histórico da máquina.
+id, tenant_id, machine_id, kind (`enrolled`, `re_enrolled`, `first_signal`, `went_offline`, `came_back`, `agent_updated`, `revoked`), metadata jsonb, created_at. Somente inserção. Alimenta o histórico da máquina. `re_enrolled` é o uso de uma nova chave numa máquina já cadastrada; o conteúdo vindo do agente (versão, sistema) é dado não confiável.
 
 ### `enrollment_keys` (M2)
-id, tenant_id, machine_id, key_hash, expires_at, used_at, created_by.
+id, tenant_id, machine_id, key_hash (sha256, único), expires_at, used_at, revoked_at, created_by, created_at. Uma chave viva (nem usada nem revogada) por máquina: gerar nova chave revoga a anterior na mesma transação. A chave em si (`rgk_…`) só aparece na resposta que a cria.
 
 ### `bots` (M3)
 id, tenant_id, pool_id, name, description, concurrency int default 1, is_active, current_version_id (M4).

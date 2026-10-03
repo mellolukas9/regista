@@ -58,16 +58,16 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 
 ## M2 — Agente: identidade e presença
 
-- [ ] Tabelas `pools`, `machines`, `enrollment_keys`, `machine_events`
-- [ ] Painel gera chave de registro de uso único (KeyReveal: exibida uma vez; banco guarda só o hash; expira em 24h; "Gerar nova chave" invalida a anterior); máquina fica `pending` até o cadastro
-- [ ] `regista-agent enroll --url --key`: gera par Ed25519 local, envia chave pública, recebe `machine_id`
-- [ ] Autenticação do agente por desafio assinado → token de acesso curto (15 min) com escopo de máquina e tenant
-- [ ] Heartbeat; tarefa interna (Procrastinate) marca máquina `offline` após 2 minutos sem sinal; histórico em `machine_events`
-- [ ] Revogação de máquina no painel (efeito imediato)
-- [ ] Modo serviço e modo sessão de usuário (ver `docs/specs/agent.md`); execução local via `uv run regista-agent`
-- [ ] `regista-agent diagnose` (conexão, proxy, certificado, permissões, versão do Python)
-- [ ] Armazenamento protegido da chave privada (ACL restrita / DPAPI no Windows)
-- [ ] Frontend: Máquinas e pools (7.13) e Detalhe da máquina (7.14)
+- [x] Tabelas `pools`, `machines`, `enrollment_keys`, `machine_events`
+- [x] Painel gera chave de registro de uso único (KeyReveal: exibida uma vez; banco guarda só o hash; expira em 24h; "Gerar nova chave" invalida a anterior); máquina fica `pending` até o cadastro
+- [x] `regista-agent enroll --url --key`: gera par Ed25519 local, envia chave pública, recebe `machine_id`
+- [x] Autenticação do agente por desafio assinado → token de acesso curto (15 min) com escopo de máquina e tenant
+- [x] Heartbeat; tarefa interna (Procrastinate) marca máquina `offline` após 2 minutos sem sinal; histórico em `machine_events`
+- [x] Revogação de máquina no painel (efeito imediato)
+- [x] Modo serviço e modo sessão de usuário (ver `docs/specs/agent.md`); execução local via `uv run regista-agent`
+- [x] `regista-agent diagnose` (conexão, proxy, certificado, permissões, versão do Python)
+- [x] Armazenamento protegido da chave privada (ACL restrita / DPAPI no Windows)
+- [x] Frontend: Máquinas e pools (7.13) e Detalhe da máquina (7.14)
 
 **Pronto quando:** uma VM ou a própria máquina de dev se cadastra, aparece online, cai para offline ao parar o agente e para de funcionar ao ser revogada.
 

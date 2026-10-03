@@ -6,7 +6,7 @@
 
 1. Administrador cria a máquina no painel, dentro de um pool.
 2. A API gera uma **chave de registro de uso único** (exibida uma vez; banco guarda só o hash; expira em 24h).
-3. Na máquina: `regista-agent enroll --url https://<regista> --key <chave>`.
+3. Na máquina, em um console **elevado** (Administrador no Windows): `regista-agent enroll --url https://<regista> --key <chave> [--agent-account <conta>]`. O `enroll` recusa sobrescrever uma identidade existente sem `--force`.
 4. O agente gera um par **Ed25519 localmente** e envia a chave pública com a chave de registro.
 5. A API valida, queima a chave de registro, grava a chave pública e responde com `machine_id`.
 6. Daqui em diante, para obter acesso: o agente pede um desafio (nonce), assina com a chave privada e troca por um **token de acesso de 15 minutos** com escopo `machine_id` + `tenant_id`.
@@ -69,4 +69,5 @@ No M3, antes da assinatura existir, o runner aceita uma pasta local apenas com `
 - Log local rotativo do agente e registro local do que foi executado (robô, versão, horário, resultado) para auditoria do TI do cliente.
 - Kill switch local: arquivo/flag que suspende novas execuções sem depender do painel.
 - Autoatualização assinada (M8): o agente baixa nova versão de si mesmo, valida assinatura e troca.
-- Armazenamento da chave privada com ACL restrita ao usuário do serviço (no Windows, proteger com DPAPI).
+- Armazenamento da chave privada (ADR 0018): no Windows, DPAPI com escopo da máquina e entropia fixa, em `%ProgramData%\Regista\keys\` com herança desligada e acesso só para a conta que roda o agente (`--agent-account`; padrão `NT SERVICE\RegistaAgent` no modo `service`, obrigatória no modo `session`), `SYSTEM` e `Administradores`, nunca para quem rodou o `enroll`. Limite aceito: um administrador da máquina extrai a chave; a evolução é o TPM. O `diagnose` confere a ACL. Detalhes em `agent/README.md`.
+- Renovação do token e backoff usam relógio monotônico, não o horário do sistema.
