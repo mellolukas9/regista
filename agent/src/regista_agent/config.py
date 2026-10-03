@@ -23,6 +23,8 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
+from regista_agent.errors import AgentError
+
 CONFIG_NAME = "agent.toml"
 Mode = Literal["service", "session", "oneshot"]
 
@@ -70,6 +72,20 @@ class AgentSettings(BaseSettings):
     ca_bundle: Path | None = None
     log_level: str = Field(default="INFO")
 
+    # --- running robots (M3) ---------------------------------------------------------------
+    # `prod` unless said otherwise: forgetting to set it can only make the agent stricter.
+    environment: Literal["dev", "prod"] = "prod"
+    # M3 only, before signed packages exist (M4): run a robot from a local folder. Refused in
+    # production (`check_dev_unsigned`), so it cannot be switched on by accident on a customer's
+    # machine.
+    dev_unsigned: bool = False
+    dev_bots_dir: Path | None = None
+    dev_python: Path | None = None
+    job_priority: Literal["below_normal", "normal"] = "below_normal"
+    cancel_grace_seconds: int = Field(default=15, ge=0, le=300)
+    log_flush_seconds: float = Field(default=2.0, gt=0, le=60)
+    poll_wait_seconds: int = Field(default=30, ge=0, le=30)
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -105,6 +121,21 @@ class AgentSettings(BaseSettings):
     @property
     def enrolled(self) -> bool:
         return self.machine_id is not None and self.server_url is not None
+
+    def check_dev_unsigned(self) -> None:
+        """Running a robot that nobody signed is a development tool, and only that."""
+        if not self.dev_unsigned:
+            return
+        if self.environment != "dev":
+            raise AgentError(
+                "REGISTA_DEV_UNSIGNED só pode ser usado com REGISTA_ENVIRONMENT=dev. Em produção "
+                "o agente só roda pacotes assinados pela Artemisys."
+            )
+        if self.dev_bots_dir is None or not self.dev_bots_dir.is_dir():
+            raise AgentError(
+                "REGISTA_DEV_UNSIGNED pede REGISTA_DEV_BOTS_DIR apontando para a pasta dos robôs "
+                "(no repositório, a pasta `bots`)."
+            )
 
 
 def save_identity(

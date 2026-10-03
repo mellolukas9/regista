@@ -50,11 +50,11 @@ plugins = ["pydantic.mypy"]
 mypy_path = ["apps/api/src", "sdk/src", "agent/src"]
 explicit_package_bases = true
 files = ["apps/api", "sdk", "agent"]
-exclude = ["migrations/versions/"]
+exclude = ["migrations/versions/", "agent/tests/fixtures/", "bots/"]
 
 [[tool.mypy.overrides]]
 # boto3 ships no types; the S3 calls are wrapped in `regista_api.storage`.
-module = ["boto3", "boto3.*", "botocore", "botocore.*", "asyncpg", "asyncpg.*"]
+module = ["boto3", "boto3.*", "botocore", "botocore.*", "asyncpg", "asyncpg.*", "psutil", "psutil.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
