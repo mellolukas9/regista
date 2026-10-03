@@ -41,3 +41,6 @@ apps/web/CLAUDE.md
 
 # Capturas e snapshots do Playwright MCP (conferencia no navegador)
 .playwright-mcp/
+
+# Guia local de teste manual do agente real (nao versionar)
+/TESTE-AGENTE-REAL.md
