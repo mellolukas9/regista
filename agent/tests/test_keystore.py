@@ -166,6 +166,22 @@ def test_sddl_parsing_understands_aliases_and_rights() -> None:
 
 
 @windows_only
+def test_sddl_aliases_that_mean_a_different_sid_on_each_computer_are_resolved() -> None:
+    """Windows writes the local Administrator account (RID 500) as the alias `LA`. A table of
+    fixed aliases cannot know that SID, and the agent's own account was reported as a stranger."""
+    from regista_agent import _windows
+
+    administrator = _windows.normalize_sid("LA")
+    assert administrator.startswith("S-1-5-21-") and administrator.endswith("-500")
+    assert _windows.normalize_sid("S-1-5-18") == "S-1-5-18"  # already a SID
+    assert _windows.normalize_sid("BA") == _windows.ADMINISTRATORS_SID  # well known
+    assert _windows.normalize_sid("ZZ") == "ZZ"  # unknown stays visible as unexpected
+
+    dacl = _windows.parse_sddl("D:P(A;OICI;FR;;;LA)(A;OICI;FA;;;SY)")
+    assert [a.sid for a in dacl.aces] == [administrator, _windows.SYSTEM_SID]
+
+
+@windows_only
 def test_restricting_a_folder_leaves_only_the_three_accounts(tmp_path: Path) -> None:
     from regista_agent import _windows
 

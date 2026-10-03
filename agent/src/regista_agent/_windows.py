@@ -38,8 +38,9 @@ _PROTECTED_DACL_SECURITY_INFORMATION = 0x80000000
 _UNPROTECTED_DACL_SECURITY_INFORMATION = 0x20000000
 _SDDL_REVISION_1 = 1
 
-# SDDL aliases of the principals that matter here (the full list is long; anything not known is
-# kept as it is and shows up as an unexpected principal).
+# Well-known SDDL aliases, resolved without asking the system. Anything else (`LA`, the local
+# Administrator account; `LG`, `DA`...) is turned into a SID by Windows itself: some aliases mean
+# a different SID on every computer, so no fixed table can cover them.
 _SDDL_ALIASES = {
     "SY": SYSTEM_SID,
     "BA": ADMINISTRATORS_SID,
@@ -274,6 +275,32 @@ class Dacl:
     aces: list[Ace]
 
 
+def normalize_sid(token: str) -> str:
+    """A SID as `S-1-...`, whether SDDL wrote it in full or as a two-letter alias.
+
+    Windows writes the account of the person who set an ACL as an alias when it is a well-known
+    one (the local Administrator, RID 500, becomes `LA`), so comparing raw SDDL tokens with SIDs
+    from `resolve_sid` would call the agent's own account a stranger.
+    """
+    if token.startswith("S-1-"):
+        return token
+    if token in _SDDL_ALIASES:
+        return _SDDL_ALIASES[token]
+    sid = ctypes.c_void_p()
+    if not _advapi32.ConvertStringSidToSidW(token, ctypes.byref(sid)):
+        return token  # unknown: left as it is, so it shows up as an unexpected account
+    try:
+        text = wintypes.LPWSTR()
+        if not _advapi32.ConvertSidToStringSidW(sid, ctypes.byref(text)):
+            return token
+        try:
+            return str(text.value)
+        finally:
+            _kernel32.LocalFree(ctypes.cast(text, ctypes.c_void_p))
+    finally:
+        _kernel32.LocalFree(sid)
+
+
 _ACE = re.compile(r"\(([^)]*)\)")
 
 
@@ -287,7 +314,7 @@ def parse_sddl(sddl: str) -> Dacl:
     for raw in _ACE.findall(section):
         fields = raw.split(";")
         sid = fields[5] if len(fields) > 5 else ""
-        aces.append(Ace(fields[0], fields[1], fields[2], _SDDL_ALIASES.get(sid, sid)))
+        aces.append(Ace(fields[0], fields[1], fields[2], normalize_sid(sid)))
     return Dacl(protected="P" in flags, aces=aces)
 
 
