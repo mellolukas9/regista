@@ -79,6 +79,8 @@ uv run alembic -c apps/api/alembic.ini upgrade head
 
 Migrations rodam como `regista_owner` (`REGISTA_DATABASE_OWNER_URL`); a API roda como `regista_app` (`REGISTA_DATABASE_URL`).
 
+**Atualizar o Procrastinate.** A versão é fixa (`==`) em `apps/api/pyproject.toml` e o schema dele vive no banco, aplicado pela migration `0003`. Nunca rode o `procrastinate schema --apply` nem troque só a versão. Para subir de versão: (1) troque a versão fixa e rode `uv sync`; (2) crie uma migration Alembic nova que aplica, como `regista_owner`, os arquivos de `procrastinate/sql/migrations/` entre a versão antiga e a nova (em ordem), e refaz os grants a `regista_app` (DML nas tabelas, sequences e EXECUTE nas funções novas); (3) confirme que `uv run pytest` passa, incluindo os testes do worker. O registro da decisão fica na ADR 0018.
+
 **Equipe Artemisys e dados de exemplo.** A equipe vive num cliente interno oculto e se gerencia só pelo CLI `regista-admin` (sem tela no MVP; nunca aceita senha por argumento, sempre convite). Em dev, os e-mails (convites) são impressos no console:
 
 ```powershell
@@ -94,5 +96,5 @@ O seed cria os clientes e usuários do §10 de `docs/specs/design-system.md` (`a
 
 1. Ler `docs/STATUS.md` e o marco atual em `docs/ROADMAP.md`.
 2. Propor um plano curto (arquivos, passos, como validar) e aguardar aprovação.
-3. Implementar em passos pequenos, rodando testes e lint a cada passo.
+3. Implementar em passos pequenos, rodando testes e lint a cada passo. **Ao final de cada passo: commit e push** (`git push`), para o trabalho nunca ficar só na máquina local.
 4. Ao terminar: marcar o checklist do marco no `ROADMAP.md`, atualizar `docs/STATUS.md` (estado, próximo passo, registro) e a seção de comandos deste arquivo, se mudou.
