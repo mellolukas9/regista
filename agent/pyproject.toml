@@ -3,7 +3,13 @@ name = "regista-agent"
 version = "0.0.0"
 description = "Regista agent (runs in the customer environment)"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "cryptography>=50.0.2",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.15.0",
+    "tomli-w>=1.2.0",
+    "truststore>=0.10.4",
+]
 
 [project.scripts]
 regista-agent = "regista_agent.cli:main"

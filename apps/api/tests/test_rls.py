@@ -45,6 +45,17 @@ async def test_app_role_is_not_privileged(app_factory: Factory, seed: Seed) -> N
     assert owned == 0
 
 
+# Platform data, not client data: the Procrastinate job queue (ADR 0018). The list is closed and
+# the guard below checks these tables really have no `tenant_id`, so a client table cannot hide
+# here. Task arguments carry only ids, never client content.
+PLATFORM_TABLES = {
+    "procrastinate_events",
+    "procrastinate_jobs",
+    "procrastinate_periodic_defers",
+    "procrastinate_workers",
+}
+
+
 async def test_every_tenant_table_has_forced_rls_and_policies(owner_factory: Factory) -> None:
     """Guard for future milestones: new tables cannot ship without the pattern."""
     async with tenant_session(owner_factory) as session:
@@ -60,8 +71,13 @@ async def test_every_tenant_table_has_forced_rls_and_policies(owner_factory: Fac
                 )
             )
         ).all()
-        assert {t.relname for t in tables} >= {"tenants", "rls_probe"}
+        names = {t.relname for t in tables}
+        assert names >= {"tenants", "rls_probe", "pools", "machines"}
+        assert names >= {"enrollment_keys", "machine_events"} | PLATFORM_TABLES
         for table in tables:
+            if table.relname in PLATFORM_TABLES:
+                assert not table.has_tenant_id, f"{table.relname} has tenant_id: needs RLS"
+                continue
             assert table.relrowsecurity, f"{table.relname}: RLS not enabled"
             assert table.relforcerowsecurity, f"{table.relname}: RLS not forced"
             commands = {

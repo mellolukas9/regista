@@ -1,0 +1,18 @@
+{
+  "_comment": "Contrato de assinatura entre o servidor e o agente (ADR 0018). Ed25519 e deterministico: a mesma entrada gera sempre a mesma assinatura. Os testes do servidor (apps/api/tests/test_agent_api.py) e os do agente leem este arquivo; se um dos lados mudar o que assina, o teste quebra.",
+  "private_seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "public_key_b64": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=",
+  "audience": "https://regista.exemplo.com.br",
+  "enroll": {
+    "key": "rgk_vetor-fixo-de-teste",
+    "key_hash_hex": "0e881e5a9450e98c60c289642d8cdc937f3bf87affad74cd7a0dc753e191369a",
+    "message": "regista-enroll/v1\n0e881e5a9450e98c60c289642d8cdc937f3bf87affad74cd7a0dc753e191369a\nhttps://regista.exemplo.com.br",
+    "proof_b64": "IwwMLlI2jUtUY9lvRZ+9tcSYT0LGc0eQmga9xeuzSTfZW1rp/GC7/ozH7t2MpUNjXSlYi+ShzNKJjz1jHRzhDA=="
+  },
+  "auth": {
+    "machine_id": "01a00000-0000-7000-8000-000000000001",
+    "nonce_b64": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=",
+    "message": "regista-agent-auth/v1\n01a00000-0000-7000-8000-000000000001\nICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=\nhttps://regista.exemplo.com.br",
+    "signature_b64": "U1Yh+B1k+MGToSe+C7p3U6Z1O5uzxb6r+oLdesSp63ZtzN6bEcC1SU2cOTJzqKD2oumPNNuQr/HcVmg191l8Bw=="
+  }
+}

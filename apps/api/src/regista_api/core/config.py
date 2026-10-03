@@ -47,6 +47,26 @@ class Settings(BaseSettings):
     rate_mfa_per_5min: int = 10
     rate_invite_ip_per_minute: int = 20
 
+    # Enrollment key of a machine: single use, valid for this long (docs/specs/agent.md).
+    enrollment_key_hours: int = 24
+
+    # Machine access token (docs/adr/0018). Renewal is the agent's job, on its own monotonic clock.
+    agent_token_minutes: int = 15
+    # Public URL of this API, as the agent knows it. It is part of what the agent signs (the
+    # "audience"), so a signature made for another environment is worthless here.
+    api_public_url: str = "http://127.0.0.1:8000"
+    heartbeat_seconds: int = 30
+    # "Sem sinal" (docs/STATUS.md): an online machine silent for this long becomes offline. The
+    # sweep that does it runs on this cron (6 fields, the last one is the second).
+    machine_offline_after_seconds: int = 120
+    machine_sweep_cron: str = "* * * * * */30"
+    # Windows of the rate limit table older than this are purged (hourly).
+    rate_limit_retention_seconds: int = 86_400
+    # Rate limits of the agent routes (fixed windows in PostgreSQL, ADR 0003).
+    rate_agent_enroll_ip_per_minute: int = 20
+    rate_agent_auth_ip_per_minute: int = 120
+    rate_agent_auth_machine_per_minute: int = 30
+
     # Peers allowed to set X-Forwarded-For (comma separated). Dev: the Next.js proxy.
     trusted_proxies: str = "127.0.0.1,::1"
 

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
@@ -47,6 +48,15 @@ class DbUrls:
 TEST_MASTER_KEY = LocalKeyProvider.generate_key()
 
 
+@pytest.fixture(scope="session")
+def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
+    """psycopg (the job queue's driver) cannot run on Windows' default Proactor loop; asyncpg
+    works on both, so the whole suite uses the selector loop there."""
+    if sys.platform == "win32":
+        return asyncio.WindowsSelectorEventLoopPolicy()
+    return asyncio.DefaultEventLoopPolicy()
+
+
 def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
     """Settings for tests: real test database, in-memory e-mail, throwaway master key."""
     values: dict[str, object] = {
@@ -59,6 +69,9 @@ def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
         # a test sets them on purpose.
         "rate_login_ip_per_minute": 100_000,
         "rate_invite_ip_per_minute": 100_000,
+        "rate_agent_enroll_ip_per_minute": 100_000,
+        "rate_agent_auth_ip_per_minute": 100_000,
+        "rate_agent_auth_machine_per_minute": 100_000,
         **overrides,
     }
     return Settings.model_validate(values)

@@ -58,3 +58,12 @@ addopts = "--import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
+markers = [
+    "e2e: starts the real API, worker and agent as separate processes (slower)",
+]
+filterwarnings = [
+    # The suite overrides `event_loop_policy` (psycopg needs the selector loop on Windows). The
+    # replacement hook the warning points to is not in pytest-asyncio 1.4 yet. When the fixture
+    # is removed the tests fail loudly on Windows, so this cannot hide a regression.
+    'ignore:Overriding the "event_loop_policy" fixture is deprecated:pytest.PytestDeprecationWarning',
+]

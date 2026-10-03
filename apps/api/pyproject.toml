@@ -15,10 +15,15 @@ dependencies = [
     "argon2-cffi>=25.1",
     "pyotp>=2.9",
     "cryptography>=46.0",
+    # Pinned: its schema is applied by our Alembic migrations. To upgrade, add a migration that
+    # runs the library's SQL migrations between the old and new version (see ADR 0018).
+    "procrastinate==3.10.0",
+    "psycopg[binary,pool]>=3.3.6",
 ]
 
 [project.scripts]
 regista-admin = "regista_api.cli:main"
+regista-worker = "regista_api.tasks.worker:main"
 
 [build-system]
 requires = ["hatchling"]
