@@ -169,7 +169,8 @@ async def test_machine_constraints(app_factory: Factory, seed: Seed) -> None:
         )
         await _machine(session, seed.tenant_a, pool_id, name=name)
 
-    # status <=> revoked_at, and a non-pending machine always has a key of 32 bytes. The database
+    # status <=> revoked_at, and a machine past `pending` has a key of 32 bytes (unless it was
+    # revoked before it ever enrolled, which is allowed). The database
     # is shared by the whole session, so each statement targets this test's own machine.
     async with tenant_session(app_factory, tenant_id=seed.tenant_a) as session:
         own = await _machine(session, seed.tenant_a, pool_id)

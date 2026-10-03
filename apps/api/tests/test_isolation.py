@@ -7,6 +7,7 @@ server errors anywhere, no trace of A in any response, and A's data untouched af
 """
 
 import json
+import os
 import re
 import uuid
 from collections.abc import AsyncIterator
@@ -33,7 +34,7 @@ from .isolation import RouteSpec, Uncovered, discover
 Factory = async_sessionmaker[AsyncSession]
 
 # Path parameters that name a resource owned by a client, and where to find an A example.
-RESOURCE_PARAMS = {"user_id", "session_id"}
+RESOURCE_PARAMS = {"user_id", "session_id", "machine_id", "pool_id"}
 
 
 @dataclass
@@ -55,14 +56,16 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
         rate_mfa_per_5min=1_000_000,
         lockout_threshold=1_000_000,
     ) as env:
+        a_browser = new_client(env.app)
         a_admin = await onboard(
             env.app,
-            new_client(env.app),
+            a_browser,
             seed.tenant_a,
             env.clock,
             role="tenant_admin",
             email=unique_email("leak-admin"),
         )
+        a_machines = await _client_a_machines(env, a_browser, seed.tenant_a)
         a_target = await onboard(
             env.app, new_client(env.app), seed.tenant_a, env.clock, email=unique_email("leak-user")
         )
@@ -90,22 +93,91 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     {"u": a_admin.user_id},
                 )
             ).scalar_one()
-        yield World(
-            env=env,
-            seed=seed,
-            internal=internal_tenant,
-            b_admin=b_admin,
-            staff=staff,
-            a_ids={"user_id": str(target_id), "session_id": str(session_id)},
-            a_markers=[
-                str(seed.tenant_a),
-                "Tenant A",
-                a_admin.email,
-                a_target.email,
-                str(target_id),
-                str(session_id),
-            ],
+        try:
+            yield World(
+                env=env,
+                seed=seed,
+                internal=internal_tenant,
+                b_admin=b_admin,
+                staff=staff,
+                a_ids={
+                    "user_id": str(target_id),
+                    "session_id": str(session_id),
+                    "machine_id": a_machines.pending_id,
+                    "pool_id": a_machines.pool_id,
+                },
+                a_markers=[
+                    str(seed.tenant_a),
+                    "Tenant A",
+                    a_admin.email,
+                    a_target.email,
+                    str(target_id),
+                    str(session_id),
+                    *a_machines.markers,
+                ],
+            )
+        finally:
+            await a_browser.aclose()
+
+
+@dataclass
+class AMachines:
+    pool_id: str
+    pending_id: str
+    markers: list[str]
+
+
+async def _client_a_machines(
+    env: Env, browser: httpx.AsyncClient, tenant_a: uuid.UUID
+) -> AMachines:
+    """Client A's pool and machines: one pending with a live key, one enrolled with history."""
+    suffix = uuid.uuid4().hex[:8]
+    pool_name = f"pool-secreto-{suffix}"
+    pool = await browser.post("/pools", json={"name": pool_name}, headers=csrf(browser))
+    assert pool.status_code == 201, pool.text
+    pool_id = pool.json()["id"]
+    pending_name = f"maquina-pendente-{suffix}"
+    created = await browser.post(
+        "/machines",
+        json={"name": pending_name, "pool_id": pool_id, "mode": "service"},
+        headers=csrf(browser),
+    )
+    assert created.status_code == 201, created.text
+    pending = created.json()
+
+    enrolled_name = f"maquina-ativa-{suffix}"
+    async with tenant_session(env.app.state.session_factory, tenant_id=tenant_a) as db:
+        enrolled_id: uuid.UUID = (
+            await db.execute(
+                text(
+                    "INSERT INTO machines (tenant_id, pool_id, name, public_key, status,"
+                    " credential_version, last_seen_at, enrolled_at)"
+                    " VALUES (:t, :p, :n, :k, 'online', 1, now(), now()) RETURNING id"
+                ),
+                {"t": tenant_a, "p": pool_id, "n": enrolled_name, "k": os.urandom(32)},
+            )
+        ).scalar_one()
+        await db.execute(
+            text(
+                "INSERT INTO machine_events (tenant_id, machine_id, kind, metadata)"
+                " VALUES (:t, :m, 'enrolled', '{\"agent_version\": \"0.0.0-leak\"}')"
+            ),
+            {"t": tenant_a, "m": enrolled_id},
         )
+    return AMachines(
+        pool_id=pool_id,
+        pending_id=pending["machine_id"],
+        markers=[
+            pool_id,
+            pool_name,
+            pending["machine_id"],
+            pending_name,
+            pending["enrollment_key"],
+            str(enrolled_id),
+            enrolled_name,
+            "0.0.0-leak",
+        ],
+    )
 
 
 # --- helpers ----------------------------------------------------------------------------------
@@ -277,6 +349,17 @@ def test_discovery_finds_every_real_route(bare_app: FastAPI) -> None:
     assert "GET /health" in labels
     assert "POST /auth/login" in labels
     assert "POST /users/{user_id}/remove-access" in labels
+    assert {
+        "GET /pools",
+        "POST /pools",
+        "GET /machines",
+        "POST /machines",
+        "GET /machines/summary",
+        "GET /machines/{machine_id}",
+        "GET /machines/{machine_id}/events",
+        "POST /machines/{machine_id}/enrollment-key",
+        "POST /machines/{machine_id}/revoke",
+    } <= labels
     assert {s.marker.kind for s in specs} == {"public", "stage", "self_service", "permission"}
 
 

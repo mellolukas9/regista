@@ -18,6 +18,7 @@ from regista_api.core.db import create_engine, create_session_factory
 from regista_api.core.email import EmailSender, create_email_sender
 from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.logging import configure_logging
+from regista_api.machines.router import router as machines_router
 from regista_api.tenants.clients import router as clients_router
 from regista_api.tenants.users import router as users_router
 
@@ -82,6 +83,7 @@ def create_app(
     app.include_router(account_router)
     app.include_router(clients_router)
     app.include_router(users_router)
+    app.include_router(machines_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:

@@ -20,11 +20,15 @@ from .helpers import Env, csrf, new_client, onboard
 from .isolation import RouteSpec, discover
 
 ACTORS = ("artemisys", "tenant_admin", "operator", "viewer")
+# Path parameters of the routes; a random id of each is enough to reach the permission check.
+UNKNOWN_IDS = ("user_id", "session_id", "machine_id", "pool_id")
 
 # Rows of the permission table (design-system.md section 4) that M1 implements.
 #   "Ver todos os clientes, seletor de cliente, tela Clientes"
 #   "Novo cliente"
 #   "Usuários: Convidar, Mudar papel, Encerrar sessões, Remover acesso (e Reenviar convite)"
+#   "Consultar tudo do próprio cliente" (here: pools, machines and their history)
+#   "Máquinas: Cadastrar máquina, Novo pool, Gerar nova chave, Revogar"
 MATRIX: dict[Permission, dict[str, bool]] = {
     Permission.CLIENTS_VIEW_ALL: {
         "artemisys": True,
@@ -39,6 +43,18 @@ MATRIX: dict[Permission, dict[str, bool]] = {
         "viewer": False,
     },
     Permission.USERS_MANAGE: {
+        "artemisys": True,
+        "tenant_admin": True,
+        "operator": False,
+        "viewer": False,
+    },
+    Permission.MACHINES_VIEW: {
+        "artemisys": True,
+        "tenant_admin": True,
+        "operator": True,
+        "viewer": True,
+    },
+    Permission.MACHINES_MANAGE: {
         "artemisys": True,
         "tenant_admin": True,
         "operator": False,
@@ -91,7 +107,7 @@ async def actors(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asy
                 await onboard(env.app, browser, seed.tenant_a, env.clock, role=actor)
             browsers[actor] = browser
         try:
-            yield Actors(env, browsers, discover(env.app, {"user_id", "session_id"}))
+            yield Actors(env, browsers, discover(env.app, set(UNKNOWN_IDS)))
         finally:
             for browser in browsers.values():
                 await browser.aclose()
@@ -101,7 +117,7 @@ async def test_every_permission_gated_route_obeys_the_matrix(actors: Actors) -> 
     gated = [s for s in actors.specs if isinstance(s.marker, Require)]
     assert {s.marker.permission for s in gated if isinstance(s.marker, Require)} == set(Permission)
 
-    unknown = {"user_id": str(uuid.uuid4()), "session_id": str(uuid.uuid4())}
+    unknown = {name: str(uuid.uuid4()) for name in UNKNOWN_IDS}
     for spec in gated:
         assert isinstance(spec.marker, Require)
         for actor in ACTORS:

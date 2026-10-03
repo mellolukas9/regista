@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     rate_mfa_per_5min: int = 10
     rate_invite_ip_per_minute: int = 20
 
+    # Enrollment key of a machine: single use, valid for this long (docs/specs/agent.md).
+    enrollment_key_hours: int = 24
+
     # Machine access token (docs/adr/0018). Renewal is the agent's job, on its own monotonic clock.
     agent_token_minutes: int = 15
 

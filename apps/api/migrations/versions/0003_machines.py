@@ -137,7 +137,10 @@ def upgrade() -> None:
         sa.CheckConstraint("name ~ '^[a-z0-9][a-z0-9-]{0,62}$'", name="name_format"),
         sa.CheckConstraint("public_key IS NULL OR length(public_key) = 32", name="public_key_size"),
         sa.CheckConstraint("(status = 'revoked') = (revoked_at IS NOT NULL)", name="revoked"),
-        sa.CheckConstraint("status = 'pending' OR public_key IS NOT NULL", name="enrolled_key"),
+        # A machine that was revoked before it ever enrolled (registered by mistake) has no key.
+        sa.CheckConstraint(
+            "status IN ('pending', 'revoked') OR public_key IS NOT NULL", name="enrolled_key"
+        ),
         sa.CheckConstraint("max_concurrency >= 1", name="max_concurrency"),
     )
     op.execute(
