@@ -409,7 +409,9 @@ async def test_machine_list_filters_sorts_and_counts_revoked(b: Browsers) -> Non
     assert (await b.viewer_a.get("/machines", params={"sort": "password"})).status_code == 422
     assert (await b.viewer_a.get("/machines", params={"per_page": 7})).status_code == 422
     assert (await b.viewer_a.get("/machines", params={"pool_id": "nope"})).status_code == 422
-    assert one["machine_id"] in str((await b.viewer_a.get("/machines")).json())
+    # (Filtered by pool: the database is shared, and an unfiltered first page can miss the row.)
+    in_pool_1 = await b.viewer_a.get("/machines", params={"pool_id": pool_1["id"]})
+    assert one["machine_id"] in str(in_pool_1.json())
 
 
 async def test_history_is_newest_first_paginated_and_only_for_this_client(
@@ -484,7 +486,7 @@ async def test_everyone_reads_but_only_admins_change_and_all_clients_is_read_onl
             assert (r.status_code, r.json()["detail"]) == (403, {"code": "forbidden"}), path
 
     # The Artemisys team in "all clients" may read everything and write nothing.
-    seen = (await b.staff.get("/machines")).json()
+    seen = (await b.staff.get("/machines", params={"pool_id": pool["id"]})).json()
     assert machine_id in str(seen) and {"client_name"} <= set(seen["items"][0])
     for path, body in _writes(pool["id"], machine):
         r = await _post(b.staff, path, body)
