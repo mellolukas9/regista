@@ -52,6 +52,14 @@ class Settings(BaseSettings):
 
     # Machine access token (docs/adr/0018). Renewal is the agent's job, on its own monotonic clock.
     agent_token_minutes: int = 15
+    # Public URL of this API, as the agent knows it. It is part of what the agent signs (the
+    # "audience"), so a signature made for another environment is worthless here.
+    api_public_url: str = "http://127.0.0.1:8000"
+    heartbeat_seconds: int = 30
+    # Rate limits of the agent routes (fixed windows in PostgreSQL, ADR 0003).
+    rate_agent_enroll_ip_per_minute: int = 20
+    rate_agent_auth_ip_per_minute: int = 120
+    rate_agent_auth_machine_per_minute: int = 30
 
     # Peers allowed to set X-Forwarded-For (comma separated). Dev: the Next.js proxy.
     trusted_proxies: str = "127.0.0.1,::1"

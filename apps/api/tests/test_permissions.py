@@ -63,7 +63,15 @@ MATRIX: dict[Permission, dict[str, bool]] = {
 }
 
 # State-changing routes that need no permission, by design.
-PUBLIC_MUTATING = {"/auth/login", "/auth/invitations/inspect", "/auth/invitations/accept"}
+PUBLIC_MUTATING = {
+    "/auth/login",
+    "/auth/invitations/inspect",
+    "/auth/invitations/accept",
+    # How an agent gets its identity and a token: proven by a key or a signature, not a session.
+    "/agent/enroll",
+    "/agent/challenge",
+    "/agent/token",
+}
 
 
 def _can(permission: Permission, actor: str) -> bool:
@@ -153,6 +161,8 @@ def test_every_mutating_route_declares_who_may_call_it(actors: Actors) -> None:
             assert spec.path in PUBLIC_MUTATING, f"{spec.label}: public but mutating"
         elif kind == "stage":
             assert spec.path.startswith("/auth/"), f"{spec.label}: partial-session route"
+        elif kind == "machine":
+            assert spec.path.startswith("/agent/"), f"{spec.label}: machine route outside /agent/"
         else:
             assert kind in ("permission", "self_service"), spec.label
 

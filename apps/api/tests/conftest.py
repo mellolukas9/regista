@@ -59,6 +59,9 @@ def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
         # a test sets them on purpose.
         "rate_login_ip_per_minute": 100_000,
         "rate_invite_ip_per_minute": 100_000,
+        "rate_agent_enroll_ip_per_minute": 100_000,
+        "rate_agent_auth_ip_per_minute": 100_000,
+        "rate_agent_auth_machine_per_minute": 100_000,
         **overrides,
     }
     return Settings.model_validate(values)

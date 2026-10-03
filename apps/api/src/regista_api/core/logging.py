@@ -6,10 +6,11 @@ import structlog
 
 REDACTED = "[redacted]"
 
-# Keys whose values must never reach a log (passwords, TOTP secrets, tokens, codes, cookies).
+# Keys whose values must never reach a log (passwords, TOTP secrets, tokens, codes, cookies and
+# what the agent proves itself with: enrollment key, nonce, signature, proof, private key).
 _SENSITIVE_KEY = re.compile(
     r"pass(word|wd)|secret|token|recovery|otpauth|authorization|cookie|csrf|credential|"
-    r"^(code|otp|totp|api_key|private_key|master_key)$",
+    r"signature|nonce|proof|key$|^(code|otp|totp)$",
     re.IGNORECASE,
 )
 
