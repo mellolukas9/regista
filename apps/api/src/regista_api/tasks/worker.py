@@ -11,6 +11,7 @@ import structlog
 from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
 from regista_api.core.logging import configure_logging
+from regista_api.jobs import lost
 from regista_api.tasks.app import build_app
 
 log = structlog.get_logger()
@@ -19,7 +20,10 @@ log = structlog.get_logger()
 async def run(settings: Settings) -> None:
     engine = create_engine(settings.database_url)
     try:
-        app = build_app(settings, create_session_factory(engine))
+        factory = create_session_factory(engine)
+        # Logs need this month's partition from the first second, not from the nightly task.
+        await lost.ensure_log_partitions(factory)
+        app = build_app(settings, factory)
         async with app.open_async():
             log.info("worker_started", sweep_cron=settings.machine_sweep_cron)
             await app.run_worker_async(name="regista-worker")

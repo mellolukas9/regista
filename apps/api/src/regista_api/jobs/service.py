@@ -94,3 +94,21 @@ async def finish_job(
         },
     )
     return result.first() is not None
+
+
+async def cancellations(
+    db: AsyncSession, machine_id: uuid.UUID, current_job_id: uuid.UUID | None
+) -> list[uuid.UUID]:
+    """Runs of this machine that must stop: those the panel asked to cancel, plus the one the
+    agent says it is running when the server already ended it (lost, revoked, cancelled). Only
+    runs of this machine are ever named, so an id sent by someone else agent echoes nothing."""
+    rows = await db.execute(
+        text(
+            "SELECT id FROM jobs WHERE machine_id = :m AND ("
+            " (status IN ('assigned', 'running') AND cancel_requested_at IS NOT NULL)"
+            " OR (id = CAST(:cur AS uuid) AND status NOT IN ('assigned', 'running')))"
+            " ORDER BY created_at"
+        ),
+        {"m": machine_id, "cur": current_job_id},
+    )
+    return [r.id for r in rows]

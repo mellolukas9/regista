@@ -1,6 +1,7 @@
 """Shared setup of the run tests: a pool and a bot, machines, and direct state changes."""
 
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -90,3 +91,22 @@ async def enrolled_agent(
     assert enrolled.status_code == 200, enrolled.text
     await agent.login()
     return agent
+
+
+@dataclass
+class Rig:
+    """A client with a pool, a bot and one enrolled (online) machine with a simulated agent."""
+
+    panel: Panel
+    bot: dict[str, str]
+    agent: AgentSim
+    agent_client: httpx.AsyncClient
+
+    async def second_agent(self) -> AgentSim:
+        return await enrolled_agent(
+            self.panel,
+            self.panel.tenant_a,
+            self.panel.admin_a,
+            self.bot["pool_id"],
+            self.agent_client,
+        )

@@ -38,7 +38,10 @@ _AGENT_BODY_LIMIT = 16 * 1024
 
 
 class HealthResponse(BaseModel):
-    status: Literal["ok", "unavailable"]
+    # `degraded`: the API works but something needs attention before it breaks (HTTP 200, so a
+    # load balancer does not take a working API out of rotation).
+    status: Literal["ok", "degraded", "unavailable"]
+    reason: str | None = None
 
 
 def _is_no_store(path: str) -> bool:
@@ -117,17 +120,33 @@ def create_app(
         errors = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": errors})
 
-    @app.get("/health", response_model=HealthResponse, dependencies=[Depends(PublicRoute())])
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        response_model_exclude_none=True,
+        dependencies=[Depends(PublicRoute())],
+    )
     async def health(response: Response) -> HealthResponse:
         # Uses the runtime role (regista_app) with no tenant: only checks connectivity.
         try:
             async with app.state.session_factory() as session:
                 await session.execute(text("SELECT 1"))
+                partitions = (
+                    await session.execute(text("SELECT * FROM app.job_logs_partition_status()"))
+                ).one()
         except Exception:
             # Details go to the log, never to the response.
             log.exception("health_check_failed")
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
             return HealthResponse(status="unavailable")
+        if not (partitions.current_month and partitions.next_month):
+            # Without the partition of a month, run logs of that month cannot be stored.
+            log.error(
+                "job_logs_partition_missing",
+                current_month=partitions.current_month,
+                next_month=partitions.next_month,
+            )
+            return HealthResponse(status="degraded", reason="job_logs_partition_missing")
         return HealthResponse(status="ok")
 
     return app

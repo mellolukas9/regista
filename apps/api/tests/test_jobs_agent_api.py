@@ -5,13 +5,9 @@ import asyncio
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import asyncpg
-import httpx
-import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -21,34 +17,13 @@ from regista_api.jobs.waiters import JobListener, JobWaiters
 from .agent_helpers import AgentSim
 from .conftest import DbUrls
 from .helpers import Panel, new_client
-from .jobs_helpers import _post, enrolled_agent, make_bot, run, set_job
+from .jobs_helpers import Rig, _post, enrolled_agent, make_bot, run, set_job
 
 Factory = async_sessionmaker[AsyncSession]
 
 
-@dataclass
-class Rig:
-    panel: Panel
-    bot: dict[str, str]
-    agent: AgentSim
-    agent_client: httpx.AsyncClient
-
-
-@pytest_asyncio.fixture
-async def rig(panel: Panel) -> AsyncIterator[Rig]:
-    agent_client = new_client(panel.env.app)  # an agent never has a session cookie
-    bot = await make_bot(panel, panel.tenant_a, panel.admin_a)
-    agent = await enrolled_agent(panel, panel.tenant_a, panel.admin_a, bot["pool_id"], agent_client)
-    try:
-        yield Rig(panel, bot, agent, agent_client)
-    finally:
-        await agent_client.aclose()
-
-
 async def _second_agent(rig: Rig) -> AgentSim:
-    return await enrolled_agent(
-        rig.panel, rig.panel.tenant_a, rig.panel.admin_a, rig.bot["pool_id"], rig.agent_client
-    )
+    return await rig.second_agent()
 
 
 # --- taking a run -----------------------------------------------------------------------------

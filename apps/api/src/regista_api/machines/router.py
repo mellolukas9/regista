@@ -26,6 +26,7 @@ from regista_api.machines.schemas import (
     ClientNoSignal,
     CreateMachineRequest,
     CreatePoolRequest,
+    CurrentJob,
     IssuedKey,
     MachineDetail,
     MachineEvent,
@@ -59,11 +60,15 @@ _FROM = (
     " LEFT JOIN LATERAL (SELECT k.expires_at, k.created_at FROM enrollment_keys k"
     "   WHERE k.machine_id = m.id AND k.used_at IS NULL AND k.revoked_at IS NULL"
     "   LIMIT 1) live ON true"
+    " LEFT JOIN LATERAL (SELECT j.id, j.short_code, j.status FROM jobs j"
+    "   WHERE j.tenant_id = m.tenant_id AND j.machine_id = m.id"
+    "   AND j.status IN ('assigned', 'running') LIMIT 1) cur ON true"
 )
 _ITEM_COLUMNS = (
     "m.id, m.name, m.status, m.mode, m.pool_id, p.name AS pool_name, m.tenant_id,"
     " t.name AS client_name, m.last_seen_at, m.agent_version, m.created_at,"
-    " live.expires_at AS key_expires_at, live.created_at AS key_created_at"
+    " live.expires_at AS key_expires_at, live.created_at AS key_created_at,"
+    " cur.id AS cur_id, cur.short_code AS cur_code, cur.status AS cur_status"
 )
 # Staff (internal tenant) are not visible under a client's RLS, so a machine they registered is
 # shown as theirs whichever way the row is read.
@@ -89,7 +94,10 @@ async def list_pools(auth: Annotated[Auth, _VIEW]) -> PoolList:
                     "SELECT p.id, p.name, p.kind, p.tenant_id, t.name AS client_name,"
                     " p.created_at,"
                     " count(m.id) FILTER (WHERE m.status <> 'revoked') AS machines_total,"
-                    " count(m.id) FILTER (WHERE m.status = 'online') AS machines_online"
+                    " count(m.id) FILTER (WHERE m.status = 'online') AS machines_online,"
+                    " (SELECT coalesce(array_agg(b.name ORDER BY lower(b.name)), '{}')"
+                    "  FROM bots b WHERE b.tenant_id = p.tenant_id AND b.pool_id = p.id"
+                    "  AND b.is_active) AS bot_names"
                     " FROM pools p JOIN tenants t ON t.id = p.tenant_id"
                     " LEFT JOIN machines m ON m.tenant_id = p.tenant_id AND m.pool_id = p.id"
                     " WHERE NOT t.is_internal"
@@ -389,6 +397,19 @@ async def revoke_machine(
                 ),
                 {"m": machine_id},
             )
+            # The run on this machine ends with it. The agent finds out on its next call (the
+            # token is refused) and stops the robot.
+            cancelled = await db.execute(
+                text(
+                    "UPDATE jobs SET status = 'cancelled', error_code = 'machine_revoked',"
+                    " cancel_requested_at = coalesce(cancel_requested_at, now()),"
+                    " finished_at = now(), updated_at = now()"
+                    " WHERE machine_id = :m AND status IN ('assigned', 'running') RETURNING id"
+                ),
+                {"m": machine_id},
+            )
+            for job in cancelled.all():
+                await _audit_job(db, auth, job.id, machine_id)
             await service.record_event(
                 db,
                 tenant_id=auth.client_id,
@@ -452,6 +473,9 @@ def _machine_item(r: Row[Any]) -> MachineItem:
         key_expires_at=r.key_expires_at,
         key_created_at=r.key_created_at,
         created_at=r.created_at,
+        current_job=None
+        if r.cur_id is None
+        else CurrentJob(id=r.cur_id, short_code=r.cur_code, status=r.cur_status),
     )
 
 
@@ -465,6 +489,23 @@ def _pool_item(r: Row[Any]) -> PoolItem:
         machines_total=r.machines_total,
         machines_online=r.machines_online,
         created_at=r.created_at,
+        bot_names=list(getattr(r, "bot_names", None) or []),
+    )
+
+
+async def _audit_job(
+    db: AsyncSession, auth: Auth, job_id: uuid.UUID, machine_id: uuid.UUID
+) -> None:
+    await audit.record(
+        db,
+        tenant_id=auth.client_id,
+        actor_type="user",
+        actor_id=auth.user.id,
+        action="job.cancelled",
+        target_type="job",
+        target_id=job_id,
+        metadata={"because": "machine_revoked", "machine_id": str(machine_id)},
+        ip=auth.ip,
     )
 
 

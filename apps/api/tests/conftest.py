@@ -25,6 +25,7 @@ from regista_api.core.rls import tenant_rls_statements
 from regista_api.main import create_app
 
 from .helpers import Env, FakeClock, Panel, new_client, onboard, unique_email
+from .jobs_helpers import Rig, enrolled_agent, make_bot
 
 # The Ryuk reaper container races with Docker Desktop port publishing on Windows. The
 # container below is stopped by its context manager instead.
@@ -252,6 +253,18 @@ async def panel(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
         finally:
             for client in clients.values():
                 await client.aclose()
+
+
+@pytest_asyncio.fixture
+async def rig(panel: Panel) -> AsyncIterator[Rig]:
+    """Client A with a pool, a bot and an online machine that has a simulated agent."""
+    agent_client = new_client(panel.env.app)  # an agent never has a session cookie
+    bot = await make_bot(panel, panel.tenant_a, panel.admin_a)
+    agent = await enrolled_agent(panel, panel.tenant_a, panel.admin_a, bot["pool_id"], agent_client)
+    try:
+        yield Rig(panel, bot, agent, agent_client)
+    finally:
+        await agent_client.aclose()
 
 
 @pytest_asyncio.fixture(scope="session")
