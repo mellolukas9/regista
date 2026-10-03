@@ -38,3 +38,6 @@ htmlcov/
 # Gerados pelo `next dev` (instruções de agente do Next); não versionar sem decisão
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
+
+# Capturas e snapshots do Playwright MCP (conferencia no navegador)
+.playwright-mcp/
