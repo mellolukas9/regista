@@ -1103,7 +1103,7 @@ Telas e estados que o M1 precisa e que as seções 7 e 9 não trazem. Mesma regr
 - Dialog "Gerar novos códigos de recuperação?" / "Os códigos atuais deixam de valer. Confirme sua senha para continuar." / campo "Senha" / "Voltar" + "Gerar novos códigos".
 - AlertDialog "Encerrar todas as outras sessões?" / "Os outros aparelhos saem do Regista e precisam entrar de novo. Robôs em execução não param." / "Voltar" + "Encerrar todas as outras".
 
-**Clientes (7.16) no M1:** só as colunas Cliente (+ "desde"), Usuários e "Entrar no cliente"; Máquinas, Bots, Última execução e Atenção entram nos marcos que criam esses dados.
+**Clientes (7.16) no M1:** só as colunas Cliente (+ "desde"), Usuários e "Entrar no cliente"; Máquinas, Bots, Última execução e Atenção entram nos marcos que criam esses dados. (No M2 a coluna Máquinas passou a existir: "1 de 3 online", ou "—" sem máquinas.)
 
 **Sem acesso (EmptyState `forbidden`)**
 - "Você não tem acesso a esta tela" / "Se precisar dela, peça ao administrador do seu escritório."
@@ -1158,5 +1158,12 @@ Telas e estados de Máquinas e pools (7.13 e 7.14) que as seções 7 e 9 não tr
 
 **Erro de carregamento**
 - "Não foi possível carregar a máquina" (7.14), com "O servidor não respondeu. Tente de novo em alguns segundos." e "Tentar de novo".
+
+**Detalhe da máquina (7.14)** (proposto)
+- Máquina inexistente ou de outro cliente: "Máquina não encontrada" / "Ela pode ter sido removida ou pertencer a outro cliente. Volte para a lista."
+- Cabeçalho: contexto "Máquina · <pool>" (e "· <cliente>" em "Todos os clientes"); sem sinal: "Último sinal hoje às 08:20, há 2 h".
+- Faixa meta: "Cadastrada" mostra data e quem ("11/10/2026 10:15 · pessoa@escritorio.com.br", ou "Equipe Artemisys"); numa máquina revogada, o campo vira "Revogada" com a data.
+- Histórico, títulos e detalhes: "Máquina cadastrada" (Agente <versão>), "Agente cadastrado de novo" (O agente anterior deixou de funcionar.), "Ficou online pela primeira vez", "Voltou a ficar online", "Ficou sem sinal", "Agente atualizado" (<versão antiga> → <nova>), "Máquina revogada". Vazio: "Nenhum evento ainda" / "Os eventos aparecem aqui assim que a máquina se cadastrar." Botão "Mostrar mais". Erro: "Não foi possível carregar o histórico".
+- Contador "N máquina(s) sem sinal" ao lado de Máquinas na sidebar; "N sem sinal" ao lado do cliente no seletor.
 
 **Fica para o M3** (dependem de `bots` e `jobs`): coluna "Agora", linha "Roda: …" (e "Nenhum bot usa este pool ainda"), aba Execuções e "A execução em andamento será cancelada." no AlertDialog de revogar.

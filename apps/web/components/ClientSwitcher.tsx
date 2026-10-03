@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { api } from "@/lib/api";
+import { useMachinesSummary } from "@/lib/machines";
 import { messageFor } from "@/lib/messages";
 import { contextName, useCurrentUser } from "@/lib/me-context";
 
@@ -51,6 +52,10 @@ export function ClientSwitcher() {
       ),
     enabled: open,
   });
+
+  // "N sem sinal" ao lado de cada cliente com máquina parada (design-system.md 5, Seletor de cliente).
+  const summary = useMachinesSummary();
+  const silentByClient = new Map(summary.data?.clients.map((c) => [c.client_id, c.no_signal]));
 
   const choose = useMutation({
     mutationFn: (clientId: string | null) => api.put("/auth/context", { client_id: clientId }),
@@ -97,7 +102,12 @@ export function ClientSwitcher() {
                 selected={client.id === currentId}
                 onSelect={() => choose.mutate(client.id)}
               >
-                <span className="truncate">{client.name}</span>
+                <span className="min-w-0 flex-1 truncate">{client.name}</span>
+                {(silentByClient.get(client.id) ?? 0) > 0 && (
+                  <span className="shrink-0 text-caption text-danger-text">
+                    {silentByClient.get(client.id)} sem sinal
+                  </span>
+                )}
               </CommandItem>
             ))}
             {clients.isSuccess && clients.data.items.length === 0 && (

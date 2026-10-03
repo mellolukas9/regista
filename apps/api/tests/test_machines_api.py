@@ -157,6 +157,11 @@ async def test_pools_are_created_listed_with_counts_and_unique_per_client(b: Bro
     assert listed[pool["id"]]["machines_total"] == 2
     assert listed[pool["id"]]["machines_online"] == 1
 
+    # The portfolio list (Artemisys only) carries the same counts per client (Clientes screen).
+    client_rows = (await b.staff.get("/clients", params={"per_page": 50})).json()["items"]
+    mine = next(c for c in client_rows if c["id"] == str(b.seed.tenant_a))
+    assert mine["machines_total"] >= 2 and mine["machines_online"] >= 1
+
 
 # --- creating a machine and its key -----------------------------------------------------------
 

@@ -110,7 +110,16 @@ class KeyStore:
         if sys.platform == "win32":
             from regista_agent import _windows
 
-            _windows.make_private_file(self.staged_path, data)
+            try:
+                _windows.make_private_file(self.staged_path, data)
+            except PermissionError as exc:
+                # The folder now belongs to the agent's account, SYSTEM and Administrators: a
+                # console that is not elevated is none of them, even for an administrator.
+                raise AgentError(
+                    "Sem permissão para gravar a chave nesta máquina. Rode o cadastro em um "
+                    "PowerShell aberto como Administrador, ou informe com --agent-account a "
+                    "conta que vai ler a chave (a sua, em um teste local)."
+                ) from exc
         else:
             descriptor = os.open(self.staged_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, "wb") as handle:

@@ -1,0 +1,46 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [aria-hidden] [ref=e5]: R
+        - generic [ref=e6]:
+          - generic [ref=e7]: Regista
+          - generic [ref=e8]: by Artemisys
+      - generic [ref=e9]:
+        - heading "Suas automações, acompanhadas em tempo real." [level=2] [ref=e10]
+        - list [ref=e11]:
+          - listitem [ref=e12]:
+            - generic [ref=e16]:
+              - paragraph [ref=e17]: Disparo sem acessar a máquina
+              - paragraph [ref=e18]: Execute qualquer robô direto do painel, sem abrir acesso remoto.
+          - listitem [ref=e19]:
+            - generic [ref=e24]:
+              - paragraph [ref=e25]: Cada item com status e motivo
+              - paragraph [ref=e26]: Veja o que deu certo, o que falhou e por quê, linha por linha.
+          - listitem [ref=e27]:
+            - generic [ref=e34]:
+              - paragraph [ref=e35]: Aviso quando algo para
+              - paragraph [ref=e36]: Receba e-mail quando um robô falha ou uma máquina fica sem sinal.
+      - paragraph [ref=e37]: Regista é um serviço da Artemisys · artemisys.com.br
+    - main [ref=e38]:
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - paragraph [ref=e46]: Passo 1 de 2
+          - heading "Proteja sua conta" [level=1] [ref=e47]
+          - paragraph [ref=e48]: Todo acesso ao Regista pede um código do celular, além da senha.
+        - list [ref=e49]:
+          - listitem [ref=e50]: 1.Instale um app autenticador, como Google Authenticator ou Microsoft Authenticator.
+          - listitem [ref=e51]: 2.No app, escolha adicionar conta e aponte a câmera para o código abaixo.
+        - generic [ref=e52]:
+          - img "Código QR para o app autenticador" [ref=e54]
+          - generic [ref=e57]:
+            - paragraph [ref=e58]: "Não consegue escanear? Digite esta chave no app:"
+            - paragraph [ref=e59]: O26Q 365U JVTF VGOI OOHR C5KW 6LPU YNGB
+            - button "Copiar chave" [ref=e60]
+        - generic [ref=e61]:
+          - generic [ref=e62]: Código de 6 dígitos que aparece no app
+          - textbox "Código de 6 dígitos que aparece no app" [ref=e63]
+        - button "Ativar verificação" [ref=e64]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e70] [cursor=pointer]
+  - alert [ref=e74]

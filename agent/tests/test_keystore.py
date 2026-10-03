@@ -232,6 +232,21 @@ def test_a_staged_key_is_born_protected_and_loads_back(tmp_path: Path) -> None:
 
 
 @windows_only
+def test_a_console_that_is_not_elevated_is_told_what_to_do_not_given_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from regista_agent import _windows
+
+    def refuse(path: Path, data: bytes) -> None:
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(_windows, "make_private_file", refuse)
+    store = KeyStore(tmp_path / "keys", agent_account=_current_account())
+    with pytest.raises(AgentError, match="Administrador"):
+        store.stage(Ed25519PrivateKey.generate())
+
+
+@windows_only
 def test_check_fails_when_the_folder_is_opened_up(tmp_path: Path) -> None:
     from regista_agent import _windows
 

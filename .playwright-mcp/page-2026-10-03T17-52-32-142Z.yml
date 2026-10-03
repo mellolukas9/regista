@@ -1,0 +1,116 @@
+- generic [active] [ref=f4e1]:
+  - generic [ref=f4e15]:
+    - complementary [ref=f4e16]:
+      - generic [ref=f4e17]:
+        - link "Regista, início" [ref=f4e19] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f4e20]:
+            - generic [aria-hidden] [ref=f4e21]: R
+            - generic [ref=f4e22]:
+              - generic [ref=f4e23]: Regista
+              - generic [ref=f4e24]: by Artemisys
+        - 'button "Cliente: Escritório Exemplo. Trocar cliente (Ctrl+J)" [ref=f4e26]':
+          - generic [ref=f4e31]:
+            - generic [ref=f4e32]: Cliente
+            - generic [ref=f4e33]: Escritório Exemplo
+        - navigation "Principal" [ref=f4e37]:
+          - generic [ref=f4e38]:
+            - generic [ref=f4e39]:
+              - paragraph [ref=f4e40]: Artemisys
+              - list [ref=f4e41]:
+                - listitem [ref=f4e42]:
+                  - link "Clientes" [ref=f4e43] [cursor=pointer]:
+                    - /url: /clients
+            - generic [ref=f4e48]:
+              - paragraph [ref=f4e49]: Operação
+              - list [ref=f4e50]:
+                - listitem [ref=f4e51]:
+                  - generic [ref=f4e52]: Dashboard
+                - listitem [ref=f4e58]:
+                  - generic [ref=f4e59]: Execuções
+                - listitem [ref=f4e62]:
+                  - generic [ref=f4e63]: Filas
+                - listitem [ref=f4e67]:
+                  - generic [ref=f4e68]: Lotes
+            - generic [ref=f4e73]:
+              - paragraph [ref=f4e74]: Automação
+              - list [ref=f4e75]:
+                - listitem [ref=f4e76]:
+                  - generic [ref=f4e77]: Bots
+                - listitem [ref=f4e81]:
+                  - generic [ref=f4e82]: Agendamentos
+                - listitem [ref=f4e87]:
+                  - generic [ref=f4e88]: Alertas
+            - generic [ref=f4e92]:
+              - paragraph [ref=f4e93]: Infraestrutura
+              - list [ref=f4e94]:
+                - listitem [ref=f4e95]:
+                  - link "Máquinas" [ref=f4e257] [cursor=pointer]:
+                    - /url: /machines
+                - listitem [ref=f4e109]:
+                  - link "Usuários" [ref=f4e110] [cursor=pointer]:
+                    - /url: /users
+        - button "Menu da conta" [ref=f4e117]:
+          - generic [aria-hidden] [ref=f4e118]: CC
+          - generic [ref=f4e119]:
+            - generic [ref=f4e120]: Conferencia Claude
+            - generic [ref=f4e121]: Equipe Artemisys
+    - main [ref=f4e125]:
+      - generic [ref=f4e126]:
+        - generic [ref=f4e127]:
+          - paragraph [ref=f4e128]: Escritório Exemplo / Regista
+          - paragraph [ref=f4e129]: Sincronizado
+          - button "Buscar referência, bot ou execução Ctrl K" [disabled] [ref=f4e131]:
+            - text: Buscar referência, bot ou execução
+            - generic [ref=f4e135]: Ctrl K
+          - button "Notificações" [disabled] [ref=f4e136]
+        - generic [ref=f4e183]:
+          - link "Máquinas e pools" [ref=f4e184] [cursor=pointer]:
+            - /url: /machines
+          - generic [ref=f4e188]:
+            - paragraph [ref=f4e189]: Máquina · Escritório - Atendimento
+            - heading "estacao-dev-01" [level=1] [ref=f4e190]
+            - generic [ref=f4e191]:
+              - generic [ref=f4e192]: Revogada
+              - generic [ref=f4e194]: Último sinal hoje às 14:49, há 3 min
+          - generic [ref=f4e198]:
+            - generic [ref=f4e199]:
+              - term [ref=f4e200]: Versão do agente
+              - definition [ref=f4e201]: 0.1.0
+            - generic [ref=f4e202]:
+              - term [ref=f4e203]: Modo
+              - definition [ref=f4e204]: Serviço
+            - generic [ref=f4e205]:
+              - term [ref=f4e206]: Sistema
+              - definition [ref=f4e207]: Windows 11
+            - generic [ref=f4e208]:
+              - term [ref=f4e209]: Pool
+              - definition [ref=f4e210]: Escritório - Atendimento
+            - generic [ref=f4e258]:
+              - term [ref=f4e259]: Revogada
+              - definition [ref=f4e260]: 03/10/2026 14:52
+        - generic [ref=f4e220]:
+          - tablist "Seções da máquina" [ref=f4e221]:
+            - tab "Histórico" [selected] [ref=f4e222]
+          - tabpanel "Histórico" [ref=f4e223]:
+            - list [ref=f4e225]:
+              - listitem [ref=f4e261]:
+                - time [ref=f4e262]: 03/10 14:52
+                - paragraph [ref=f4e265]: Máquina revogada
+              - listitem [ref=f4e226]:
+                - time [ref=f4e227]: 03/10 14:52
+                - paragraph [ref=f4e230]: Ficou sem sinal
+              - listitem [ref=f4e231]:
+                - time [ref=f4e232]: 03/10 14:48
+                - paragraph [ref=f4e235]: Ficou online pela primeira vez
+              - listitem [ref=f4e236]:
+                - time [ref=f4e237]: 03/10 14:48
+                - generic [ref=f4e239]:
+                  - paragraph [ref=f4e240]: Máquina cadastrada
+                  - paragraph [ref=f4e241]: Agente 0.1.0
+  - region "Notifications alt+T":
+    - list:
+      - listitem [ref=f4e266]:
+        - generic [ref=f4e271]: Máquina revogada
+  - button "Open Next.js Dev Tools" [ref=f4e10] [cursor=pointer]
+  - alert [ref=f4e14]

@@ -19,6 +19,7 @@ import { usePathname } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
 import { ClientSwitcher } from "@/components/ClientSwitcher";
 import { UserMenu } from "@/components/UserMenu";
+import { useMachinesSummary } from "@/lib/machines";
 import { canManageUsers } from "@/lib/me";
 import { useCurrentUser } from "@/lib/me-context";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,8 @@ type Item = {
   icon: LucideIcon;
   /** Sem `href` o item ainda não tem tela: pertence a um marco futuro. */
   href?: string;
+  /** Contador de atenção ao lado do rótulo (design-system.md 11.6, "Contadores da navegação"). */
+  counter?: "machines";
   visible?: (me: ReturnType<typeof useCurrentUser>) => boolean;
 };
 type Group = { title: string; items: Item[]; visible?: Item["visible"] };
@@ -60,7 +63,7 @@ const GROUPS: Group[] = [
   {
     title: "Infraestrutura",
     items: [
-      { label: "Máquinas", icon: MonitorCog },
+      { label: "Máquinas", icon: MonitorCog, href: "/machines", counter: "machines" },
       { label: "Usuários", icon: Users, href: "/users", visible: canManageUsers },
     ],
   },
@@ -71,6 +74,8 @@ const ITEM_BASE = "flex h-11 items-center gap-3 rounded-control px-3 text-body";
 export function Sidebar({ onClose }: Readonly<{ onClose: () => void }>) {
   const me = useCurrentUser();
   const pathname = usePathname();
+  const machines = useMachinesSummary();
+  const counters = { machines: machines.data?.no_signal ?? 0 };
 
   return (
     <div className="flex h-full flex-col">
@@ -110,12 +115,20 @@ export function Sidebar({ onClose }: Readonly<{ onClose: () => void }>) {
               <ul className="flex flex-col gap-0.5">
                 {group.items
                   .filter((item) => item.visible?.(me) ?? true)
-                  .map(({ label, icon: Icon, href }) => (
+                  .map(({ label, icon: Icon, href, counter }) => (
                     <li key={label}>
                       {href ? (
                         <NavLink href={href} pathname={pathname} onClick={onClose}>
                           <Icon aria-hidden className="size-[18px]" />
                           {label}
+                          {counter && counters[counter] > 0 && (
+                            <span
+                              aria-label={`${counters[counter]} ${counters[counter] === 1 ? "máquina sem sinal" : "máquinas sem sinal"}`}
+                              className="ml-auto grid h-5 min-w-5 place-items-center rounded-pill bg-danger px-1.5 font-mono text-caption font-medium text-danger-fg"
+                            >
+                              {counters[counter]}
+                            </span>
+                          )}
                         </NavLink>
                       ) : (
                         <span

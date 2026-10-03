@@ -1,0 +1,84 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e15]:
+    - complementary [ref=f2e16]:
+      - generic [ref=f2e17]:
+        - link "Regista, início" [ref=f2e19] [cursor=pointer]:
+          - /url: /
+          - generic [ref=f2e20]:
+            - generic [aria-hidden] [ref=f2e21]: R
+            - generic [ref=f2e22]:
+              - generic [ref=f2e23]: Regista
+              - generic [ref=f2e24]: by Artemisys
+        - 'button "Cliente: Escritório Exemplo. Trocar cliente (Ctrl+J)" [ref=f2e26]':
+          - generic [ref=f2e31]:
+            - generic [ref=f2e32]: Cliente
+            - generic [ref=f2e33]: Escritório Exemplo
+        - navigation "Principal" [ref=f2e37]:
+          - generic [ref=f2e38]:
+            - generic [ref=f2e39]:
+              - paragraph [ref=f2e40]: Artemisys
+              - list [ref=f2e41]:
+                - listitem [ref=f2e42]:
+                  - link "Clientes" [ref=f2e43] [cursor=pointer]:
+                    - /url: /clients
+            - generic [ref=f2e48]:
+              - paragraph [ref=f2e49]: Operação
+              - list [ref=f2e50]:
+                - listitem [ref=f2e51]:
+                  - generic [ref=f2e52]: Dashboard
+                - listitem [ref=f2e58]:
+                  - generic [ref=f2e59]: Execuções
+                - listitem [ref=f2e62]:
+                  - generic [ref=f2e63]: Filas
+                - listitem [ref=f2e67]:
+                  - generic [ref=f2e68]: Lotes
+            - generic [ref=f2e73]:
+              - paragraph [ref=f2e74]: Automação
+              - list [ref=f2e75]:
+                - listitem [ref=f2e76]:
+                  - generic [ref=f2e77]: Bots
+                - listitem [ref=f2e81]:
+                  - generic [ref=f2e82]: Agendamentos
+                - listitem [ref=f2e87]:
+                  - generic [ref=f2e88]: Alertas
+            - generic [ref=f2e92]:
+              - paragraph [ref=f2e93]: Infraestrutura
+              - list [ref=f2e94]:
+                - listitem [ref=f2e95]:
+                  - link "Máquinas" [ref=f2e96] [cursor=pointer]:
+                    - /url: /machines
+                - listitem [ref=f2e108]:
+                  - link "Usuários" [ref=f2e109] [cursor=pointer]:
+                    - /url: /users
+        - button "Menu da conta" [ref=f2e116]:
+          - generic [aria-hidden] [ref=f2e117]: CC
+          - generic [ref=f2e118]:
+            - generic [ref=f2e119]: Conferencia Claude
+            - generic [ref=f2e120]: Equipe Artemisys
+    - main [ref=f2e124]:
+      - generic [ref=f2e125]:
+        - generic [ref=f2e126]:
+          - paragraph [ref=f2e127]: Escritório Exemplo / Regista
+          - paragraph [ref=f2e128]: Sincronizado
+          - button "Buscar referência, bot ou execução Ctrl K" [disabled] [ref=f2e130]:
+            - text: Buscar referência, bot ou execução
+            - generic [ref=f2e134]: Ctrl K
+          - button "Notificações" [disabled] [ref=f2e135]
+        - generic [ref=f2e139]:
+          - generic [ref=f2e140]:
+            - heading "Máquinas e pools" [level=1] [ref=f2e141]
+            - paragraph [ref=f2e142]: Computadores onde os robôs rodam, com o agente instalado. Um pool reúne máquinas que podem rodar os mesmos robôs.
+          - generic [ref=f2e143]:
+            - button "Novo pool" [ref=f2e144]
+            - button "Cadastrar máquina" [ref=f2e145]
+        - generic [ref=f2e171]:
+          - generic [ref=f2e173]:
+            - heading "Escritório - Atendimento" [level=2] [ref=f2e175]
+            - paragraph [ref=f2e176]: 0 de 0 online
+          - paragraph [ref=f2e177]: Nenhuma máquina neste pool ainda.
+  - region "Notifications alt+T":
+    - list:
+      - listitem [ref=f2e178]:
+        - generic [ref=f2e183]: Pool criado
+  - button "Open Next.js Dev Tools" [ref=f2e10] [cursor=pointer]
+  - alert [ref=f2e14]

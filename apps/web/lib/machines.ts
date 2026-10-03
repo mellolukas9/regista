@@ -114,11 +114,11 @@ export function ago(iso: string, now: number = Date.now()): string {
   return seconds < 60 ? `há ${seconds}s` : relativeTime(iso, now);
 }
 
-function dayAndTime(iso: string, now: number): string {
+function dayAndTime(iso: string, now: number, joiner = " "): string {
   const time = formatListDate(iso).slice(-5);
-  if (formatDate(iso) === formatDate(new Date(now).toISOString())) return `hoje ${time}`;
+  if (formatDate(iso) === formatDate(new Date(now).toISOString())) return `hoje${joiner}${time}`;
   if (formatDate(iso) === formatDate(new Date(now - 24 * 3600 * 1000).toISOString())) {
-    return `ontem ${time}`;
+    return `ontem${joiner}${time}`;
   }
   return formatListDate(iso);
 }
@@ -138,4 +138,87 @@ export function lastSignal(machine: Machine, now: number = Date.now()): string {
   if (!machine.last_seen_at) return "—";
   if (machine.status === "online") return ago(machine.last_seen_at, now);
   return `${dayAndTime(machine.last_seen_at, now)} · ${ago(machine.last_seen_at, now)}`;
+}
+
+/** Frase do cabeçalho do detalhe: "Último sinal hoje às 08:20, há 2 h". */
+export function lastSignalSentence(machine: Machine, now: number = Date.now()): string {
+  if (machine.status === "pending") return lastSignal(machine, now);
+  if (!machine.last_seen_at) return "Ainda sem sinal";
+  if (machine.status === "online") return `Último sinal ${ago(machine.last_seen_at, now)}`;
+  const when = dayAndTime(machine.last_seen_at, now, " às ");
+  return `Último sinal ${when}, ${ago(machine.last_seen_at, now)}`;
+}
+
+export type MachineEventKind =
+  | "enrolled"
+  | "re_enrolled"
+  | "first_signal"
+  | "went_offline"
+  | "came_back"
+  | "agent_updated"
+  | "revoked";
+
+export type MachineEvent = {
+  id: string;
+  kind: MachineEventKind;
+  created_at: string;
+  metadata: Record<string, unknown>;
+};
+
+/** Texto curto de um valor vindo do agente: não confiável, então limitado (o React escapa o resto). */
+function shown(value: unknown): string {
+  return typeof value === "string" || typeof value === "number" ? String(value).slice(0, 40) : "—";
+}
+
+/** Título, detalhe e tom de cada evento do histórico (design-system.md 7.14 e §13). */
+export function describeEvent(event: MachineEvent): {
+  title: string;
+  detail?: string;
+  tone: "success" | "danger" | "neutral" | "accent";
+} {
+  const meta = event.metadata;
+  switch (event.kind) {
+    case "enrolled":
+      return {
+        title: "Máquina cadastrada",
+        detail: meta.agent_version ? `Agente ${shown(meta.agent_version)}` : undefined,
+        tone: "accent",
+      };
+    case "re_enrolled":
+      return {
+        title: "Agente cadastrado de novo",
+        detail: "O agente anterior deixou de funcionar.",
+        tone: "accent",
+      };
+    case "first_signal":
+      return { title: "Ficou online pela primeira vez", tone: "success" };
+    case "came_back":
+      return { title: "Voltou a ficar online", tone: "success" };
+    case "went_offline":
+      return { title: "Ficou sem sinal", tone: "danger" };
+    case "agent_updated":
+      return {
+        title: "Agente atualizado",
+        detail: `${shown(meta.from)} → ${shown(meta.to)}`,
+        tone: "neutral",
+      };
+    case "revoked":
+      return { title: "Máquina revogada", tone: "neutral" };
+  }
+}
+
+export type MachinesSummary = {
+  total: number;
+  online: number;
+  no_signal: number;
+  clients: { client_id: string; client_name: string; no_signal: number }[];
+};
+
+/** Contagem de máquinas sem sinal: alimenta o contador da sidebar e o seletor de cliente. */
+export function useMachinesSummary() {
+  return useQuery({
+    queryKey: [...machinesKey, "summary"],
+    refetchInterval: POLL_MS,
+    queryFn: () => api.get<MachinesSummary>("/machines/summary"),
+  });
 }

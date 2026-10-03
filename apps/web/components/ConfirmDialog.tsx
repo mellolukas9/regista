@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { Field } from "@/components/Field";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 /**
  * Confirmação de ação destrutiva (design-system.md §5, AlertDialog). "Voltar" é a saída segura e
@@ -28,6 +31,7 @@ export function ConfirmDialog({
   error,
   onConfirm,
   variant = "destructive",
+  typeToConfirm,
 }: Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -39,14 +43,40 @@ export function ConfirmDialog({
   error?: string | null;
   onConfirm: () => void;
   variant?: "destructive" | "primary";
+  /** Ação irreversível: o botão só libera quando a pessoa digita este nome ("Digite <nome> para confirmar"). */
+  typeToConfirm?: string;
 }>) {
+  const [typed, setTyped] = useState("");
+  const blocked = typeToConfirm !== undefined && typed !== typeToConfirm;
   return (
-    <AlertDialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (pending) return;
+        if (!next) setTyped("");
+        onOpenChange(next);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader destructive={variant === "destructive"}>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {typeToConfirm !== undefined && (
+          <Field label={`Digite ${typeToConfirm} para confirmar`}>
+            {(control) => (
+              <Input
+                {...control}
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="font-mono"
+                value={typed}
+                onChange={(event) => setTyped(event.target.value)}
+              />
+            )}
+          </Field>
+        )}
         {error && (
           <p role="alert" className="text-body-sm text-danger-text">
             {error}
@@ -56,7 +86,7 @@ export function ConfirmDialog({
           <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
           <AlertDialogAction
             variant={variant}
-            disabled={pending}
+            disabled={pending || blocked}
             aria-busy={pending || undefined}
             onClick={(event) => {
               event.preventDefault();

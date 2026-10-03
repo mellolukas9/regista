@@ -1,0 +1,53 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [aria-hidden] [ref=e5]: R
+        - generic [ref=e6]:
+          - generic [ref=e7]: Regista
+          - generic [ref=e8]: by Artemisys
+      - generic [ref=e9]:
+        - heading "Suas automações, acompanhadas em tempo real." [level=2] [ref=e10]
+        - list [ref=e11]:
+          - listitem [ref=e12]:
+            - generic [ref=e16]:
+              - paragraph [ref=e17]: Disparo sem acessar a máquina
+              - paragraph [ref=e18]: Execute qualquer robô direto do painel, sem abrir acesso remoto.
+          - listitem [ref=e19]:
+            - generic [ref=e24]:
+              - paragraph [ref=e25]: Cada item com status e motivo
+              - paragraph [ref=e26]: Veja o que deu certo, o que falhou e por quê, linha por linha.
+          - listitem [ref=e27]:
+            - generic [ref=e34]:
+              - paragraph [ref=e35]: Aviso quando algo para
+              - paragraph [ref=e36]: Receba e-mail quando um robô falha ou uma máquina fica sem sinal.
+      - paragraph [ref=e37]: Regista é um serviço da Artemisys · artemisys.com.br
+    - main [ref=e38]:
+      - generic [ref=e75]:
+        - generic [ref=e76]:
+          - paragraph [ref=e77]: Passo 2 de 2
+          - heading "Guarde seus códigos de recuperação" [level=1] [ref=e78]
+          - paragraph [ref=e79]: Se perder o celular, entre com um destes códigos. Cada um funciona uma vez.
+        - status [ref=e80]:
+          - generic [ref=e83]:
+            - paragraph [ref=e84]: Eles não serão mostrados de novo
+            - generic [ref=e85]: Copie agora e guarde num gerenciador de senhas.
+        - list [ref=e86]:
+          - listitem [ref=e87]: E5RR-EAJU
+          - listitem [ref=e88]: 6LDK-DGUA
+          - listitem [ref=e89]: 2M24-S689
+          - listitem [ref=e90]: NW6P-6YVW
+          - listitem [ref=e91]: GHHD-FWBW
+          - listitem [ref=e92]: A5KC-AM2Z
+          - listitem [ref=e93]: DW4M-SDTM
+          - listitem [ref=e94]: BCJH-639X
+          - listitem [ref=e95]: M78S-VVC2
+          - listitem [ref=e96]: HZPE-RV49
+        - button "Copiar códigos" [ref=e97]
+        - generic [ref=e98]:
+          - checkbox "Guardei os códigos em um lugar seguro" [ref=e99]
+          - text: Guardei os códigos em um lugar seguro
+        - button "Concluir e entrar" [disabled] [ref=e101]
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e70] [cursor=pointer]
+  - alert [ref=e74]

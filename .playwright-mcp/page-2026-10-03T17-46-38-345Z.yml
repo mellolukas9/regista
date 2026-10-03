@@ -1,0 +1,26 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [aria-hidden] [ref=e5]: R
+        - generic [ref=e6]:
+          - generic [ref=e7]: Regista
+          - generic [ref=e8]: by Artemisys
+      - generic [ref=e9]:
+        - heading "Suas automações, acompanhadas em tempo real." [level=2] [ref=e10]
+        - list [ref=e11]:
+          - listitem [ref=e12]:
+            - generic [ref=e16]:
+              - paragraph [ref=e17]: Disparo sem acessar a máquina
+              - paragraph [ref=e18]: Execute qualquer robô direto do painel, sem abrir acesso remoto.
+          - listitem [ref=e19]:
+            - generic [ref=e24]:
+              - paragraph [ref=e25]: Cada item com status e motivo
+              - paragraph [ref=e26]: Veja o que deu certo, o que falhou e por quê, linha por linha.
+          - listitem [ref=e27]:
+            - generic [ref=e34]:
+              - paragraph [ref=e35]: Aviso quando algo para
+              - paragraph [ref=e36]: Receba e-mail quando um robô falha ou uma máquina fica sem sinal.
+      - paragraph [ref=e37]: Regista é um serviço da Artemisys · artemisys.com.br
+    - main [ref=e38]
+  - region "Notifications alt+T"

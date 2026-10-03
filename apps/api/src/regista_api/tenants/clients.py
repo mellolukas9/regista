@@ -59,7 +59,11 @@ async def list_clients(
                 text(
                     "SELECT t.id, t.name, t.created_at,"  # noqa: S608
                     " (SELECT count(*) FROM users u"
-                    "  WHERE u.tenant_id = t.id AND u.status <> 'disabled') AS users_count"
+                    "  WHERE u.tenant_id = t.id AND u.status <> 'disabled') AS users_count,"
+                    " (SELECT count(*) FROM machines m"
+                    "  WHERE m.tenant_id = t.id AND m.status <> 'revoked') AS machines_total,"
+                    " (SELECT count(*) FROM machines m"
+                    "  WHERE m.tenant_id = t.id AND m.status = 'online') AS machines_online"
                     f" FROM tenants t WHERE {_WHERE} ORDER BY {ordering}"
                     " LIMIT :limit OFFSET :offset"
                 ),
@@ -68,7 +72,14 @@ async def list_clients(
         ).all()
     return ClientList(
         items=[
-            ClientItem(id=r.id, name=r.name, created_at=r.created_at, users_count=r.users_count)
+            ClientItem(
+                id=r.id,
+                name=r.name,
+                created_at=r.created_at,
+                users_count=r.users_count,
+                machines_total=r.machines_total,
+                machines_online=r.machines_online,
+            )
             for r in rows
         ],
         total=total,

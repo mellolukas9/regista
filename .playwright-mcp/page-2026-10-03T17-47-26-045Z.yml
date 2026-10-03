@@ -1,0 +1,112 @@
+- generic:
+  - generic [aria-hidden]:
+    - complementary:
+      - generic:
+        - generic:
+          - link:
+            - /url: /
+            - generic:
+              - generic [aria-hidden]: R
+              - generic:
+                - generic: Regista
+                - generic: by Artemisys
+        - generic:
+          - button:
+            - generic:
+              - generic: Cliente
+              - generic: Escritório Exemplo
+        - navigation:
+          - generic:
+            - generic:
+              - paragraph: Artemisys
+              - list:
+                - listitem:
+                  - link:
+                    - /url: /clients
+                    - text: Clientes
+            - generic:
+              - paragraph: Operação
+              - list:
+                - listitem:
+                  - generic: Dashboard
+                - listitem:
+                  - generic: Execuções
+                - listitem:
+                  - generic: Filas
+                - listitem:
+                  - generic: Lotes
+            - generic:
+              - paragraph: Automação
+              - list:
+                - listitem:
+                  - generic: Bots
+                - listitem:
+                  - generic: Agendamentos
+                - listitem:
+                  - generic: Alertas
+            - generic:
+              - paragraph: Infraestrutura
+              - list:
+                - listitem:
+                  - link:
+                    - /url: /machines
+                    - text: Máquinas
+                - listitem:
+                  - link:
+                    - /url: /users
+                    - text: Usuários
+        - generic:
+          - button:
+            - generic [aria-hidden]: CC
+            - generic:
+              - generic: Conferencia Claude
+              - generic: Equipe Artemisys
+    - main:
+      - generic:
+        - generic:
+          - paragraph: Escritório Exemplo / Regista
+          - paragraph: Sincronizado
+          - button [disabled]:
+            - text: Buscar referência, bot ou execução
+            - generic: Ctrl K
+          - button [disabled]
+        - generic:
+          - generic:
+            - heading [level=1]: Máquinas e pools
+            - paragraph: Computadores onde os robôs rodam, com o agente instalado. Um pool reúne máquinas que podem rodar os mesmos robôs.
+          - generic:
+            - button: Novo pool
+            - button: Cadastrar máquina
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - heading [level=2]: Escritório - Atendimento
+              - paragraph: 0 de 0 online
+          - paragraph: Nenhuma máquina neste pool ainda.
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f2e10] [cursor=pointer]
+  - alert
+  - dialog [ref=f2e186]:
+    - generic [ref=f2e187]:
+      - generic [ref=f2e188]:
+        - heading "Cadastrar máquina" [level=2] [ref=f2e189]
+        - paragraph [ref=f2e190]: Depois de cadastrar, você recebe uma chave para instalar o agente nesse computador.
+      - generic [ref=f2e191]:
+        - generic [ref=f2e192]: Nome da máquina
+        - textbox "Nome da máquina" [active] [ref=f2e193]:
+          - /placeholder: estacao-atendimento-03
+      - generic [ref=f2e194]:
+        - generic [ref=f2e195]: Pool
+        - combobox "Pool" [ref=f2e196]:
+          - generic [ref=f2e197]: Escritório - Atendimento
+        - combobox [aria-hidden] [ref=f2e200]
+      - group "Como o agente roda" [ref=f2e201]:
+        - radiogroup "Como o agente roda" [ref=f2e203]:
+          - radio "Serviço" [checked] [ref=f2e204]
+          - radio "Sessão" [ref=f2e205]
+        - paragraph [ref=f2e206]: "Serviço: roda em segundo plano, mesmo sem ninguém logado. Use quando o robô não precisa de tela."
+      - generic [ref=f2e207]:
+        - button "Voltar" [ref=f2e208]
+        - button "Cadastrar e gerar chave" [ref=f2e209]
+    - button "Fechar" [ref=f2e210]

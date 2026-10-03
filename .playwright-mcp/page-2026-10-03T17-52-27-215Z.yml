@@ -1,0 +1,139 @@
+- generic:
+  - generic [aria-hidden]:
+    - complementary:
+      - generic:
+        - generic:
+          - link:
+            - /url: /
+            - generic:
+              - generic [aria-hidden]: R
+              - generic:
+                - generic: Regista
+                - generic: by Artemisys
+        - generic:
+          - button:
+            - generic:
+              - generic: Cliente
+              - generic: Escritório Exemplo
+        - navigation:
+          - generic:
+            - generic:
+              - paragraph: Artemisys
+              - list:
+                - listitem:
+                  - link:
+                    - /url: /clients
+                    - text: Clientes
+            - generic:
+              - paragraph: Operação
+              - list:
+                - listitem:
+                  - generic: Dashboard
+                - listitem:
+                  - generic: Execuções
+                - listitem:
+                  - generic: Filas
+                - listitem:
+                  - generic: Lotes
+            - generic:
+              - paragraph: Automação
+              - list:
+                - listitem:
+                  - generic: Bots
+                - listitem:
+                  - generic: Agendamentos
+                - listitem:
+                  - generic: Alertas
+            - generic:
+              - paragraph: Infraestrutura
+              - list:
+                - listitem:
+                  - link:
+                    - /url: /machines
+                    - text: Máquinas
+                    - generic: "1"
+                - listitem:
+                  - link:
+                    - /url: /users
+                    - text: Usuários
+        - generic:
+          - button:
+            - generic [aria-hidden]: CC
+            - generic:
+              - generic: Conferencia Claude
+              - generic: Equipe Artemisys
+    - main:
+      - generic:
+        - generic:
+          - paragraph: Escritório Exemplo / Regista
+          - paragraph: Sincronizado
+          - button [disabled]:
+            - text: Buscar referência, bot ou execução
+            - generic: Ctrl K
+          - button [disabled]
+        - generic:
+          - link:
+            - /url: /machines
+            - text: Máquinas e pools
+          - generic:
+            - generic:
+              - paragraph: Máquina · Escritório - Atendimento
+              - heading [level=1]: estacao-dev-01
+              - generic:
+                - generic: Sem sinal
+                - generic: Último sinal hoje às 14:49, há 3 min
+            - generic:
+              - button: Gerar nova chave
+              - button: Revogar máquina
+          - generic:
+            - generic:
+              - term: Versão do agente
+              - definition: 0.1.0
+            - generic:
+              - term: Modo
+              - definition: Serviço
+            - generic:
+              - term: Sistema
+              - definition: Windows 11
+            - generic:
+              - term: Pool
+              - definition: Escritório - Atendimento
+            - generic:
+              - term: Cadastrada
+              - definition: 03/10/2026 14:47 · Equipe Artemisys
+        - alert:
+          - generic:
+            - paragraph: O agente parou de responder
+            - generic: Enquanto isso, as execuções do pool ficam pendentes. Confira se o computador está ligado, com internet, e se o usuário do Windows continua logado (modo Sessão).
+        - generic:
+          - tablist:
+            - tab [selected]: Histórico
+          - tabpanel:
+            - generic:
+              - list:
+                - listitem:
+                  - time: 03/10 14:52
+                  - generic:
+                    - paragraph: Ficou sem sinal
+                - listitem:
+                  - time: 03/10 14:48
+                  - generic:
+                    - paragraph: Ficou online pela primeira vez
+                - listitem:
+                  - time: 03/10 14:48
+                  - generic:
+                    - paragraph: Máquina cadastrada
+                    - paragraph: Agente 0.1.0
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=f4e10] [cursor=pointer]
+  - alert
+  - alertdialog [ref=f4e243]:
+    - generic [ref=f4e248]:
+      - heading "Revogar estacao-dev-01?" [level=2] [ref=f4e249]
+      - paragraph [ref=f4e250]: A máquina deixa de receber execuções na hora e a chave dela para de funcionar. Para usar de novo, será preciso cadastrar a máquina outra vez.
+    - generic [ref=f4e251]:
+      - generic [ref=f4e252]: Digite estacao-dev-01 para confirmar
+      - textbox "Digite estacao-dev-01 para confirmar" [ref=f4e253]
+    - generic [ref=f4e254]:
+      - button "Voltar" [active] [ref=f4e255]
+      - button "Revogar máquina" [disabled] [ref=f4e256]
