@@ -91,10 +91,7 @@ export function Timeline({ steps }: Readonly<{ steps: Step[] }>) {
             )}
             {step.note && (
               <p
-                className={cn(
-                  "text-caption",
-                  step.state === "attention" ? "text-warning-text" : "text-text-label",
-                )}
+                className={`text-caption ${step.state === "attention" ? "text-warning-text" : "text-text-label"}`}
               >
                 {step.note}
               </p>

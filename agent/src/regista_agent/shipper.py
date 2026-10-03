@@ -16,7 +16,7 @@ from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 
-from regista_agent.errors import ServerUnavailable
+from regista_agent.errors import MachineRevoked, ServerUnavailable
 from regista_agent.jobapi import JobApi, JobGone
 from regista_agent.logs import scrub
 
@@ -139,6 +139,14 @@ class LogShipper:
             result = self._api.send_logs(self._job_id, batch)
         except JobGone as exc:
             log.warning("logs of %s are no longer wanted: %s", self._job_id, exc)
+            with self._lock:
+                self._stopped = True
+                self._pending.clear()
+            return False
+        except MachineRevoked:
+            # The run's own thread and the heartbeat see the revocation and stop everything; this
+            # thread only has to stop quietly instead of dying with a traceback.
+            log.warning("logs of %s not sent: the machine was revoked", self._job_id)
             with self._lock:
                 self._stopped = True
                 self._pending.clear()

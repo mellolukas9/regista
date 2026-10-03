@@ -29,12 +29,8 @@ export function KPI({
 }>) {
   const body = (
     <>
-      <p
-        className={cn(
-          "text-overline uppercase",
-          tone === "danger" ? "text-danger-text" : "text-text-muted",
-        )}
-      >
+      {/* Classe montada à mão: o tailwind-merge confundiria text-overline (tamanho) com cor. */}
+      <p className={`text-overline uppercase ${tone === "danger" ? "text-danger-text" : "text-text-muted"}`}>
         {label}
       </p>
       {loading ? (

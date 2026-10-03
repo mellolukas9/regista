@@ -54,7 +54,7 @@ export default function DashboardPage() {
         <PageHeader title={allClients ? "Visão geral" : "Dashboard"} description="" />
         <div className="grid grid-cols-4 gap-4 max-[1100px]:grid-cols-2 max-[560px]:grid-cols-1" aria-busy="true">
           {Array.from({ length: 4 }, (_, i) => (
-            <KPI key={i} label="Carregando" value="" loading />
+            <KPI key={i} label="​" value="" loading />
           ))}
         </div>
         <Skeleton className="h-64 w-full rounded-card" />

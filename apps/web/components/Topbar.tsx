@@ -19,7 +19,10 @@ const PAGE_NAMES: Record<string, string> = {
 function useTrail(): string {
   const me = useCurrentUser();
   const pathname = usePathname();
-  return `${contextName(me)} / ${PAGE_NAMES[pathname] ?? "Regista"}`;
+  // `/runs/<id>` vira "Execuções / Detalhe": o pai (a lista) e a página, como no design (§5, Topbar).
+  const [first, ...rest] = pathname.split("/").filter(Boolean);
+  const parent = PAGE_NAMES[`/${first}`] ?? PAGE_NAMES[pathname] ?? "Regista";
+  return `${contextName(me)} / ${parent}${rest.length > 0 ? " / Detalhe" : ""}`;
 }
 
 export function Topbar({

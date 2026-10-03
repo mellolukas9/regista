@@ -333,6 +333,18 @@ def test_logs_stop_when_the_server_says_the_budget_is_over() -> None:
     assert api.completed, "the run itself is not affected"
 
 
+def test_a_revoked_machine_stops_the_log_thread_quietly(
+    caplog: pytest.LogCaptureFixture, capfd: pytest.CaptureFixture[str]
+) -> None:
+    api = FakeApi()
+    api.log_errors = [MachineRevoked()]
+    # The run itself ends normally here; the point is that the shipper thread does not blow up
+    # (an unhandled exception in a thread prints a traceback to stderr).
+    _executor(api)[0].execute(job("noisy", lines=20))
+    assert "Traceback" not in capfd.readouterr().err
+    assert api.lines == []
+
+
 def test_logs_stop_when_the_run_is_no_longer_ours() -> None:
     api = FakeApi()
     api.log_errors = [JobGone("job_closed")]
