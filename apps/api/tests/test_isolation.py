@@ -123,6 +123,22 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     },
                 )
             ).scalar_one()
+            job_code = f"exec-{uuid.uuid4().hex[:6]}"
+            job_id: uuid.UUID = (
+                await db.execute(
+                    text(
+                        "INSERT INTO jobs (tenant_id, bot_id, pool_id, short_code, params)"
+                        " VALUES (:t, :b, :p, :c, CAST(:x AS jsonb)) RETURNING id"
+                    ),
+                    {
+                        "t": seed.tenant_a,
+                        "b": bot_id,
+                        "p": a_machines.pool_id,
+                        "c": job_code,
+                        "x": '{"segredo": "param-secreto-de-a"}',
+                    },
+                )
+            ).scalar_one()
         try:
             yield World(
                 env=env,
@@ -136,8 +152,8 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     "machine_id": a_machines.pending_id,
                     "pool_id": a_machines.pool_id,
                     "bot_id": str(bot_id),
-                    # Filled in by the steps that add the job and artifact routes.
-                    "job_id": str(uuid.uuid4()),
+                    "job_id": str(job_id),
+                    # Filled in by the step that adds the screenshot routes.
                     "artifact_id": str(uuid.uuid4()),
                 },
                 a_markers=[
@@ -149,6 +165,9 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     str(session_id),
                     str(bot_id),
                     bot_name,
+                    str(job_id),
+                    job_code,
+                    "param-secreto-de-a",
                     *a_machines.markers,
                 ],
                 a_used_key=a_machines.used_key,

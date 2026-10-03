@@ -73,6 +73,18 @@ MATRIX: dict[Permission, dict[str, bool]] = {
         "operator": False,
         "viewer": False,
     },
+    Permission.JOBS_VIEW: {
+        "artemisys": True,
+        "tenant_admin": True,
+        "operator": True,
+        "viewer": True,
+    },
+    Permission.JOBS_RUN: {
+        "artemisys": True,
+        "tenant_admin": True,
+        "operator": True,
+        "viewer": False,
+    },
 }
 
 # State-changing routes that need no permission, by design.

@@ -56,9 +56,20 @@ def test_permissions_by_role() -> None:
         Permission.MACHINES_VIEW,
         Permission.MACHINES_MANAGE,
         Permission.BOTS_VIEW,
+        Permission.JOBS_VIEW,
+        Permission.JOBS_RUN,
     }
-    assert ROLE_PERMISSIONS["operator"] == {Permission.MACHINES_VIEW, Permission.BOTS_VIEW}
-    assert ROLE_PERMISSIONS["viewer"] == {Permission.MACHINES_VIEW, Permission.BOTS_VIEW}
+    assert ROLE_PERMISSIONS["operator"] == {
+        Permission.MACHINES_VIEW,
+        Permission.BOTS_VIEW,
+        Permission.JOBS_VIEW,
+        Permission.JOBS_RUN,
+    }
+    assert ROLE_PERMISSIONS["viewer"] == {
+        Permission.MACHINES_VIEW,
+        Permission.BOTS_VIEW,
+        Permission.JOBS_VIEW,
+    }
     assert permissions_for(role="viewer", is_platform_admin=True) == frozenset(Permission)
     assert not has_permission(
         role="tenant_admin", is_platform_admin=False, permission=Permission.CLIENTS_CREATE
