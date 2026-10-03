@@ -20,6 +20,7 @@ from regista_api.core.email import EmailSender, create_email_sender
 from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.limits import BodyLimitMiddleware
 from regista_api.core.logging import configure_logging
+from regista_api.dashboard.router import router as dashboard_router
 from regista_api.jobs import artifacts
 from regista_api.jobs.agent import router as job_agent_router
 from regista_api.jobs.router import router as jobs_router
@@ -122,6 +123,7 @@ def create_app(
     app.include_router(machines_router)
     app.include_router(bots_router)
     app.include_router(jobs_router)
+    app.include_router(dashboard_router)
     app.include_router(agent_router)
     app.include_router(job_agent_router)
     app.include_router(artifacts.agent_router)

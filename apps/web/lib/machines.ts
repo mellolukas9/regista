@@ -21,6 +21,8 @@ export type Machine = {
   key_expires_at: string | null;
   key_created_at: string | null;
   created_at: string;
+  /** A execução em andamento nesta máquina (coluna "Agora"). */
+  current_job: { id: string; short_code: string; status: string } | null;
 };
 
 export type MachineDetail = Machine & {
@@ -40,6 +42,8 @@ export type Pool = {
   machines_total: number;
   machines_online: number;
   created_at: string;
+  /** Bots ativos que rodam neste pool ("Roda: ..."). */
+  bot_names: string[];
 };
 
 export type IssuedKey = {

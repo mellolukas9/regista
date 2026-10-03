@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Banner } from "@/components/Banner";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -12,9 +13,11 @@ import { KeyReveal } from "@/components/KeyReveal";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import { formatDateTime, formatListDate } from "@/lib/format";
+import { duration, jobsKey, startedLabel, triggerLabel, type JobPage } from "@/lib/jobs";
 import {
   describeEvent,
   lastSignalSentence,
@@ -212,7 +215,7 @@ export default function MachineDetailPage() {
           setRevoking(next);
         }}
         title={`Revogar ${data.name}?`}
-        description="A máquina deixa de receber execuções na hora e a chave dela para de funcionar. Para usar de novo, será preciso cadastrar a máquina outra vez."
+        description={`A máquina deixa de receber execuções na hora e a chave dela para de funcionar. Para usar de novo, será preciso cadastrar a máquina outra vez.${data.current_job ? " A execução em andamento será cancelada." : ""}`}
         confirmLabel="Revogar máquina"
         loadingLabel="Revogando…"
         typeToConfirm={data.name}
@@ -231,18 +234,99 @@ function registered(machine: MachineDetail): string {
   return machine.created_by ? `${when} · ${machine.created_by}` : when;
 }
 
+const TABS = ["history", "runs"] as const;
+
 function DetailTabs({ machineId, contextKey }: Readonly<{ machineId: string; contextKey: string }>) {
-  // A aba Execuções (e o `?tab=` na URL, que só faz sentido com mais de uma aba) chega no M3,
-  // junto com os jobs; por ora só o Histórico existe.
+  const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams();
+  const tab = TABS.find((t) => t === search.get("tab")) ?? "history";
   return (
-    <Tabs value="history">
+    <Tabs
+      value={tab}
+      onValueChange={(next) => {
+        const params = new URLSearchParams(search.toString());
+        params.set("tab", next);
+        router.replace(`${pathname}?${params}`, { scroll: false });
+      }}
+    >
       <TabsList aria-label="Seções da máquina">
         <TabsTrigger value="history">Histórico</TabsTrigger>
+        <TabsTrigger value="runs">Execuções</TabsTrigger>
       </TabsList>
       <TabsContent value="history">
         <History machineId={machineId} contextKey={contextKey} />
       </TabsContent>
+      <TabsContent value="runs">
+        <MachineRuns machineId={machineId} contextKey={contextKey} />
+      </TabsContent>
     </Tabs>
+  );
+}
+
+function MachineRuns({ machineId, contextKey }: Readonly<{ machineId: string; contextKey: string }>) {
+  const runs = useQuery({
+    queryKey: [...jobsKey, "of-machine", machineId, contextKey],
+    queryFn: () => api.get<JobPage>(`/jobs?machine_id=${machineId}&per_page=10&period=all`),
+    refetchInterval: POLL_MS,
+  });
+
+  if (runs.isPending) return <Skeleton className="h-40 w-full rounded-card" />;
+  if (runs.isError) {
+    return (
+      <EmptyState
+        tone="error"
+        title="Não foi possível carregar as execuções"
+        description="O servidor não respondeu. Tente de novo em alguns segundos."
+        action={
+          <Button variant="secondary" onClick={() => runs.refetch()}>
+            Tentar de novo
+          </Button>
+        }
+      />
+    );
+  }
+  if (runs.data.items.length === 0) {
+    return (
+      <EmptyState
+        title="Nenhuma execução nesta máquina ainda"
+        description="As execuções que ela rodar aparecem aqui."
+      />
+    );
+  }
+  return (
+    <div className="grid gap-3">
+      <Table>
+        <TableHeader>
+          <TableRow className="h-11 hover:bg-transparent">
+            <TableHead>Execução</TableHead>
+            <TableHead>Bot</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Gatilho</TableHead>
+            <TableHead>Início</TableHead>
+            <TableHead>Duração</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {runs.data.items.map((job) => (
+            <TableRow key={job.id}>
+              <TableCell>
+                <Link href={`/runs/${job.id}`} className="font-mono text-body-sm">
+                  {job.short_code}
+                </Link>
+              </TableCell>
+              <TableCell className="text-text-secondary">{job.bot_name}</TableCell>
+              <TableCell>
+                <StatusPill kind="job" status={job.status} />
+              </TableCell>
+              <TableCell className="text-text-secondary">{triggerLabel(job)}</TableCell>
+              <TableCell className="tabular text-text-secondary">{startedLabel(job)}</TableCell>
+              <TableCell className="tabular text-text-secondary">{duration(job)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 

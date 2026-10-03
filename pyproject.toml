@@ -45,6 +45,8 @@ known-first-party = ["regista_api", "regista", "regista_agent"]
 "**/tests/**" = ["S101", "S105", "S106"]
 # Migration SQL is static (constants only); S608 flags the f-string composition.
 "**/migrations/**" = ["S608"]
+# The dashboard queries are fixed text joined with constant SQL fragments (the period start).
+"**/dashboard/router.py" = ["S608"]
 
 [tool.mypy]
 python_version = "3.12"

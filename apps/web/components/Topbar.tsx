@@ -6,6 +6,7 @@ import { contextName, useCurrentUser } from "@/lib/me-context";
 
 const PAGE_NAMES: Record<string, string> = {
   "/": "Início",
+  "/dashboard": "Dashboard",
   "/clients": "Clientes",
   "/users": "Usuários",
   "/bots": "Bots",

@@ -47,7 +47,7 @@ const GROUPS: Group[] = [
   {
     title: "Operação",
     items: [
-      { label: "Dashboard", icon: LayoutDashboard },
+      { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
       { label: "Execuções", icon: Play, href: "/runs", counter: "jobs" },
       { label: "Filas", icon: ListChecks },
       { label: "Lotes", icon: Layers },

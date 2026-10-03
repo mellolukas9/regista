@@ -209,8 +209,13 @@ function PoolCard({
             {showClient && <Badge variant="mono">{pool.client_name}</Badge>}
           </div>
           <CardDescription>
-            {pool.machines_online} de {pool.machines_total} online
+            {pool.bot_names.length > 0
+              ? `Roda: ${pool.bot_names.join(", ")}`
+              : "Nenhum bot usa este pool ainda"}
           </CardDescription>
+          <p className="mt-0.5 text-caption text-text-label">
+            {pool.machines_online} de {pool.machines_total} online
+          </p>
         </div>
       </CardHeader>
 
@@ -227,6 +232,7 @@ function PoolCard({
                   <TableHead>Último sinal</TableHead>
                   <TableHead>Agente</TableHead>
                   <TableHead>Modo</TableHead>
+                  <TableHead>Agora</TableHead>
                   <TableHead>
                     <span className="sr-only">Ações</span>
                   </TableHead>
@@ -244,6 +250,15 @@ function PoolCard({
                       {machine.agent_version ?? "—"}
                     </TableCell>
                     <TableCell className="text-text-secondary">{MODE_LABEL[machine.mode]}</TableCell>
+                    <TableCell className="text-body-sm text-text-secondary">
+                      {machine.current_job ? (
+                        <Link href={`/runs/${machine.current_job.id}`}>
+                          Executando {machine.current_job.short_code}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Link href={`/machines/${machine.id}`} aria-label={`Abrir ${machine.name}`}>
                         Abrir →
@@ -269,6 +284,11 @@ function PoolCard({
                     {MODE_LABEL[machine.mode]}
                     {machine.agent_version ? ` · agente ${machine.agent_version}` : ""}
                   </span>
+                  {machine.current_job && (
+                    <span className="text-body-sm text-text-secondary">
+                      Executando {machine.current_job.short_code}
+                    </span>
+                  )}
                 </Link>
               </li>
             ))}
