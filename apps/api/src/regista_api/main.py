@@ -17,14 +17,20 @@ from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
 from regista_api.core.email import EmailSender, create_email_sender
 from regista_api.core.keys import LocalKeyProvider
+from regista_api.core.limits import BodyLimitMiddleware
 from regista_api.core.logging import configure_logging
+from regista_api.machines.agent import router as agent_router
+from regista_api.machines.router import router as machines_router
 from regista_api.tenants.clients import router as clients_router
 from regista_api.tenants.users import router as users_router
 
 log = structlog.get_logger()
 
-# Responses under these prefixes carry session state, TOTP secrets or recovery codes.
-_NO_STORE_PREFIXES = ("/auth", "/account")
+# Responses under these prefixes carry session state, TOTP secrets, recovery codes or the
+# agent's nonces and access tokens.
+_NO_STORE_PREFIXES = ("/auth", "/account", "/agent")
+# What the agent may send is a handful of short fields; anything bigger is refused unread.
+_AGENT_BODY_LIMIT = 16 * 1024
 
 
 class HealthResponse(BaseModel):
@@ -58,6 +64,11 @@ def create_app(
 
     app = FastAPI(title="Regista API", lifespan=lifespan)
 
+    # Registered before the `http` middleware below, so it sits inside it (the last one added is
+    # the outermost). That matters: BaseHTTPMiddleware reads the body inside an anyio task group,
+    # which would wrap the 413 in an ExceptionGroup that FastAPI turns into a generic 400.
+    app.add_middleware(BodyLimitMiddleware, prefix="/agent/", max_bytes=_AGENT_BODY_LIMIT)
+
     @app.middleware("http")
     async def http_middleware(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -82,6 +93,8 @@ def create_app(
     app.include_router(account_router)
     app.include_router(clients_router)
     app.include_router(users_router)
+    app.include_router(machines_router)
+    app.include_router(agent_router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:

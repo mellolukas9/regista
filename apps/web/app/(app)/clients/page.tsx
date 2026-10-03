@@ -25,7 +25,14 @@ import { messageFor } from "@/lib/messages";
 import { useCurrentUser } from "@/lib/me-context";
 import { listQuery, useListState } from "@/lib/url-state";
 
-type Client = { id: string; name: string; created_at: string; users_count: number };
+type Client = {
+  id: string;
+  name: string;
+  created_at: string;
+  users_count: number;
+  machines_total: number;
+  machines_online: number;
+};
 type ClientPage = { items: Client[]; total: number; page: number; per_page: number };
 
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -88,6 +95,21 @@ function Clients() {
         header: "Usuários",
         meta: { className: "tabular" },
         cell: ({ row }) => row.original.users_count,
+      },
+      {
+        id: "machines",
+        header: "Máquinas",
+        enableSorting: false,
+        cell: ({ row }) =>
+          row.original.machines_total === 0 ? (
+            <span className="text-text-muted">—</span>
+          ) : (
+            <span
+              className={`tabular ${row.original.machines_online < row.original.machines_total ? "text-danger-text" : "text-text"}`}
+            >
+              {row.original.machines_online} de {row.original.machines_total} online
+            </span>
+          ),
       },
       {
         id: "actions",
@@ -153,6 +175,7 @@ function Clients() {
               <p className="text-caption text-text-muted">
                 desde {formatSince(row.created_at)} · {row.users_count}{" "}
                 {row.users_count === 1 ? "usuário" : "usuários"}
+                {row.machines_total > 0 && ` · ${row.machines_online} de ${row.machines_total} online`}
               </p>
             </div>
             <Button

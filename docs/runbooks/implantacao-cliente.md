@@ -34,7 +34,7 @@ No caminho A, configurar prioridade de processo abaixo do normal e concorrência
 
 ## 3. Configuração no Regista
 
-1. Criar o tenant e os usuários do cliente (MFA para administradores).
+1. Criar o tenant e os usuários do cliente (MFA obrigatório para todos os usuários, ADR 0017).
 2. Criar o pool e a máquina; gerar a chave de registro.
 3. Criar a fila (modo de dados `reference` por padrão; definir campos visíveis e retenção).
 4. Publicar a versão assinada do robô e associar ao pool.
@@ -63,5 +63,5 @@ No caminho A, configurar prioridade de processo abaixo do normal e concorrência
 ## Acordos com o cliente
 
 - Disponibilidade da máquina é responsabilidade do cliente; o Regista monitora e alerta.
-- Itens interrompidos (máquina desligada, queda de energia) voltam para a fila automaticamente.
+- Itens interrompidos (máquina desligada, queda de energia) ficam como Abandonado e não voltam sozinhos: a pessoa usa "Reprocessar" no item ou nas falhas da fila (ADR 0011).
 - Crescimento de volume: o robô migra para máquina dedicada ou nuvem do cliente trocando o pool.

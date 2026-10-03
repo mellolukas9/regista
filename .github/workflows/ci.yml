@@ -28,6 +28,20 @@ jobs:
       # Testcontainers starts Postgres 18 through the runner's Docker.
       - run: uv run pytest
 
+  # The agent keeps its key with DPAPI and a restricted ACL on Windows, which cannot be tested on
+  # Linux. The runner is an administrator, so the tests that create local users run here (and
+  # are skipped, with the reason, on a developer's unelevated session).
+  agent-windows:
+    name: Agent on Windows (DPAPI, ACLs)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest agent/tests -v -rs
+
   web:
     name: Web (lint, typecheck, build)
     runs-on: ubuntu-latest

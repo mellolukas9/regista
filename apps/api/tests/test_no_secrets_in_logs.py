@@ -9,10 +9,13 @@ import uuid
 import httpx
 import pytest
 import structlog
+from cryptography.hazmat.primitives import serialization
 from sqlalchemy import text
 
 from regista_api.core.db import tenant_session
+from regista_api.machines.agent import audience
 
+from .agent_helpers import AgentSim, b64
 from .conftest import DbUrls, Seed, open_env
 from .helpers import (
     NEW_PASSWORD,
@@ -22,6 +25,8 @@ from .helpers import (
     invite_user,
     login,
     new_client,
+    onboard,
+    unique_email,
 )
 
 WRONG_PASSWORD = "senha-errada-que-nao-existe-9"
@@ -131,3 +136,91 @@ async def test_nothing_secret_reaches_logs(
     assert "[redacted]" in logged, "the redaction processor did not run"
     for secret in secrets:
         assert secret not in logged, f"a secret value leaked into the logs: {secret[:6]}..."
+
+
+async def test_nothing_the_agent_proves_itself_with_reaches_logs(
+    db_urls: DbUrls,
+    seed: Seed,
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Enrollment key, nonce, signature, proof, access token and the private key stay out of the
+    logs: on success, on failure and when a log call tries to include them by mistake."""
+    caplog.set_level(logging.DEBUG)
+    secrets: set[str] = set()
+
+    async with open_env(db_urls, log_level="DEBUG") as env:
+        admin_client, agent_client = new_client(env.app), new_client(env.app)
+        await onboard(
+            env.app,
+            admin_client,
+            seed.tenant_a,
+            env.clock,
+            role="tenant_admin",
+            email=unique_email("log-agent"),
+        )
+        aud = audience(env.app.state.settings.api_public_url)
+
+        suffix = uuid.uuid4().hex[:8]
+        pool = await admin_client.post(
+            "/pools", json={"name": f"pool-{suffix}"}, headers=csrf(admin_client)
+        )
+        created = (
+            await admin_client.post(
+                "/machines",
+                json={"name": f"m-{suffix}", "pool_id": pool.json()["id"], "mode": "service"},
+                headers=csrf(admin_client),
+            )
+        ).json()
+        key = created["enrollment_key"]
+        secrets.add(key)
+
+        agent = AgentSim(agent_client, aud)
+        body = agent.enroll_body(key)
+        secrets.update({body["proof"], key})
+        private_raw = agent.private.private_bytes(
+            serialization.Encoding.Raw,
+            serialization.PrivateFormat.Raw,
+            serialization.NoEncryption(),
+        )
+        secrets.update({b64(private_raw), private_raw.hex()})
+        assert (await agent.enroll(key)).status_code == 200
+
+        challenge = (await agent.challenge()).json()
+        nonce = challenge["nonce"]
+        signature = agent.sign(nonce)
+        secrets.update({nonce, signature})
+        token = (await agent.exchange(nonce, signature)).json()["access_token"]
+        secrets.add(token)
+        secrets.update(token.split(".")[1:])  # payload and mac on their own
+        assert (await agent.heartbeat(token)).status_code == 200
+
+        # Failure paths log nothing sensitive either: replay, bad proof, unknown key.
+        replay = await agent.exchange(nonce, signature)
+        assert replay.status_code == 401
+        await agent_client.post("/agent/enroll", json={**body, "key": "rgk_inexistente-xyz"})
+        secrets.add("rgk_inexistente-xyz")
+        await agent_client.post(
+            "/agent/heartbeat",
+            json={"agent_version": "0.1.0", "os_info": {}},
+            headers={"Authorization": "Bearer rga1.forjado.token"},
+        )
+
+        # The pipeline itself must redact, whatever a future log call passes in.
+        structlog.get_logger().info(
+            "probe",
+            enrollment_key=key,
+            nonce=nonce,
+            signature=signature,
+            proof=body["proof"],
+            private_key=b64(private_raw),
+            access_token=token,
+            nested={"machine_key": key, "nonce": nonce},
+        )
+
+    out = capsys.readouterr()
+    logged = "\n".join([out.out, out.err, caplog.text])
+    assert logged.count("http_request") >= 8, "the access log produced nothing"
+    assert "[redacted]" in logged, "the redaction processor did not run"
+    for secret in secrets:
+        assert secret not in logged, f"an agent secret leaked into the logs: {secret[:8]}..."

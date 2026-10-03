@@ -4,9 +4,10 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 
 ## Agora
 
-- **Marco atual:** M2 — Agente: identidade e presença (o M1 está pronto; PR #2 aguardando revisão e merge pelo responsável do projeto)
-- **Situação:** M1 concluído: clientes, convites, login com MFA, sessões, seletor de cliente, permissões no servidor, varredura de isolamento automática e as telas de Login/MFA, Clientes, Usuários e Minhas sessões.
-- **Próximo passo:** depois do merge do PR #2, abrir a branch `m2-agent` a partir da `main` e planejar o M2 (leitura das ADRs 0006, 0007, 0009 e 0010 e de `docs/specs/agent.md` antes do plano, que deve ser aprovado antes de implementar).
+- **Marco atual:** M3 — Disparo manual de ponta a ponta (o M2 está pronto; PR #3 aguardando revisão e merge pelo responsável do projeto)
+- **Situação:** M2 concluído: pools e máquinas, chave de registro de uso único, agente com par Ed25519 gerado na máquina, desafio assinado e token de 15 min, heartbeat, "Sem sinal" após 2 min (primeira tarefa Procrastinate, em `regista-worker`), revogação imediata, modos serviço e sessão, `regista-agent enroll/run/diagnose`, chave protegida por DPAPI + ACL, e as telas Máquinas e pools (7.13) e Detalhe da máquina (7.14).
+- **Próximo passo:** depois do merge do PR #3, abrir a branch `m3-jobs` a partir da `main` e planejar o M3 (começa pela ADR do S3 local de desenvolvimento; ler `docs/specs/orchestration.md` e `agent.md` antes do plano, que deve ser aprovado antes de implementar).
+- **Pendências para decisão (M2):** ver "Pendências do fim do M2" abaixo (`npm audit` e ESLint).
 
 ## Decisões já aprovadas para o M0 (não perguntar de novo)
 
@@ -44,6 +45,27 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 
 **Risco conhecido e aceito no MVP:** o bloqueio progressivo por conta permite que alguém bloqueie a conta de outra pessoa errando a senha de propósito. Mitigação: teto de 15 min e rate limit por e-mail. Evolução possível: considerar o IP no bloqueio.
 
+## Decisões aprovadas para o M2 (não perguntar de novo)
+
+| Tema | Decisão |
+|---|---|
+| "Gerar nova chave" | Vale para qualquer máquina não revogada. Em máquina já cadastrada, abre um AlertDialog avisando que o agente atual para quando a nova chave for usada; se ela expirar sem uso, nada muda. O uso gera o evento `re_enrolled` (não repete `enrolled`) e o `audit_log` guarda quem gerou e quando foi usada |
+| Chave privada no Windows | DPAPI `LocalMachine` com entropia fixa + ACL em `%ProgramData%\Regista\keys\`, herança desligada, acesso só para a conta que roda o agente (`--agent-account`; padrão `NT SERVICE\RegistaAgent` em modo serviço, obrigatória em modo sessão), SYSTEM e Administradores; nunca para quem rodou o `enroll`. O `diagnose` confere a ACL |
+| Worker | Processo separado (`regista-worker`), role `regista_app` sem `BYPASSRLS`. Tarefas entre clientes: leitura com flag de plataforma, escrita com o tenant da linha. Três terminais em dev (API, worker, web) |
+| Token do agente | `rga1.<payload>.<mac>`, 15 min, HMAC-SHA256 pelo `KeyProvider.mac`; `credential_version` derruba o agente antigo no recadastro |
+| Procrastinate | Versão fixa; atualizar por migration Alembic (procedimento no `CLAUDE.md`) |
+| Relógio do agente | Renovação e backoff com `time.monotonic` |
+| Nome da máquina | `[a-z0-9][a-z0-9-]{0,62}`, único por cliente entre as não revogadas |
+| Textos | `design-system.md` §13, aprovados pelo responsável com ajustes (banner por modo, endereço no KeyReveal, plural do contador) |
+| Fluxo | Ao final de cada passo: commit **e** push (regra registrada no `CLAUDE.md`) |
+
+**Risco aceito no MVP (ADR 0018):** com DPAPI `LocalMachine`, um administrador da máquina consegue extrair a chave privada e usá-la. Mitigação: revogar a máquina no painel invalida a identidade na hora. Evolução: guardar a chave no TPM (provedor de chaves da plataforma); o resto do agente não muda.
+
+## Pendências do fim do M2
+
+- **`npm audit`: 5 vulnerabilidades "high", todas em ferramentas de desenvolvimento.** `npm audit --omit=dev` dá 0: nada disso vai para o app em produção. A cadeia é `braces` → `micromatch` → `fast-glob` → `@next/eslint-plugin-next` → `eslint-config-next`, usada só pelo linter, que processa os padrões de arquivo do próprio repositório (o ataque pede padrões de glob aninhados fundo, que não vêm de fora). O `braces 3.0.3` é a última versão publicada e não há versão corrigida, então **não existe correção sem `--force`**; e o `npm audit fix --force` sugerido **rebaixaria** o `eslint-config-next` para a 14, o que quebra o projeto (Next 16). **Decidido: aceitar o risco**, registrado aqui, e rodar `npm audit` de novo a cada atualização do Next ou do ESLint.
+- **ESLint 9.39.5 "não suportado" (decidido: depois do M3).** É o aviso da linha 9.x, que saiu para manutenção (`npm view eslint dist-tags`: `maintenance` 9.39.5, `latest` 10.12.0). Subir para a 10 é mudança de versão maior: o `eslint-config-next` 16.3.8 aceita `eslint >=9` no peer, mas os plugins que ele traz (react, import, jsx-a11y) podem não estar prontos. **Pendência: depois do M3, testar a 10 numa branch própria** e só adotar se `npm run lint` passar sem avisos; do contrário, ficar na 9.39.5 até o Next trazer suporte.
+
 ## Contexto
 
 O Regista começou como um piloto (início de 2026) para orquestrar automações locais com Prefect OSS, FastAPI e Next.js. O piloto validou o fluxo, mas suas premissas não servem para um produto multi-cliente. A v2 é uma reescrita do zero com as decisões registradas em `docs/adr/`. Nenhum código do piloto foi mantido.
@@ -75,6 +97,8 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 | 2026-10-02 | M1 | Leitura completa e obrigatória feita (CLAUDE.md, STATUS, ROADMAP, ARCHITECTURE, ADRs 0001–0016, specs `agent`, `orchestration`, `data-model`, `security`, `frontend` e `design-system` inteiros). Plano do M1 aprovado com ajustes (ver "Decisões aprovadas para o M1"). ADR 0017 proposta. |
 | 2026-10-02 | M1 | Backend do M1 pronto (passos 2 a 9): tabelas e RLS (`0002`), funções `SECURITY DEFINER` mínimas (no PG18 o flag é ligado e restaurado dentro do corpo da função, não com `SET` na definição), fluxos de convite/senha/MFA/sessão, CSRF, bloqueio progressivo, rate limit no Postgres, auditoria, `regista-admin` e `seed-dev`. Varredura de isolamento por descoberta automática de rotas (rota sem marcador, parâmetro sem entrada no registro ou modelo sem `examples` falha o teste; checada por mutação), matriz de permissões do §4 e teste de ausência de segredos em log. CI verde no Linux. |
 | 2026-10-02 | M1 | Frontend do M1 (passos 10 a 13): shadcn/ui com os tokens do §2, telas de Login e MFA, convite, Clientes, Usuários e Minhas sessões, shell com seletor de cliente, rodapé do usuário e favicon. Conferido no navegador de ponta a ponta contra o stack de dev (convite do `estagio@` até o painel, login com TOTP, Leitor sem acesso a Usuários, equipe Artemisys entrando em um cliente), o que revelou e corrigiu a perda do token do convite no modo estrito do React. Nenhuma senha, segredo TOTP ou token apareceu no log da API. |
+| 2026-10-03 | M2 | Pasta local perdida de novo e refeita a partir do GitHub (passos 1 a 8 estavam enviados). Ajustes pós-plano conferidos e completados (`agent/README.md`, procedimento do Procrastinate); nova regra de commit e push por passo. |
+| 2026-10-03 | M2 | Telas 7.13 e 7.14, sidebar com contador de "sem sinal", seletor de cliente com "N sem sinal" e coluna Máquinas em Clientes. Conferido no navegador contra o stack de dev: cadastrar pool e máquina, KeyReveal (sem Esc, "Concluir" só após o checkbox), máquina online, "Sem sinal" com banner e contador, revogação com nome digitado, 390 px. Docs fechados (ADR 0018 aceita, specs, runbook, ROADMAP). |
 
 ## Desvios e escolhas do M1 para a revisão
 
@@ -85,3 +109,12 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 - **"Gerar novos códigos"** mostra os códigos em `/login/recovery-codes?from=account` (como no design), mantidos só em memória.
 - **Tabela de Usuários** põe "Reenviar convite" num menu "Mais ações" para a linha ficar compacta; no mobile continua como botão.
 - **Cabeçalhos:** CSP completa de scripts fica para o M8.
+
+## Desvios e escolhas do M2 para a revisão
+
+- **Conferência no navegador sem o `regista-agent` real.** O `enroll` grava a chave numa pasta que só um console elevado consegue escrever (por desenho), e a sessão de desenvolvimento não era elevada. A conferência usou um script que fala o mesmo protocolo (enroll, desafio, token, heartbeat) por HTTP. O agente real é coberto pelo teste ponta a ponta e, no Windows, pelo job `agent-windows` da CI (inclui "enroll por um usuário, leitura pela conta do agente"). Falta rodar o agente real num console elevado antes do primeiro cliente.
+- **Não conferido no navegador:** a visão de Operador/Leitor (sem botões; coberta pela matriz de permissões do servidor) e "Gerar nova chave" numa máquina já cadastrada (coberto pelo teste da API; o botão e o diálogo foram escritos mas não exercitados na tela).
+- **A API ganhou dois campos para as telas:** `key_created_at` em máquinas ("Chave gerada há 10 min, ainda não usada") e `machines_total`/`machines_online` em Clientes.
+- **Aba Execuções, coluna "Agora" e linha "Roda: …"** ficam para o M3 (dependem de `bots` e `jobs`); a aba na URL (`?tab=`) também, pois por ora só existe o Histórico.
+- **`enroll` sem elevação** passou a explicar o que fazer (antes mostrava um traceback).
+- **Erro no processo:** a pasta `.playwright-mcp/` (capturas da conferência) foi commitada por engano e removida no commit seguinte. **Decidido manter no histórico, sem force-push.** Conferido: as capturas só têm dados de uma conta temporária de dev (segredo TOTP, códigos de recuperação e uma chave de registro), e todos estão mortos: o usuário está `disabled` e sem sessão, a chave foi usada e a máquina está revogada. Nenhum cookie de sessão, CSRF, token `rga1` ou link de convite aparece nelas.

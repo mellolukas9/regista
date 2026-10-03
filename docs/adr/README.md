@@ -21,6 +21,7 @@ Cada arquivo registra uma decisão: contexto, decisão, consequências e alterna
 | [0015](0015-agendador-proprio.md) | Agendador próprio com croniter e advisory lock |
 | [0016](0016-tarefas-internas-procrastinate.md) | Tarefas internas com Procrastinate |
 | [0017](0017-ajustes-na-autenticacao.md) | Ajustes na autenticação (MFA para todos, convite como recuperação, tenant interno) |
+| [0018](0018-identidade-de-maquina-buscas-antes-do-tenant.md) | Identidade de máquina: buscas antes do tenant, token assinado e tarefas entre clientes |
 
 ## Modelo
 

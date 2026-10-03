@@ -23,6 +23,9 @@ DEFINER_FUNCTIONS = (
     "lookup_session",
     "rate_limit_hit",
     "users_guard_platform_admin",
+    "lookup_enrollment_key",
+    "lookup_machine_credential",
+    "rate_limit_purge",
 )
 
 
@@ -121,16 +124,29 @@ async def test_platform_flag_is_restored_when_a_lookup_fails_midway(
         assert await _value(conn, PLATFORM_FLAG) == "on"
 
         # 3. Same failure in a savepoint of a caller without the flag, other lookup functions too.
+        await conn.execute(text("ALTER TABLE machines RENAME TO machines_renamed"))
+        await conn.execute(text("ALTER TABLE enrollment_keys RENAME TO enrollment_keys_renamed"))
         await conn.execute(text("SELECT set_config('app.platform_admin', '', true)"))
         for call in (
             "SELECT * FROM app.lookup_invitation(:h)",
             "SELECT * FROM app.lookup_session(:h)",
+            "SELECT * FROM app.lookup_enrollment_key(:h)",
+            "SELECT * FROM app.lookup_machine_credential(gen_random_uuid())",
         ):
             savepoint = await conn.begin_nested()
             with pytest.raises(DBAPIError):
                 await conn.execute(text(call), {"h": uuid.uuid4().bytes})
             await savepoint.rollback()
             assert await _value(conn, PLATFORM_FLAG) != "on", call
+
+        # 4. The purge function raises the rate-limit flag, not the platform one.
+        await conn.execute(text("ALTER TABLE auth_rate_limits RENAME TO auth_rate_limits_renamed"))
+        savepoint = await conn.begin_nested()
+        with pytest.raises(DBAPIError, match="auth_rate_limits"):
+            await conn.execute(text("SELECT app.rate_limit_purge(60)"))
+        await savepoint.rollback()
+        assert await _value(conn, RATE_FLAG) != "on"
+        assert await _value(conn, PLATFORM_FLAG) != "on"
 
         await outer.rollback()
 

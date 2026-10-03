@@ -129,6 +129,7 @@ async def test_artemisys_creates_a_client_and_its_first_admin_is_invited(
     listed = (await env.client.get("/clients", params={"q": "Cliente"})).json()
     row = next(i for i in listed["items"] if i["id"] == str(client_id))
     assert row["users_count"] == 1
+    assert (row["machines_total"], row["machines_online"]) == (0, 0)
 
 
 async def test_client_creation_is_all_or_nothing(

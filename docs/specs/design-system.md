@@ -332,7 +332,8 @@ Base = componente do shadcn/ui que serve de ponto de partida.
   - pill "Aguardando cadastro" com o nome da máquina;
   - título "Copie a chave de registro";
   - aviso âmbar;
-  - chave em mono com `user-select: all`;
+  - "Endereço do Regista" em mono, com "Copiar endereço" (vira "Copiado");
+  - a chave em mono com `user-select: all`;
   - botão "Copiar chave", que vira "Copiada" por 3s com `aria-live`;
   - checkbox "Guardei a chave em um lugar seguro";
   - "Concluir", liberado só após o checkbox.
@@ -758,7 +759,7 @@ No erro, a topbar mostra "Sem conexão · tentando de novo".
   - contexto `Máquina · Escritório – Atendimento`, título mono;
   - pill + "Último sinal hoje às 08:20, há 2 h";
   - ações "Gerar nova chave" (secondary; abre o KeyReveal e invalida a chave anterior) e "Revogar máquina" (destructive-outline).
-- Banner danger quando estiver sem sinal: "O agente parou de responder" / "Enquanto isso, as execuções do pool vão para a estacao-atendimento-01. Confira se o computador está ligado, com internet, e se o usuário do Windows continua logado (modo Sessão)."
+- Banner danger quando estiver sem sinal: "O agente parou de responder" e o texto da §13 (muda se há outra máquina online no pool e se a máquina está no modo Sessão).
 - Faixa meta: Versão do agente, Modo, Sistema, Pool, Cadastrada (data + quem).
 - Abas:
   - **Histórico:** linha do tempo de eventos (data mono, ponto colorido, título e detalhe). Eventos: ficou sem sinal, concluiu exec-…, agente atualizado, ficou online pela primeira vez, máquina cadastrada.
@@ -1103,7 +1104,7 @@ Telas e estados que o M1 precisa e que as seções 7 e 9 não trazem. Mesma regr
 - Dialog "Gerar novos códigos de recuperação?" / "Os códigos atuais deixam de valer. Confirme sua senha para continuar." / campo "Senha" / "Voltar" + "Gerar novos códigos".
 - AlertDialog "Encerrar todas as outras sessões?" / "Os outros aparelhos saem do Regista e precisam entrar de novo. Robôs em execução não param." / "Voltar" + "Encerrar todas as outras".
 
-**Clientes (7.16) no M1:** só as colunas Cliente (+ "desde"), Usuários e "Entrar no cliente"; Máquinas, Bots, Última execução e Atenção entram nos marcos que criam esses dados.
+**Clientes (7.16) no M1:** só as colunas Cliente (+ "desde"), Usuários e "Entrar no cliente"; Máquinas, Bots, Última execução e Atenção entram nos marcos que criam esses dados. (No M2 a coluna Máquinas passou a existir: "1 de 3 online", ou "—" sem máquinas.)
 
 **Sem acesso (EmptyState `forbidden`)**
 - "Você não tem acesso a esta tela" / "Se precisar dela, peça ao administrador do seu escritório."
@@ -1115,3 +1116,57 @@ Telas e estados que o M1 precisa e que as seções 7 e 9 não trazem. Mesma regr
 - "Seu acesso ao Regista": convite com o link e a validade de 7 dias.
 - "Novo convite para o Regista": o link anterior deixa de valer.
 - "Sua senha do Regista foi alterada": "Se não foi você, fale com o administrador do seu escritório."
+
+---
+
+## 13. Textos complementares do M2
+
+Telas e estados de Máquinas e pools (7.13 e 7.14) que as seções 7 e 9 não trazem. Mesma regra: usar exatamente estes textos.
+
+**Banner de máquina sem sinal (7.14)**
+- Título "O agente parou de responder".
+- Sem outra máquina online no pool: "Até o agente voltar, as execuções do pool ficam pendentes. Confira se o computador está ligado e com internet."
+- Com outra máquina online no pool: "Até o agente voltar, as execuções do pool vão para a máquina <nome>. Confira se o computador está ligado e com internet."
+- Só em máquina no modo Sessão, acrescenta ao final: "Confira também se o usuário do Windows continua logado."
+
+**Gerar nova chave (7.14)**
+- AlertDialog "Gerar nova chave para <nome>?" / "Quando a nova chave for usada, o agente instalado hoje nessa máquina para de funcionar. Se ela não for usada em 24 h, nada muda." / "Voltar" + "Gerar nova chave". Em máquina `pending`, vai direto para o KeyReveal.
+- Toast "Nova chave gerada".
+
+**Último sinal (7.13)**
+- Online: "há 8s". Sem sinal: "hoje 08:20 · há 2 h" (ou "ontem 08:20" / "dd/MM HH:mm").
+- Aguardando cadastro: "Chave gerada há 10 min, ainda não usada"; com a chave vencida, "Chave expirada, gere uma nova".
+
+**KeyReveal**
+- Texto abaixo do título: "Use o endereço e a chave no computador onde o agente será instalado. A chave vale uma vez, até <data e hora>."
+- Aviso âmbar: "Esta é a única vez que a chave aparece. Se você fechar sem copiar, será preciso gerar uma nova."
+- Dois blocos em mono, cada um com seu botão: "Endereço do Regista" (o mesmo que o agente usa no `enroll --url`; "Copiar endereço" → "Copiado") e "Chave de registro" ("Copiar chave" → "Copiada").
+
+**Máquinas e pools**
+- Pool sem máquinas: "Nenhuma máquina neste pool ainda."
+- Em "Todos os clientes": "Você está vendo todos os clientes. Para cadastrar máquinas ou criar pools, escolha um cliente no topo da barra lateral."
+- Revogadas: "Mostrar revogadas (N)" / "Ocultar revogadas".
+- Cadastrar máquina sem pools: ajuda do campo Pool "Crie um pool antes de cadastrar a máquina."
+- Banner por máquina na lista: "<nome> está sem sinal há <tempo>" (do 7.13).
+
+**Erros de formulário**
+- "Já existe uma máquina com esse nome neste cliente."
+- "Já existe um pool com esse nome."
+- "Use letras minúsculas, números e hífen. Ex.: estacao-atendimento-03" (nome da máquina: `[a-z0-9][a-z0-9-]{0,62}`).
+- "O nome não confere." (confirmação de revogar)
+- "Escreva um nome para o pool."
+
+**Toasts**
+- "Pool criado", "Máquina revogada", "Nova chave gerada".
+
+**Erro de carregamento**
+- "Não foi possível carregar a máquina" (7.14), com "O servidor não respondeu. Tente de novo em alguns segundos." e "Tentar de novo".
+
+**Detalhe da máquina (7.14)**
+- Máquina inexistente ou de outro cliente: "Máquina não encontrada" / "Confira o endereço ou volte para a lista de máquinas." (máquinas não são removidas, só revogadas).
+- Cabeçalho: contexto "Máquina · <pool>" (e "· <cliente>" em "Todos os clientes"); sem sinal: "Último sinal hoje às 08:20, há 2 h".
+- Faixa meta: "Cadastrada" mostra data e quem ("11/10/2026 10:15 · pessoa@escritorio.com.br", ou "Equipe Artemisys"); numa máquina revogada, o campo vira "Revogada" com a data.
+- Histórico, títulos e detalhes: "Máquina cadastrada" (Agente <versão>), "Agente cadastrado de novo" (O agente anterior deixou de funcionar.), "Ficou online pela primeira vez", "Voltou a ficar online", "Ficou sem sinal", "Agente atualizado" (<versão antiga> → <nova>), "Máquina revogada". Vazio: "Nenhum evento ainda" / "Os eventos aparecem aqui assim que a máquina se cadastrar." Botão "Mostrar mais". Erro: "Não foi possível carregar o histórico".
+- Contador ao lado de Máquinas na sidebar, com o plural no `aria-label`: "1 máquina sem sinal" / "N máquinas sem sinal". No seletor de cliente: "N sem sinal".
+
+**Fica para o M3** (dependem de `bots` e `jobs`): coluna "Agora", linha "Roda: …" (e "Nenhum bot usa este pool ainda"), aba Execuções e "A execução em andamento será cancelada." no AlertDialog de revogar.

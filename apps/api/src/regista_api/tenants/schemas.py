@@ -32,6 +32,8 @@ class ClientItem(BaseModel):
     name: str
     created_at: datetime
     users_count: int
+    machines_total: int
+    machines_online: int
 
 
 class ClientList(Page):

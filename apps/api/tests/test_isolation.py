@@ -21,18 +21,22 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from regista_api.auth.deps import PublicRoute, Require, RequireStage, SelfService
+from regista_api.auth.machine import MachineRoute
 from regista_api.auth.permissions import PLATFORM_ONLY
 from regista_api.core.db import tenant_session
+from regista_api.machines.agent import audience
 from regista_api.main import create_app
 
+from .agent_helpers import AgentSim
 from .conftest import DbUrls, Seed, make_settings, open_env
 from .helpers import Account, Env, csrf, invite_user, login, new_client, onboard, unique_email
 from .isolation import RouteSpec, Uncovered, discover
+from .test_machine_token import _rebuild
 
 Factory = async_sessionmaker[AsyncSession]
 
 # Path parameters that name a resource owned by a client, and where to find an A example.
-RESOURCE_PARAMS = {"user_id", "session_id"}
+RESOURCE_PARAMS = {"user_id", "session_id", "machine_id", "pool_id"}
 
 
 @dataclass
@@ -44,6 +48,9 @@ class World:
     staff: Account
     a_ids: dict[str, str]
     a_markers: list[str]  # strings that must never show up in anything B or staff-in-B receives
+    a_used_key: str  # an enrollment key of A that is already burned
+    a_agent: AgentSim  # an enrolled machine of A, with a real key pair
+    b_agent: AgentSim  # an enrolled machine of B, with a valid access token
 
 
 @pytest_asyncio.fixture
@@ -54,20 +61,24 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
         rate_mfa_per_5min=1_000_000,
         lockout_threshold=1_000_000,
     ) as env:
+        a_browser = new_client(env.app)
         a_admin = await onboard(
             env.app,
-            new_client(env.app),
+            a_browser,
             seed.tenant_a,
             env.clock,
             role="tenant_admin",
             email=unique_email("leak-admin"),
         )
+        agent_client = new_client(env.app)  # no cookies: an agent never has a session
+        aud = audience(env.app.state.settings.api_public_url)
+        a_machines = await _client_a_machines(a_browser, agent_client, aud)
         a_target = await onboard(
             env.app, new_client(env.app), seed.tenant_a, env.clock, email=unique_email("leak-user")
         )
-        b_admin = await onboard(
-            env.app, new_client(env.app), seed.tenant_b, env.clock, role="tenant_admin"
-        )
+        b_browser = new_client(env.app)
+        b_admin = await onboard(env.app, b_browser, seed.tenant_b, env.clock, role="tenant_admin")
+        b_agent = await _enrolled_agent(b_browser, agent_client, aud)
         staff = await onboard(
             env.app,
             new_client(env.app),
@@ -89,22 +100,116 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     {"u": a_admin.user_id},
                 )
             ).scalar_one()
-        yield World(
-            env=env,
-            seed=seed,
-            internal=internal_tenant,
-            b_admin=b_admin,
-            staff=staff,
-            a_ids={"user_id": str(target_id), "session_id": str(session_id)},
-            a_markers=[
-                str(seed.tenant_a),
-                "Tenant A",
-                a_admin.email,
-                a_target.email,
-                str(target_id),
-                str(session_id),
-            ],
-        )
+        try:
+            yield World(
+                env=env,
+                seed=seed,
+                internal=internal_tenant,
+                b_admin=b_admin,
+                staff=staff,
+                a_ids={
+                    "user_id": str(target_id),
+                    "session_id": str(session_id),
+                    "machine_id": a_machines.pending_id,
+                    "pool_id": a_machines.pool_id,
+                },
+                a_markers=[
+                    str(seed.tenant_a),
+                    "Tenant A",
+                    a_admin.email,
+                    a_target.email,
+                    str(target_id),
+                    str(session_id),
+                    *a_machines.markers,
+                ],
+                a_used_key=a_machines.used_key,
+                a_agent=a_machines.agent,
+                b_agent=b_agent,
+            )
+        finally:
+            await a_browser.aclose()
+            await b_browser.aclose()
+            await agent_client.aclose()
+
+
+@dataclass
+class AMachines:
+    pool_id: str
+    pending_id: str
+    used_key: str  # the enrollment key A's enrolled machine already used
+    agent: AgentSim
+    markers: list[str]
+
+
+async def _enrolled_agent(
+    browser: httpx.AsyncClient, agent_client: httpx.AsyncClient, aud: str
+) -> AgentSim:
+    """A pool and a machine of the browser's client, enrolled by a simulated agent that then has
+    a valid access token."""
+    suffix = uuid.uuid4().hex[:8]
+    pool = await browser.post("/pools", json={"name": f"pool-{suffix}"}, headers=csrf(browser))
+    assert pool.status_code == 201, pool.text
+    created = await browser.post(
+        "/machines",
+        json={"name": f"m-{suffix}", "pool_id": pool.json()["id"], "mode": "service"},
+        headers=csrf(browser),
+    )
+    assert created.status_code == 201, created.text
+    agent = AgentSim(agent_client, aud)
+    enrolled = await agent.enroll(created.json()["enrollment_key"])
+    assert enrolled.status_code == 200, enrolled.text
+    await agent.login()
+    return agent
+
+
+async def _client_a_machines(
+    browser: httpx.AsyncClient, agent_client: httpx.AsyncClient, aud: str
+) -> AMachines:
+    """Client A's pool and machines: one pending with a live key, one enrolled with history."""
+    suffix = uuid.uuid4().hex[:8]
+    pool_name = f"pool-secreto-{suffix}"
+    pool = await browser.post("/pools", json={"name": pool_name}, headers=csrf(browser))
+    assert pool.status_code == 201, pool.text
+    pool_id = pool.json()["id"]
+    pending_name = f"maquina-pendente-{suffix}"
+    created = await browser.post(
+        "/machines",
+        json={"name": pending_name, "pool_id": pool_id, "mode": "service"},
+        headers=csrf(browser),
+    )
+    assert created.status_code == 201, created.text
+    pending = created.json()
+
+    # The enrolled one goes through the real protocol, so it has a real key pair to be
+    # impersonated with, and a version string that must never reach B.
+    enrolled_name = f"maquina-ativa-{suffix}"
+    other = await browser.post(
+        "/machines",
+        json={"name": enrolled_name, "pool_id": pool_id, "mode": "service"},
+        headers=csrf(browser),
+    )
+    assert other.status_code == 201, other.text
+    agent = AgentSim(agent_client, aud)
+    used_key = other.json()["enrollment_key"]
+    enrolled = await agent.enroll(used_key, agent_version="0.0.0-leak")
+    assert enrolled.status_code == 200, enrolled.text
+    return AMachines(
+        pool_id=pool_id,
+        pending_id=pending["machine_id"],
+        used_key=used_key,
+        agent=agent,
+        markers=[
+            pool_id,
+            pool_name,
+            pending["machine_id"],
+            pending_name,
+            pending["enrollment_key"],
+            used_key,
+            agent.machine_id,
+            enrolled_name,
+            "0.0.0-leak",
+        ],
+    )
 
 
 # --- helpers ----------------------------------------------------------------------------------
@@ -262,6 +367,109 @@ async def test_lists_only_contain_the_callers_client(world: World) -> None:
     assert str(w.seed.tenant_a) not in ids
 
 
+# --- machine credentials -----------------------------------------------------------------------
+
+
+def _machine_specs(app: FastAPI) -> list[RouteSpec]:
+    specs = [s for s in _specs(app) if s.marker.kind == "machine"]
+    assert specs, "no machine route was discovered"
+    return specs
+
+
+async def test_a_machine_of_b_reaches_nothing_of_a(world: World, owner_factory: Factory) -> None:
+    w = world
+    before = await _snapshot(owner_factory, w.seed.tenant_a)
+    for spec in _machine_specs(w.env.app):
+        r = await w.b_agent.client.request(
+            spec.method,
+            spec.url(w.a_ids),
+            json=spec.body(),
+            headers={"Authorization": f"Bearer {w.b_agent.token}"},
+        )
+        assert r.status_code < 500, f"B-machine {spec.label}: {r.status_code} {r.text}"
+        _assert_no_trace_of_a(w, spec, "B-machine", r)
+    assert await _snapshot(owner_factory, w.seed.tenant_a) == before
+
+
+async def test_user_routes_refuse_a_machine_token(world: World) -> None:
+    """A machine token is not a session: every route that needs a person says 401."""
+    w = world
+    checked = 0
+    for spec in _specs(w.env.app):
+        if spec.marker.kind in ("public", "machine"):
+            continue
+        r = await w.b_agent.client.request(
+            spec.method,
+            spec.url(w.a_ids),
+            json=spec.body(),
+            headers={"Authorization": f"Bearer {w.b_agent.token}"},
+        )
+        assert r.status_code == 401, f"{spec.label}: {r.status_code} {r.text}"
+        checked += 1
+    assert checked >= 20
+
+
+async def test_machine_routes_refuse_a_user_session(world: World) -> None:
+    """The mirror image: a logged-in person (cookie and CSRF) is not a machine."""
+    w = world
+    for spec in _machine_specs(w.env.app):
+        for actor in ("B-admin", "staff-in-B"):
+            client = await _b_client(w, spec) if actor == "B-admin" else await _staff_client(w)
+            try:
+                r = await _call(client, spec, w.a_ids)
+            finally:
+                await client.aclose()
+            assert r.status_code == 401, f"{actor} {spec.label}: {r.status_code} {r.text}"
+
+
+async def test_b_cannot_use_a_machine_of_a(world: World, owner_factory: Factory) -> None:
+    w = world
+    a, b = w.a_agent, w.b_agent
+    unauthorised = (401, {"detail": {"code": "invalid_credentials"}})
+
+    # A's agent asks for a challenge; B only knows the machine id and the nonce it was shown.
+    nonce = (await a.challenge()).json()["nonce"]
+    before = await _snapshot(owner_factory, w.seed.tenant_a)
+
+    # B signs with its own key, for A's machine and A's nonce.
+    for label, signature in {
+        "signed for A's id": b.sign(nonce, machine_id=a.machine_id),
+        "signed for B's id": b.sign(nonce),
+    }.items():
+        r = await b.exchange(nonce, signature, machine_id=a.machine_id)
+        assert (r.status_code, r.json()) == unauthorised, label
+    assert await _snapshot(owner_factory, w.seed.tenant_a) == before  # the nonce was not burned
+    assert (await a.exchange(nonce, a.sign(nonce))).status_code == 200  # and A still logs in
+
+    # A's id with a made-up nonce.
+    fake = "bm9uY2U="
+    r = await b.exchange(fake, b.sign(fake, machine_id=a.machine_id), a.machine_id)
+    assert (r.status_code, r.json()) == unauthorised
+
+
+async def test_the_used_key_of_a_machine_of_a_is_worthless_to_b(world: World) -> None:
+    w = world
+    assert w.a_used_key.startswith("rgk_")
+    r = await w.b_agent.client.post(
+        "/agent/enroll",
+        json=w.b_agent.enroll_body(w.a_used_key),
+        headers={"X-Forwarded-For": "198.51.100.7"},
+    )
+    assert (r.status_code, r.json()) == (401, {"detail": {"code": "invalid_enrollment_key"}})
+
+
+async def test_a_token_with_another_tenant_inside_is_refused(world: World) -> None:
+    """The tenant of an agent request comes from the signed token: editing it breaks the MAC."""
+    w = world
+    changes: list[dict[str, object]] = [
+        {"tid": str(w.seed.tenant_a)},
+        {"mid": w.a_agent.machine_id},
+    ]
+    for change in changes:
+        r = await w.b_agent.heartbeat(_rebuild(w.b_agent.token, change))
+        assert (r.status_code, r.json()["detail"]["code"]) == (401, "not_authenticated"), change
+
+
 # --- the sweep itself must fail for uncovered routes ------------------------------------------
 
 
@@ -276,7 +484,30 @@ def test_discovery_finds_every_real_route(bare_app: FastAPI) -> None:
     assert "GET /health" in labels
     assert "POST /auth/login" in labels
     assert "POST /users/{user_id}/remove-access" in labels
-    assert {s.marker.kind for s in specs} == {"public", "stage", "self_service", "permission"}
+    assert {
+        "GET /pools",
+        "POST /pools",
+        "GET /machines",
+        "POST /machines",
+        "GET /machines/summary",
+        "GET /machines/{machine_id}",
+        "GET /machines/{machine_id}/events",
+        "POST /machines/{machine_id}/enrollment-key",
+        "POST /machines/{machine_id}/revoke",
+    } <= labels
+    assert {s.marker.kind for s in specs} == {
+        "public",
+        "stage",
+        "self_service",
+        "permission",
+        "machine",
+    }
+    assert {
+        "POST /agent/enroll",
+        "POST /agent/challenge",
+        "POST /agent/token",
+        "POST /agent/heartbeat",
+    } <= labels
 
 
 def test_a_route_without_marker_fails_the_sweep(bare_app: FastAPI) -> None:
@@ -323,6 +554,53 @@ def test_a_mounted_sub_app_fails_the_sweep(db_urls: DbUrls) -> None:
     app.mount("/shadow", FastAPI())
     with pytest.raises(Uncovered, match="not an APIRoute"):
         _specs(app)
+
+
+def test_an_agent_route_without_marker_fails_the_sweep(bare_app: FastAPI) -> None:
+    @bare_app.post("/agent/oops")
+    async def oops() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="exactly one route marker"):
+        _specs(bare_app)
+
+
+def test_an_agent_route_with_a_user_marker_fails_the_sweep(bare_app: FastAPI) -> None:
+    @bare_app.get("/agent/oops", dependencies=[Depends(SelfService())])
+    async def oops() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="must be a MachineRoute"):
+        _specs(bare_app)
+
+
+def test_a_new_public_agent_route_fails_the_sweep(bare_app: FastAPI) -> None:
+    """The list of agent routes that take no token is closed: adding one is a deliberate edit."""
+
+    @bare_app.post("/agent/oops", dependencies=[Depends(PublicRoute())])
+    async def oops() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="must be a MachineRoute"):
+        _specs(bare_app)
+
+
+def test_a_user_route_with_the_machine_marker_fails_the_sweep(bare_app: FastAPI) -> None:
+    @bare_app.get("/clients/oops", dependencies=[Depends(MachineRoute())])
+    async def oops() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="only allowed under /agent/"):
+        _specs(bare_app)
+
+
+def test_a_token_less_agent_path_must_stay_public(bare_app: FastAPI) -> None:
+    @bare_app.post("/agent/enroll", dependencies=[Depends(MachineRoute())])
+    async def enroll() -> None:
+        return None
+
+    with pytest.raises(Uncovered, match="must be a PublicRoute"):
+        _specs(bare_app)
 
 
 def test_require_marker_is_discovered_with_its_permission(db_urls: DbUrls) -> None:

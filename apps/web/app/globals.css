@@ -120,6 +120,13 @@
 }
 .animate-skeleton { animation: skeleton-shimmer 1.4s ease-in-out infinite; }
 
+/* Ponto "acontecendo agora" do StatusPill (design-system.md §3). */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-dot, .animate-skeleton { animation: none !important; }
 }
