@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -67,6 +68,29 @@ class Settings(BaseSettings):
     rate_agent_auth_ip_per_minute: int = 120
     rate_agent_auth_machine_per_minute: int = 30
 
+    # Execution limits (docs/STATUS.md, M3). The agent keeps the same numbers in its own settings.
+    agent_poll_wait_seconds: int = 30
+    agent_max_waiters: int = 2000
+    job_timeout_seconds: int = 7200
+    log_line_max_bytes: int = 4096
+    log_job_max_lines: int = 20_000
+    log_job_max_bytes: int = 5_000_000
+    artifact_max_bytes: int = 5_000_000
+    artifact_max_per_job: int = 20
+    artifact_upload_seconds: int = 120
+    artifact_view_seconds: int = 60
+
+    # Object storage for screenshots (ADR 0019). Dev and tests: the SeaweedFS of the compose, with
+    # static keys. Production: AWS S3 through the instance role, so no keys and no endpoint.
+    s3_endpoint_url: str = ""
+    # The address the agent and the browser reach the storage at, when it differs from the one the
+    # API uses (a container network, for instance). Empty = the same.
+    s3_public_endpoint_url: str = ""
+    s3_bucket: str = "regista-artifacts"
+    s3_region: str = "us-east-1"
+    s3_access_key_id: str = Field(default="", repr=False)
+    s3_secret_access_key: str = Field(default="", repr=False)
+
     # Peers allowed to set X-Forwarded-For (comma separated). Dev: the Next.js proxy.
     trusted_proxies: str = "127.0.0.1,::1"
 
@@ -78,7 +102,31 @@ class Settings(BaseSettings):
     def trusted_proxy_set(self) -> frozenset[str]:
         return frozenset(p.strip() for p in self.trusted_proxies.split(",") if p.strip())
 
+    def validate_storage(self) -> None:
+        """Production reaches S3 through an IAM role only: no static keys, no dev endpoint.
+
+        Run by the API and by the worker, so neither starts with a key that could leak.
+        """
+        if self.environment != "prod":
+            return
+        if self.s3_access_key_id or self.s3_secret_access_key:
+            raise ConfigurationError(
+                "REGISTA_S3_ACCESS_KEY_ID / REGISTA_S3_SECRET_ACCESS_KEY are for dev and tests "
+                "only. In production the storage is reached with an IAM role."
+            )
+        for url in (self.s3_endpoint_url, self.s3_public_endpoint_url):
+            if not url:
+                continue
+            parsed = urlparse(url)
+            host = (parsed.hostname or "").lower()
+            if parsed.scheme != "https" or host in ("localhost", "::1") or host.startswith("127."):
+                raise ConfigurationError(
+                    f"REGISTA_S3_ENDPOINT_URL={url} is the dev storage. In production leave it "
+                    "empty (AWS S3) or use an https address that is not local."
+                )
+
     def validate_for_runtime(self) -> None:
+        self.validate_storage()
         if not self.master_key:
             raise ConfigurationError(
                 "REGISTA_MASTER_KEY is not set. Generate one with: "

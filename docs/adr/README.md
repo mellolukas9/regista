@@ -22,6 +22,8 @@ Cada arquivo registra uma decisão: contexto, decisão, consequências e alterna
 | [0016](0016-tarefas-internas-procrastinate.md) | Tarefas internas com Procrastinate |
 | [0017](0017-ajustes-na-autenticacao.md) | Ajustes na autenticação (MFA para todos, convite como recuperação, tenant interno) |
 | [0018](0018-identidade-de-maquina-buscas-antes-do-tenant.md) | Identidade de máquina: buscas antes do tenant, token assinado e tarefas entre clientes |
+| [0019](0019-s3-local-seaweedfs.md) | S3 local de desenvolvimento com SeaweedFS |
+| [0020](0020-distribuicao-de-jobs-listen-notify.md) | Distribuição de jobs: canal único, escuta dedicada e partições de logs |
 
 ## Modelo
 

@@ -175,3 +175,36 @@ def test_prod_refuses_console_and_memory_email(db_urls: DbUrls) -> None:
         settings: Settings = make_settings(db_urls, environment="prod", email_backend=backend)
         with pytest.raises(ConfigurationError, match="dev and tests only"):
             create_app(settings)
+
+
+def test_prod_refuses_static_s3_keys_and_the_dev_endpoint(db_urls: DbUrls) -> None:
+    from regista_api.tasks import worker  # noqa: F401  (the worker runs the same check)
+
+    bad = [
+        {"s3_access_key_id": "AKIA-x"},
+        {"s3_secret_access_key": "secret"},
+        {"s3_endpoint_url": "http://127.0.0.1:8333"},
+        {"s3_endpoint_url": "http://localhost:8333"},
+        {"s3_public_endpoint_url": "http://127.0.0.1:8333"},
+        {"s3_endpoint_url": "http://s3.example.com"},
+    ]
+    for overrides in bad:
+        settings = make_settings(db_urls, environment="prod", **overrides)
+        with pytest.raises(ConfigurationError, match="S3"):
+            settings.validate_storage()
+        with pytest.raises(ConfigurationError, match="S3"):
+            create_app(settings)  # the API refuses to start before anything else is checked
+
+
+def test_prod_accepts_the_iam_role_setup_and_dev_keeps_its_keys(db_urls: DbUrls) -> None:
+    make_settings(db_urls, environment="prod").validate_storage()
+    make_settings(
+        db_urls, environment="prod", s3_endpoint_url="https://s3.sa-east-1.amazonaws.com"
+    ).validate_storage()
+    make_settings(
+        db_urls,
+        environment="dev",
+        s3_endpoint_url="http://127.0.0.1:8333",
+        s3_access_key_id="regista-dev-access",
+        s3_secret_access_key="x",
+    ).validate_storage()

@@ -30,6 +30,7 @@ async def run(settings: Settings) -> None:
 
 def main() -> None:
     settings = get_settings()
+    settings.validate_storage()
     configure_logging(settings.log_level, json=settings.environment == "prod")
     # psycopg's async mode does not work on Windows' default (Proactor) event loop.
     asyncio.run(run(settings), loop_factory=asyncio.SelectorEventLoop)

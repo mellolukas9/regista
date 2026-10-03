@@ -235,3 +235,53 @@ async def internal_tenant(app_factory: async_sessionmaker[AsyncSession], seed: S
             )
         )
         return result.scalar_one()
+
+
+# --- S3 (SeaweedFS, ADR 0019) ------------------------------------------------------------------
+
+S3_CONFIG = REPO_ROOT / "infra" / "compose" / "seaweedfs" / "s3.json"
+S3_IMAGE = "chrislusf/seaweedfs:4.48"
+S3_ACCESS_KEY = "regista-dev-access"
+S3_SECRET_KEY = "regista-dev-secret-not-for-production"
+
+
+@dataclass(frozen=True)
+class S3Env:
+    endpoint_url: str
+    access_key_id: str = S3_ACCESS_KEY
+    secret_access_key: str = S3_SECRET_KEY
+    region: str = "us-east-1"
+
+
+@pytest.fixture(scope="session")
+def s3_env() -> Iterator[S3Env]:
+    """A throwaway SeaweedFS with the same identity file as the dev compose."""
+    import time
+
+    import httpx as _httpx
+    from testcontainers.core.container import DockerContainer
+
+    container = (
+        DockerContainer(S3_IMAGE)
+        .with_command("server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json")
+        .with_volume_mapping(str(S3_CONFIG), "/etc/seaweedfs/s3.json", "ro")
+        .with_exposed_ports(8333)
+    )
+    with container:
+        deadline = time.monotonic() + 60
+        endpoint = ""
+        while True:
+            try:
+                # Docker Desktop publishes the port a moment after the container starts.
+                if not endpoint:
+                    host = container.get_container_host_ip()
+                    endpoint = f"http://{host}:{container.get_exposed_port(8333)}"
+                # Without credentials the S3 port answers 403 once it is up.
+                if _httpx.get(endpoint, timeout=2).status_code in (200, 403):
+                    break
+            except (_httpx.HTTPError, ConnectionError):
+                pass
+            if time.monotonic() > deadline:
+                raise RuntimeError("SeaweedFS did not start in 60 s")
+            time.sleep(0.5)
+        yield S3Env(endpoint_url=endpoint)

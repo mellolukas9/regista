@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "regista-dev",
+      "credentials": [
+        { "accessKey": "regista-dev-access", "secretKey": "regista-dev-secret-not-for-production" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
