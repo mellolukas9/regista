@@ -125,3 +125,18 @@ class AgentSim:
         return await self.client.post(
             "/agent/logs", json={"job_id": job_id, "lines": lines}, headers=self._auth()
         )
+
+    async def presign(self, job_id: str, **overrides: Any) -> httpx.Response:
+        body = {
+            "job_id": job_id,
+            "kind": "screenshot",
+            "content_type": "image/png",
+            "size_bytes": 64,
+            **overrides,
+        }
+        return await self.client.post("/agent/artifacts/presign", json=body, headers=self._auth())
+
+    async def uploaded(self, artifact_id: str) -> httpx.Response:
+        return await self.client.post(
+            f"/agent/artifacts/{artifact_id}/uploaded", json={}, headers=self._auth()
+        )

@@ -139,6 +139,17 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     },
                 )
             ).scalar_one()
+            artifact_key = f"tenants/{seed.tenant_a}/jobs/{job_id}/{uuid.uuid4()}.png"
+            artifact_id: uuid.UUID = (
+                await db.execute(
+                    text(
+                        "INSERT INTO artifacts (tenant_id, job_id, storage_key, content_type,"
+                        " size_bytes, uploaded_at) VALUES (:t, :j, :k, 'image/png', 10, now())"
+                        " RETURNING id"
+                    ),
+                    {"t": seed.tenant_a, "j": job_id, "k": artifact_key},
+                )
+            ).scalar_one()
         try:
             yield World(
                 env=env,
@@ -153,8 +164,7 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     "pool_id": a_machines.pool_id,
                     "bot_id": str(bot_id),
                     "job_id": str(job_id),
-                    # Filled in by the step that adds the screenshot routes.
-                    "artifact_id": str(uuid.uuid4()),
+                    "artifact_id": str(artifact_id),
                 },
                 a_markers=[
                     str(seed.tenant_a),
@@ -167,6 +177,8 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     bot_name,
                     str(job_id),
                     job_code,
+                    str(artifact_id),
+                    artifact_key,
                     "param-secreto-de-a",
                     *a_machines.markers,
                 ],

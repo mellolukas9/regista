@@ -226,9 +226,23 @@ async def env(db_urls: DbUrls, seed: Seed) -> AsyncIterator[Env]:
 
 
 @pytest_asyncio.fixture
-async def panel(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> AsyncIterator[Panel]:
-    """Browsers of client A (admin, operator, viewer), of client B (admin) and of the staff."""
-    async with open_env(db_urls) as env:
+async def panel(
+    request: pytest.FixtureRequest, db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID
+) -> AsyncIterator[Panel]:
+    """Browsers of client A (admin, operator, viewer), of client B (admin) and of the staff.
+
+    A test (or module) marked `s3` also gets a running SeaweedFS and an app configured for it."""
+    overrides: dict[str, object] = {}
+    if request.node.get_closest_marker("s3") is not None:
+        s3: S3Env = request.getfixturevalue("s3_env")
+        overrides = {
+            "s3_endpoint_url": s3.endpoint_url,
+            "s3_access_key_id": s3.access_key_id,
+            "s3_secret_access_key": s3.secret_access_key,
+            "s3_region": s3.region,
+            "s3_bucket": f"test-{uuid.uuid4().hex[:12]}",
+        }
+    async with open_env(db_urls, **overrides) as env:
         plan = (
             ("admin_a", seed.tenant_a, "tenant_admin", False),
             ("operator_a", seed.tenant_a, "operator", False),

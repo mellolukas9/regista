@@ -65,6 +65,7 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 markers = [
     "e2e: starts the real API, worker and agent as separate processes (slower)",
+    "s3: needs a running SeaweedFS (Testcontainers); the panel fixture configures the app for it",
 ]
 filterwarnings = [
     # The suite overrides `event_loop_policy` (psycopg needs the selector loop on Windows). The
