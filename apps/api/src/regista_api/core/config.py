@@ -56,6 +56,12 @@ class Settings(BaseSettings):
     # "audience"), so a signature made for another environment is worthless here.
     api_public_url: str = "http://127.0.0.1:8000"
     heartbeat_seconds: int = 30
+    # "Sem sinal" (docs/STATUS.md): an online machine silent for this long becomes offline. The
+    # sweep that does it runs on this cron (6 fields, the last one is the second).
+    machine_offline_after_seconds: int = 120
+    machine_sweep_cron: str = "* * * * * */30"
+    # Windows of the rate limit table older than this are purged (hourly).
+    rate_limit_retention_seconds: int = 86_400
     # Rate limits of the agent routes (fixed windows in PostgreSQL, ADR 0003).
     rate_agent_enroll_ip_per_minute: int = 20
     rate_agent_auth_ip_per_minute: int = 120

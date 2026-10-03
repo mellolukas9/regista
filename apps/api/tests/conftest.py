@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
@@ -45,6 +46,15 @@ class DbUrls:
 
 
 TEST_MASTER_KEY = LocalKeyProvider.generate_key()
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
+    """psycopg (the job queue's driver) cannot run on Windows' default Proactor loop; asyncpg
+    works on both, so the whole suite uses the selector loop there."""
+    if sys.platform == "win32":
+        return asyncio.WindowsSelectorEventLoopPolicy()
+    return asyncio.DefaultEventLoopPolicy()
 
 
 def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:

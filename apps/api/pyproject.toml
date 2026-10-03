@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 regista-admin = "regista_api.cli:main"
+regista-worker = "regista_api.tasks.worker:main"
 
 [build-system]
 requires = ["hatchling"]
