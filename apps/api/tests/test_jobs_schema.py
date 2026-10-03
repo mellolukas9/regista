@@ -91,7 +91,7 @@ async def _world(factory: Factory, tenant_id: uuid.UUID) -> dict[str, uuid.UUID]
         bot = await _bot(s, tenant_id, pool)
         job = await _job(s, tenant_id, bot, pool)
         await _log(s, tenant_id, job, 1)
-        artifact = (
+        artifact: uuid.UUID = (
             await s.execute(
                 text(
                     "INSERT INTO artifacts (tenant_id, job_id, storage_key, content_type,"
@@ -115,18 +115,18 @@ async def test_each_tenant_sees_only_its_own_rows(app_factory: Factory, seed: Se
     await _world(app_factory, seed.tenant_b)
     for table in TABLES:
         async with tenant_session(app_factory, tenant_id=seed.tenant_a) as s:
-            foreign = (
+            foreign: int = (
                 await s.execute(
                     text(f"SELECT count(*) FROM {table} WHERE tenant_id <> :t"),  # noqa: S608
                     {"t": seed.tenant_a},
                 )
             ).scalar_one()
-            own = (await s.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one()  # noqa: S608
+            own: int = (await s.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one()  # noqa: S608
         assert foreign == 0, table
         assert own > 0, table
     async with tenant_session(app_factory) as s:
         for table in TABLES:
-            count = (await s.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one()  # noqa: S608
+            count: int = (await s.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one()  # noqa: S608
             assert count == 0, f"{table} visible without a tenant"
 
 
@@ -141,7 +141,7 @@ async def test_a_platform_admin_reads_everything_but_writes_nothing_elsewhere(
         updated = await s.execute(
             text("UPDATE jobs SET error_message = 'x' WHERE id = :j"), {"j": w["job"]}
         )
-        assert updated.rowcount == 0
+        assert getattr(updated, "rowcount", None) == 0
         with pytest.raises(DBAPIError):
             await _job(s, seed.tenant_b, w["bot"], w["pool"])
 
@@ -317,7 +317,7 @@ async def test_resending_a_log_line_does_not_duplicate_it(app_factory: Factory, 
                 ),
                 {"t": seed.tenant_a, "j": w["job"], "ts": ts},
             )
-        count = (
+        count: int = (
             await s.execute(
                 text("SELECT count(*) FROM job_logs WHERE job_id = :j AND seq = 77"),
                 {"j": w["job"]},
@@ -341,7 +341,7 @@ async def test_partition_function_is_idempotent_and_creates_isolated_partitions(
 ) -> None:
     async with tenant_session(app_factory) as s:
         await s.execute(text("SELECT app.ensure_job_log_partitions(4)"))
-        again = (await s.execute(text("SELECT app.ensure_job_log_partitions(4)"))).scalar_one()
+        again: int = (await s.execute(text("SELECT app.ensure_job_log_partitions(4)"))).scalar_one()
         status = (await s.execute(text("SELECT * FROM app.job_logs_partition_status()"))).one()
     assert again == 0
     assert status.current_month and status.next_month

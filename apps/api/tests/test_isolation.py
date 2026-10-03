@@ -263,16 +263,18 @@ async def _snapshot(owner_factory: Factory, tenant_id: uuid.UUID) -> dict[str, l
             r[0]
             for r in await db.execute(
                 text(
-                    "SELECT table_name FROM information_schema.columns"
-                    " WHERE table_schema = 'public' AND column_name = 'tenant_id'"
-                    " ORDER BY table_name"
+                    "SELECT c.table_name FROM information_schema.columns c"
+                    " JOIN pg_class k ON k.oid = format('public.%I', c.table_name)::regclass"
+                    " WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id'"
+                    # Partitions are read through their parent: listing both would count twice.
+                    " AND NOT k.relispartition ORDER BY c.table_name"
                 )
             )
         ]
         result: dict[str, list[str]] = {}
         for table in tables:
             rows = await db.execute(
-                text(f"SELECT row_to_json(x)::text FROM {table} x ORDER BY id")  # noqa: S608
+                text(f"SELECT row_to_json(x)::text FROM {table} x ORDER BY 1")  # noqa: S608
             )
             result[table] = [r[0] for r in rows]
         tenant_row = await db.execute(

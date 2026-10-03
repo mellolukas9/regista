@@ -54,7 +54,7 @@ exclude = ["migrations/versions/"]
 
 [[tool.mypy.overrides]]
 # boto3 ships no types; the S3 calls are wrapped in `regista_api.storage`.
-module = ["boto3", "boto3.*", "botocore", "botocore.*"]
+module = ["boto3", "boto3.*", "botocore", "botocore.*", "asyncpg", "asyncpg.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
