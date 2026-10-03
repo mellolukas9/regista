@@ -13,18 +13,20 @@ class Permission(enum.StrEnum):
     USERS_MANAGE = "users.manage"  # list, invite, change role, end sessions, remove, re-invite
     MACHINES_VIEW = "machines.view"  # pools, machines, history: everything of the own client
     MACHINES_MANAGE = "machines.manage"  # register machine, new pool, new key, revoke
+    BOTS_VIEW = "bots.view"
+    BOTS_MANAGE = "bots.manage"  # register a bot (Artemisys only)
 
 
 PLATFORM_ONLY: frozenset[Permission] = frozenset(
-    {Permission.CLIENTS_VIEW_ALL, Permission.CLIENTS_CREATE}
+    {Permission.CLIENTS_VIEW_ALL, Permission.CLIENTS_CREATE, Permission.BOTS_MANAGE}
 )
 
+_READ = frozenset({Permission.MACHINES_VIEW, Permission.BOTS_VIEW})
+
 ROLE_PERMISSIONS: dict[str, frozenset[Permission]] = {
-    "tenant_admin": frozenset(
-        {Permission.USERS_MANAGE, Permission.MACHINES_VIEW, Permission.MACHINES_MANAGE}
-    ),
-    "operator": frozenset({Permission.MACHINES_VIEW}),
-    "viewer": frozenset({Permission.MACHINES_VIEW}),
+    "tenant_admin": _READ | frozenset({Permission.USERS_MANAGE, Permission.MACHINES_MANAGE}),
+    "operator": _READ,
+    "viewer": _READ,
 }
 
 

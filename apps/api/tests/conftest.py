@@ -24,7 +24,7 @@ from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.rls import tenant_rls_statements
 from regista_api.main import create_app
 
-from .helpers import Env, FakeClock
+from .helpers import Env, FakeClock, Panel, new_client, onboard, unique_email
 
 # The Ryuk reaper container races with Docker Desktop port publishing on Windows. The
 # container below is stopped by its context manager instead.
@@ -222,6 +222,36 @@ async def open_env(db_urls: DbUrls, **overrides: object) -> AsyncIterator[Env]:
 async def env(db_urls: DbUrls, seed: Seed) -> AsyncIterator[Env]:
     async with open_env(db_urls) as e:
         yield e
+
+
+@pytest_asyncio.fixture
+async def panel(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> AsyncIterator[Panel]:
+    """Browsers of client A (admin, operator, viewer), of client B (admin) and of the staff."""
+    async with open_env(db_urls) as env:
+        plan = (
+            ("admin_a", seed.tenant_a, "tenant_admin", False),
+            ("operator_a", seed.tenant_a, "operator", False),
+            ("viewer_a", seed.tenant_a, "viewer", False),
+            ("admin_b", seed.tenant_b, "tenant_admin", False),
+            ("staff", internal_tenant, "tenant_admin", True),
+        )
+        clients: dict[str, httpx.AsyncClient] = {}
+        for name, tenant, role, platform in plan:
+            clients[name] = new_client(env.app)
+            await onboard(
+                env.app,
+                clients[name],
+                tenant,
+                env.clock,
+                role=role,
+                email=unique_email(name.replace("_", "-")),
+                platform_admin=platform,
+            )
+        try:
+            yield Panel(env=env, tenant_a=seed.tenant_a, tenant_b=seed.tenant_b, **clients)
+        finally:
+            for client in clients.values():
+                await client.aclose()
 
 
 @pytest_asyncio.fixture(scope="session")

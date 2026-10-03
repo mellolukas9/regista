@@ -144,3 +144,25 @@ class Env:
         sender = self.app.state.email_sender
         assert isinstance(sender, MemoryEmailSender)
         return sender
+
+
+@dataclass
+class Panel:
+    """Logged-in browsers of two clients and of the Artemisys team, for the panel API tests."""
+
+    env: Env
+    tenant_a: uuid.UUID
+    tenant_b: uuid.UUID
+    admin_a: httpx.AsyncClient
+    operator_a: httpx.AsyncClient
+    viewer_a: httpx.AsyncClient
+    admin_b: httpx.AsyncClient
+    staff: httpx.AsyncClient  # Artemisys team; starts in "all clients"
+
+    async def staff_in(self, tenant_id: uuid.UUID) -> httpx.AsyncClient:
+        """The staff browser, now working inside one client."""
+        r = await self.staff.put(
+            "/auth/context", json={"client_id": str(tenant_id)}, headers=csrf(self.staff)
+        )
+        assert r.status_code == 200, r.text
+        return self.staff

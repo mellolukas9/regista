@@ -13,6 +13,7 @@ from sqlalchemy import text
 from regista_api.auth.account import router as account_router
 from regista_api.auth.deps import PublicRoute
 from regista_api.auth.router import router as auth_router
+from regista_api.bots.router import router as bots_router
 from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
 from regista_api.core.email import EmailSender, create_email_sender
@@ -94,6 +95,7 @@ def create_app(
     app.include_router(clients_router)
     app.include_router(users_router)
     app.include_router(machines_router)
+    app.include_router(bots_router)
     app.include_router(agent_router)
 
     @app.exception_handler(RequestValidationError)

@@ -36,7 +36,15 @@ from .test_machine_token import _rebuild
 Factory = async_sessionmaker[AsyncSession]
 
 # Path parameters that name a resource owned by a client, and where to find an A example.
-RESOURCE_PARAMS = {"user_id", "session_id", "machine_id", "pool_id"}
+RESOURCE_PARAMS = {
+    "user_id",
+    "session_id",
+    "machine_id",
+    "pool_id",
+    "bot_id",
+    "job_id",
+    "artifact_id",
+}
 
 
 @dataclass
@@ -100,6 +108,21 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     {"u": a_admin.user_id},
                 )
             ).scalar_one()
+            bot_name = f"bot-secreto-{uuid.uuid4().hex[:8]}"
+            bot_id: uuid.UUID = (
+                await db.execute(
+                    text(
+                        "INSERT INTO bots (tenant_id, pool_id, name, package_name)"
+                        " VALUES (:t, :p, :n, :k) RETURNING id"
+                    ),
+                    {
+                        "t": seed.tenant_a,
+                        "p": a_machines.pool_id,
+                        "n": bot_name,
+                        "k": f"pacote_secreto_{uuid.uuid4().hex[:8]}",
+                    },
+                )
+            ).scalar_one()
         try:
             yield World(
                 env=env,
@@ -112,6 +135,10 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     "session_id": str(session_id),
                     "machine_id": a_machines.pending_id,
                     "pool_id": a_machines.pool_id,
+                    "bot_id": str(bot_id),
+                    # Filled in by the steps that add the job and artifact routes.
+                    "job_id": str(uuid.uuid4()),
+                    "artifact_id": str(uuid.uuid4()),
                 },
                 a_markers=[
                     str(seed.tenant_a),
@@ -120,6 +147,8 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     a_target.email,
                     str(target_id),
                     str(session_id),
+                    str(bot_id),
+                    bot_name,
                     *a_machines.markers,
                 ],
                 a_used_key=a_machines.used_key,

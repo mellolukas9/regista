@@ -272,6 +272,25 @@ async def test_seed_dev_builds_the_sample_data(empty_db_urls: DbUrls) -> None:
             by_name["Artemisys (demonstração)"].month,
         ) == (2026, 7)
 
+        async with tenant_session(factory, platform_admin=True) as db:
+            seeded_bots = (
+                await db.execute(
+                    text(
+                        "SELECT b.name, b.package_name, p.name AS pool, t.name AS client"
+                        " FROM bots b JOIN pools p ON p.id = b.pool_id"
+                        " JOIN tenants t ON t.id = b.tenant_id"
+                    )
+                )
+            ).all()
+        assert [tuple(r) for r in seeded_bots] == [
+            (
+                "Busca no Google",
+                "demo_busca_google",
+                "Artemisys – Demonstração",  # noqa: RUF001  (the design-system sample name)
+                "Artemisys (demonstração)",
+            )
+        ]
+
         emails = {u.email for u in result.users}
         assert emails == {
             "equipe@artemisys.example.com",
