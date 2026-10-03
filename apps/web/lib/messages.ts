@@ -26,6 +26,13 @@ const MESSAGES: Record<string, string> = {
   client_context_required:
     "Escolha um cliente na barra lateral para fazer esta alteração.",
   client_not_found: "Esse cliente não está disponível.",
+  machine_name_taken: "Já existe uma máquina com esse nome neste cliente.",
+  pool_name_taken: "Já existe um pool com esse nome.",
+  invalid_name: "Escreva um nome para o pool.",
+  name_mismatch: "O nome não confere.",
+  machine_not_found: "Essa máquina não foi encontrada. Atualize a lista e tente de novo.",
+  pool_not_found: "Esse pool não foi encontrado. Atualize a lista e tente de novo.",
+  machine_revoked: "Esta máquina foi revogada. Cadastre a máquina outra vez para usá-la.",
   forbidden: "Você não tem permissão para fazer isso.",
   validation: "Confira os campos e tente de novo.",
   [NETWORK_ERROR_CODE]:

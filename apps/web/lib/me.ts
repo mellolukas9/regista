@@ -87,3 +87,8 @@ export function roleLabel(me: Pick<Me, "role" | "is_platform_admin">): string {
 export function canManageUsers(me: Pick<Me, "role" | "is_platform_admin">): boolean {
   return me.is_platform_admin || me.role === "tenant_admin";
 }
+
+/** Cadastrar máquina, novo pool, nova chave e revogar (design-system.md §4). */
+export function canManageMachines(me: Pick<Me, "role" | "is_platform_admin">): boolean {
+  return me.is_platform_admin || me.role === "tenant_admin";
+}

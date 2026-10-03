@@ -1115,3 +1115,48 @@ Telas e estados que o M1 precisa e que as seções 7 e 9 não trazem. Mesma regr
 - "Seu acesso ao Regista": convite com o link e a validade de 7 dias.
 - "Novo convite para o Regista": o link anterior deixa de valer.
 - "Sua senha do Regista foi alterada": "Se não foi você, fale com o administrador do seu escritório."
+
+---
+
+## 13. Textos complementares do M2
+
+Telas e estados de Máquinas e pools (7.13 e 7.14) que as seções 7 e 9 não trazem. Mesma regra: usar exatamente estes textos. Os marcados com (proposto) foram escritos durante o M2 e ainda esperam confirmação.
+
+**Banner de máquina sem sinal (7.14)**
+- Título "O agente parou de responder".
+- Sem outra máquina online no pool: "Enquanto isso, as execuções do pool ficam pendentes. Confira se o computador está ligado, com internet, e se o usuário do Windows continua logado (modo Sessão)."
+- Com outra máquina online no pool: "Enquanto isso, as execuções do pool vão para a <nome>. Confira se o computador está ligado, com internet, e se o usuário do Windows continua logado (modo Sessão)."
+
+**Gerar nova chave (7.14)**
+- AlertDialog "Gerar nova chave para <nome>?" / "Quando a nova chave for usada, o agente instalado hoje nessa máquina para de funcionar. Se ela não for usada em 24 h, nada muda." / "Voltar" + "Gerar nova chave". Em máquina `pending`, vai direto para o KeyReveal.
+- Toast "Nova chave gerada".
+
+**Último sinal (7.13)**
+- Online: "há 8s". Sem sinal: "hoje 08:20 · há 2 h" (ou "ontem 08:20" / "dd/MM HH:mm").
+- Aguardando cadastro: "Chave gerada há 10 min, ainda não usada"; com a chave vencida, "Chave expirada, gere uma nova".
+
+**KeyReveal** (proposto)
+- Texto abaixo do título: "Use esta chave no computador para cadastrar o agente. Ela vale uma vez, até <data e hora>."
+- Aviso âmbar: "Esta é a única vez que a chave aparece. Se você fechar sem copiar, será preciso gerar uma nova."
+
+**Máquinas e pools** (proposto, salvo indicação)
+- Pool sem máquinas: "Nenhuma máquina neste pool ainda."
+- Em "Todos os clientes": "Todos os clientes. Escolha um cliente no topo da barra lateral para cadastrar máquinas ou criar pools."
+- Revogadas: "Mostrar revogadas (N)" / "Ocultar revogadas".
+- Cadastrar máquina sem pools: ajuda do campo Pool "Crie um pool antes de cadastrar a máquina."
+- Banner por máquina na lista: "<nome> está sem sinal há <tempo>" (do 7.13).
+
+**Erros de formulário**
+- "Já existe uma máquina com esse nome neste cliente."
+- "Já existe um pool com esse nome."
+- "Use letras minúsculas, números e hífen. Ex.: estacao-atendimento-03" (nome da máquina: `[a-z0-9][a-z0-9-]{0,62}`).
+- "O nome não confere." (confirmação de revogar)
+- "Escreva um nome para o pool." (proposto)
+
+**Toasts**
+- "Pool criado", "Máquina revogada", "Nova chave gerada".
+
+**Erro de carregamento**
+- "Não foi possível carregar a máquina" (7.14), com "O servidor não respondeu. Tente de novo em alguns segundos." e "Tentar de novo".
+
+**Fica para o M3** (dependem de `bots` e `jobs`): coluna "Agora", linha "Roda: …" (e "Nenhum bot usa este pool ainda"), aba Execuções e "A execução em andamento será cancelada." no AlertDialog de revogar.

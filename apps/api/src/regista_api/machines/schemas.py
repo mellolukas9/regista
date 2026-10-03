@@ -101,6 +101,7 @@ class MachineItem(BaseModel):
     # The live (unused, not revoked) enrollment key, if any. The key itself is never returned
     # after creation; the panel uses this to say "Chave expirada, gere uma nova".
     key_expires_at: datetime | None
+    key_created_at: datetime | None
     created_at: datetime
 
 

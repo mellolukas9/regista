@@ -56,14 +56,14 @@ _FROM = (
     "FROM machines m"
     " JOIN pools p ON p.tenant_id = m.tenant_id AND p.id = m.pool_id"
     " JOIN tenants t ON t.id = m.tenant_id"
-    " LEFT JOIN LATERAL (SELECT k.expires_at FROM enrollment_keys k"
+    " LEFT JOIN LATERAL (SELECT k.expires_at, k.created_at FROM enrollment_keys k"
     "   WHERE k.machine_id = m.id AND k.used_at IS NULL AND k.revoked_at IS NULL"
     "   LIMIT 1) live ON true"
 )
 _ITEM_COLUMNS = (
     "m.id, m.name, m.status, m.mode, m.pool_id, p.name AS pool_name, m.tenant_id,"
     " t.name AS client_name, m.last_seen_at, m.agent_version, m.created_at,"
-    " live.expires_at AS key_expires_at"
+    " live.expires_at AS key_expires_at, live.created_at AS key_created_at"
 )
 # Staff (internal tenant) are not visible under a client's RLS, so a machine they registered is
 # shown as theirs whichever way the row is read.
@@ -442,6 +442,7 @@ def _machine_item(r: Row[Any]) -> MachineItem:
         last_seen_at=r.last_seen_at,
         agent_version=r.agent_version,
         key_expires_at=r.key_expires_at,
+        key_created_at=r.key_created_at,
         created_at=r.created_at,
     )
 

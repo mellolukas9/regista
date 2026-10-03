@@ -203,6 +203,7 @@ async def test_a_machine_starts_pending_with_a_key_that_is_stored_only_as_a_hash
 
     detail = (await b.admin_a.get(f"/machines/{created['machine_id']}")).json()
     assert detail["status"] == "pending" and detail["key_expires_at"] is not None
+    assert detail["key_created_at"] is not None
     assert "enrollment_key" not in detail and "rgk_" not in str(detail)
     listed = await b.admin_a.get("/machines")
     assert "rgk_" not in listed.text and "enrollment_key" not in listed.text
