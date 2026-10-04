@@ -273,7 +273,7 @@ function Screenshot({ shot, failed }: Readonly<{ shot: Artifact; failed: boolean
       <p className="text-caption text-text-label">
         {failed
           ? "Captura feita pelo robô quando o erro aconteceu. Ela fica guardada pelo prazo de retenção da fila."
-          : "Captura feita pelo robô durante a execução. Ela fica guardada pelo prazo de retenção da fila."}
+          : "Captura feita pelo robô durante a execução."}
       </p>
     </figure>
   );

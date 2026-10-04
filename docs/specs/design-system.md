@@ -518,7 +518,7 @@ Convenções desta seção:
 
 **Versão de cliente**
 - Cabeçalho: título "Dashboard", texto "Como estão as automações do Escritório Exemplo agora." e ação primária "Executar agora", que leva a Bots.
-- Banner danger quando há máquina sem sinal: "estacao-atendimento-02 está sem sinal desde 08:20" / "As execuções seguem pela estacao-atendimento-01, uma de cada vez. Verifique se o computador está ligado e conectado à internet." + "Ver máquina".
+- Banner danger quando há máquina sem sinal: "estacao-atendimento-02 está sem sinal desde 08:20" / o texto da §13 (o mesmo do 7.14, com a máquina que assume o pool e a frase do modo Sessão) + "Ver máquina".
 - KPIs: "Execuções · 7 dias", "Itens processados · 7 dias", "Taxa de sucesso dos itens", "Máquinas online" ("1 de 2 · 1 sem sinal").
 - Gráfico "Itens processados por dia · 14 dias" com Sucesso / "Falhou ou abandonado".
 - Card "Máquinas": nome, situação ("Executando exec-7f3a24" / "Último sinal hoje 08:20") e pill.
@@ -735,7 +735,7 @@ No erro, a topbar mostra "Sem conexão · tentando de novo".
 ### 7.13 Máquinas e pools — `/machines`
 
 - Cabeçalho: título "Máquinas e pools", texto "Computadores onde os robôs rodam, com o agente instalado. Um pool reúne máquinas que podem rodar os mesmos robôs." e ações "Novo pool" (secondary) e "Cadastrar máquina" (primary).
-- Banner danger por máquina sem sinal: "estacao-atendimento-02 está sem sinal há 2 h" / "Verifique se o computador está ligado, conectado à internet e se o serviço do agente está rodando." + "Ver máquina".
+- Banner danger por máquina sem sinal: "estacao-atendimento-02 está sem sinal há 2 h" / o texto da §13 (o mesmo do 7.14) + "Ver máquina".
 - Um card por pool:
   - título, linha "Roda: Controle de Acordos" (ou "Nenhum bot usa este pool ainda"), contagem "1 de 2 online";
   - tabela Máquina, Status, Último sinal ("há 8s" / "hoje 08:20 · há 2 h" / "Chave gerada há 10 min, ainda não usada"), Agente, Modo ("Serviço"/"Sessão"), Agora ("Executando exec-7f3a24") e "Abrir →".
@@ -1190,7 +1190,7 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 | Bots | Subtítulo do bot na lista (no lugar de "fila · versão") | `pacote demo_busca_wikipedia` |
 | Bots | Última execução, bot que nunca rodou | "Nunca rodou" |
 | Bots | Busca sem resultado | "Nenhum bot com essa busca" / "Confira o nome ou limpe a busca." / "Limpar filtros" |
-| Bots | Botão com a execução sendo criada | "Executando…" |
+| Bots | Botão com a execução sendo criada | "Criando execução…" |
 | Dialog "Cadastrar bot" | Título e texto | "Cadastrar bot" / "O bot roda nas máquinas do pool escolhido. A versão assinada é publicada depois." |
 | Dialog "Cadastrar bot" | Campos | "Nome do bot" (exemplo "Busca na Wikipédia"); "Nome do pacote" (ajuda "É o nome da pasta do robô. Não muda depois de cadastrado."); "Pool" (sem pools: "Crie um pool antes de cadastrar o bot."); "Descrição (opcional)" |
 | Dialog "Cadastrar bot" | Botões | "Voltar" e "Cadastrar bot" (carregando: "Cadastrando…") |
@@ -1209,7 +1209,7 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 | Tela | Elemento | Texto |
 |---|---|---|
 | Execuções | Contagem | "1 execução" / "N execuções" |
-| Execuções | Coluna Itens (até o M5) | "0 · 0" |
+| Execuções | Coluna Itens (até o M5) | "—" (com itens: "37 · 3") |
 | Execuções | Gatilho de quem é da equipe Artemisys | "Manual" + "Equipe Artemisys" |
 | Execuções | Vazio com filtro | "Nenhuma execução com esses filtros" / "Troque o período ou limpe os filtros." / "Limpar filtros" |
 | Sidebar | Contador de Execuções (`aria-label`) | "1 execução pendente" / "N execuções pendentes" |
@@ -1226,7 +1226,7 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 | Timeline | Etapa final | "Finalizada" · "Finalizada · Falhou" · "Finalizada · Cancelada" |
 | Timeline | Notas das etapas | "há 2 h · nenhuma máquina livre" · "há 12 min · esperando a vez" (a partir de 10 min na fila) · "esperando o robô iniciar" (atribuída) · "cancelamento pedido" (rodando) |
 | Detalhe da execução | Aba de captura | "Captura de tela" (execução sem falha) ou "Captura de erro" (falhou), com a contagem |
-| Detalhe da execução | Captura de execução sem falha | Título "Captura de tela"; legenda "Captura feita pelo robô durante a execução. Ela fica guardada pelo prazo de retenção da fila." (com falha valem os textos do 7.4) |
+| Detalhe da execução | Captura de execução sem falha | Título "Captura de tela"; legenda "Captura feita pelo robô durante a execução." (a menção ao prazo de retenção da fila volta no M5; com falha valem os textos do 7.4) |
 | LogViewer | Copiar | "Copiar logs" vira "Copiados" por 3 s |
 | LogViewer | Execução ativa sem "ao vivo" | "Atualizando a cada 15 s." |
 | LogViewer | Execução que terminou sem linhas | "Esta execução não gerou logs." |
@@ -1236,7 +1236,7 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 
 | Tela | Elemento | Texto |
 |---|---|---|
-| Dashboard do cliente | Banner de máquina sem sinal, sem outra máquina online no pool | "<nome> está sem sinal desde 08:20" / "Até o agente voltar, as execuções do pool ficam pendentes. Verifique se o computador está ligado e conectado à internet." (com outra máquina online vale o texto do 7.2) |
+| Dashboard do cliente | Banner de máquina sem sinal | Título "<nome> está sem sinal desde 08:20"; o texto é o da §13, igual ao do 7.14 e ao da lista de máquinas |
 | Dashboard do cliente | KPI "Máquinas online" | contexto "0 de 1 · 1 sem sinal" |
 | Dashboard do cliente | Card "Máquinas" | "Ver máquinas →" · "Executando exec-7f3a24" · "Último sinal há 3 min" · "Ainda sem sinal" · sem máquinas: "Nenhuma máquina cadastrada ainda." |
 | Dashboard do cliente | Card "Parados" (só execuções pendentes até o M5) | "Nada parado agora." |

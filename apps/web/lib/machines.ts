@@ -146,6 +146,19 @@ export function lastSignal(machine: Machine, now: number = Date.now()): string {
   return `${dayAndTime(machine.last_seen_at, now)} · ${ago(machine.last_seen_at, now)}`;
 }
 
+/**
+ * Texto do banner de máquina sem sinal (design-system.md §13). O mesmo caso tem o mesmo texto em
+ * todas as telas: o que acontece com as execuções do pool, o que conferir e, no modo Sessão, o
+ * usuário do Windows.
+ */
+export function silenceText(mode: MachineMode, otherOnline: string | null | undefined): string {
+  const effect = otherOnline
+    ? `Até o agente voltar, as execuções do pool vão para a máquina ${otherOnline}. `
+    : "Até o agente voltar, as execuções do pool ficam pendentes. ";
+  const session = mode === "session" ? " Confira também se o usuário do Windows continua logado." : "";
+  return `${effect}Confira se o computador está ligado e com internet.${session}`;
+}
+
 /** Frase do cabeçalho do detalhe: "Último sinal hoje às 08:20, há 2 h". */
 export function lastSignalSentence(machine: Machine, now: number = Date.now()): string {
   if (machine.status === "pending") return lastSignal(machine, now);

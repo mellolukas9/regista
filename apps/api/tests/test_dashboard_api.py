@@ -83,6 +83,7 @@ async def test_machines_pending_runs_and_silent_machines(rig: Rig) -> None:
     assert by_id[other.machine_id]["status"] == "offline"
     silent = {s["id"]: s for s in data["silent"]}
     assert silent[other.machine_id]["other_online"] is not None, "another machine of the pool is up"
+    assert silent[other.machine_id]["mode"] == "service"
     assert waiting["id"] in {j["id"] for j in data["pending_runs"]}
     assert data["machines_no_signal"] >= 1
     assert any(a["kind"] == "machine_offline" for a in data["attention"])

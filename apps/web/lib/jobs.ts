@@ -120,10 +120,6 @@ export function errorText(code: string | null): string | null {
   return ERROR_TEXT[code] ?? "A execução terminou com erro.";
 }
 
-export function itemsLabel(job: Pick<Job, "items_successful" | "items_failed" | "items_abandoned">) {
-  return { ok: job.items_successful, bad: job.items_failed + job.items_abandoned };
-}
-
 /** Pendentes e ativas do contexto: alimenta o contador "Execuções" da sidebar e o Dashboard. */
 export function useJobsSummary() {
   return useQuery({

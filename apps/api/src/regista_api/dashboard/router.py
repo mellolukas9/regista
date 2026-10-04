@@ -71,6 +71,7 @@ class MachineRow(BaseModel):
 class Silent(BaseModel):
     id: str
     name: str
+    mode: str
     last_seen_at: datetime | None
     # Another machine of the same pool that is online and takes over, if any.
     other_online: str | None
@@ -332,7 +333,7 @@ async def _client_machines(db: Any) -> tuple[list[MachineRow], list[Silent]]:
     silent_rows = (
         await db.execute(
             text(
-                "SELECT m.id, m.name, m.last_seen_at,"
+                "SELECT m.id, m.name, m.mode, m.last_seen_at,"
                 " (SELECT o.name FROM machines o WHERE o.tenant_id = m.tenant_id"
                 "   AND o.pool_id = m.pool_id AND o.status = 'online'"
                 "   ORDER BY lower(o.name) LIMIT 1) AS other_online"
@@ -343,7 +344,13 @@ async def _client_machines(db: Any) -> tuple[list[MachineRow], list[Silent]]:
         )
     ).all()
     silent = [
-        Silent(id=str(r.id), name=r.name, last_seen_at=r.last_seen_at, other_online=r.other_online)
+        Silent(
+            id=str(r.id),
+            name=r.name,
+            mode=r.mode,
+            last_seen_at=r.last_seen_at,
+            other_online=r.other_online,
+        )
         for r in silent_rows
     ]
     return machines, silent

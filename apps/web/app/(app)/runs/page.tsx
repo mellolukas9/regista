@@ -7,6 +7,7 @@ import { Search } from "lucide-react";
 import Link from "next/link";
 import { DataTable } from "@/components/DataTable";
 import { EmptyState } from "@/components/EmptyState";
+import { ItemsCount } from "@/components/ItemsCount";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,6 @@ import { useBotOptions } from "@/lib/bots";
 import {
   DEFAULT_PERIOD,
   duration,
-  itemsLabel,
   jobsKey,
   PERIODS,
   startedLabel,
@@ -142,16 +142,7 @@ function Runs() {
         id: "items",
         header: "Itens",
         enableSorting: false,
-        cell: ({ row }) => {
-          const { ok, bad } = itemsLabel(row.original);
-          return (
-            <span className="tabular">
-              <span className="text-success">{ok}</span>
-              <span className="text-text-muted"> · </span>
-              <span className={bad > 0 ? "text-danger-text" : "text-text-label"}>{bad}</span>
-            </span>
-          );
-        },
+        cell: ({ row }) => <ItemsCount job={row.original} />,
       },
     ];
     if (allClients) {

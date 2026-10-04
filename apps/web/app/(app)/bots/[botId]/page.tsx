@@ -91,7 +91,7 @@ function BotDetailView() {
   const runButton = (
     <Button
       loading={run.isPending}
-      loadingText="Executando…"
+      loadingText="Criando execução…"
       onClick={() => run.mutate(data.id)}
     >
       Executar agora

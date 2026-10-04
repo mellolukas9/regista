@@ -45,7 +45,13 @@ export type DashboardData = {
     current_job: { id: string; short_code: string; status: string } | null;
   }[];
   pending_runs: Job[];
-  silent: { id: string; name: string; last_seen_at: string | null; other_online: string | null }[];
+  silent: {
+    id: string;
+    name: string;
+    mode: "service" | "session" | "oneshot";
+    last_seen_at: string | null;
+    other_online: string | null;
+  }[];
 };
 
 export const dashboardKey = ["dashboard"] as const;

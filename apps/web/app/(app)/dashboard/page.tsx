@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Banner } from "@/components/Banner";
 import { EmptyState } from "@/components/EmptyState";
+import { ItemsCount } from "@/components/ItemsCount";
 import { KPI } from "@/components/KPI";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusPill } from "@/components/StatusPill";
@@ -15,8 +16,8 @@ import { SegmentedControl, SegmentedItem } from "@/components/ui/toggle-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { percent, periodLabel, useDashboard, type DashboardData } from "@/lib/dashboard";
 import { formatListDate } from "@/lib/format";
-import { duration, itemsLabel, PERIODS, startedLabel, type Job, type Period } from "@/lib/jobs";
-import { ago } from "@/lib/machines";
+import { duration, PERIODS, startedLabel, type Job, type Period } from "@/lib/jobs";
+import { ago, silenceText } from "@/lib/machines";
 import { canRunJobs } from "@/lib/me";
 import { contextName, useCurrentUser } from "@/lib/me-context";
 
@@ -235,10 +236,7 @@ function ClientView({
             </Button>
           }
         >
-          {worst.other_online
-            ? `As execuções seguem pela ${worst.other_online}, uma de cada vez. `
-            : "Até o agente voltar, as execuções do pool ficam pendentes. "}
-          Verifique se o computador está ligado e conectado à internet.
+          {silenceText(worst.mode, worst.other_online)}
         </Banner>
       )}
 
@@ -459,7 +457,6 @@ function Latest({ runs, showClient = false }: Readonly<{ runs: Job[]; showClient
               </TableHeader>
               <TableBody>
                 {runs.map((run) => {
-                  const { ok, bad } = itemsLabel(run);
                   return (
                     <TableRow key={run.id}>
                       <TableCell>
@@ -475,10 +472,8 @@ function Latest({ runs, showClient = false }: Readonly<{ runs: Job[]; showClient
                       <TableCell className="tabular text-text-secondary">{startedLabel(run)}</TableCell>
                       <TableCell className="tabular text-text-secondary">{duration(run)}</TableCell>
                       {!showClient && (
-                        <TableCell className="tabular">
-                          <span className="text-success">{ok}</span>
-                          <span className="text-text-muted"> · </span>
-                          <span className={bad > 0 ? "text-danger-text" : "text-text-label"}>{bad}</span>
+                        <TableCell>
+                          <ItemsCount job={run} />
                         </TableCell>
                       )}
                     </TableRow>

@@ -74,6 +74,10 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 | Robô de demonstração | `bots/demo_busca_wikipedia` (a Wikipédia é estável e não pede verificação anti-robô; o Google pedia) |
 | Textos | `design-system.md` §14, aprovados na revisão do M3 |
 
+## Pendências para o início do M4
+
+- **Testes dependentes de tempo real.** `test_worker.py::test_two_workers_run_each_tick_once` e o e2e `test_jobs_e2e.py::test_a_machine_that_goes_away_in_the_middle_makes_the_run_machine_lost` falharam numa rodada local completa (a suíte estava sob carga: 10 min seguidos de contêineres e processos) e passaram isolados e na CI. **Investigar a causa e torná-los determinísticos (relógio e tarefas controlados pelo teste, sem esperar tempo real), não só aumentar timeouts.** Antes, reproduzir sob carga para achar o que de fato atrasa (a rodada do worker, a varredura de "Sem sinal" ou a espera do heartbeat).
+
 ## Pendências do fim do M2
 
 - **`npm audit`: 5 vulnerabilidades "high", todas em ferramentas de desenvolvimento.** `npm audit --omit=dev` dá 0: nada disso vai para o app em produção. A cadeia é `braces` → `micromatch` → `fast-glob` → `@next/eslint-plugin-next` → `eslint-config-next`, usada só pelo linter, que processa os padrões de arquivo do próprio repositório (o ataque pede padrões de glob aninhados fundo, que não vêm de fora). O `braces 3.0.3` é a última versão publicada e não há versão corrigida, então **não existe correção sem `--force`**; e o `npm audit fix --force` sugerido **rebaixaria** o `eslint-config-next` para a 14, o que quebra o projeto (Next 16). **Decidido: aceitar o risco**, registrado aqui, e rodar `npm audit` de novo a cada atualização do Next ou do ESLint.

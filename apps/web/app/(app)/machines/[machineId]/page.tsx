@@ -25,6 +25,7 @@ import {
   MODE_LABEL,
   poolsKey,
   POLL_MS,
+  silenceText,
   type IssuedKey,
   type Machine,
   type MachineDetail,
@@ -182,11 +183,7 @@ export default function MachineDetailPage() {
 
       {data.status === "offline" && (
         <Banner tone="danger" title="O agente parou de responder">
-          {otherOnline
-            ? `Até o agente voltar, as execuções do pool vão para a máquina ${otherOnline.name}. `
-            : "Até o agente voltar, as execuções do pool ficam pendentes. "}
-          Confira se o computador está ligado e com internet.
-          {data.mode === "session" && " Confira também se o usuário do Windows continua logado."}
+          {silenceText(data.mode, otherOnline?.name)}
         </Banner>
       )}
 

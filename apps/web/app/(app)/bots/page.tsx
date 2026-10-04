@@ -257,7 +257,7 @@ function RunButton({
   const button = (
     <Button
       loading={pending}
-      loadingText="Executando…"
+      loadingText="Criando execução…"
       className={full ? "h-12 w-full" : undefined}
       onClick={() => run.mutate(bot.id)}
     >

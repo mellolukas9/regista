@@ -34,6 +34,7 @@ import {
   MODE_LABEL,
   machinesKey,
   poolsKey,
+  silenceText,
   useAllMachines,
   usePools,
   type IssuedKey,
@@ -123,8 +124,12 @@ export default function MachinesPage() {
             </Button>
           }
         >
-          Verifique se o computador está ligado, conectado à internet e se o serviço do agente está
-          rodando.
+          {silenceText(
+            machine.mode,
+            (machines.data?.items ?? []).find(
+              (peer) => peer.pool_id === machine.pool_id && peer.status === "online",
+            )?.name,
+          )}
         </Banner>
       ))}
 
