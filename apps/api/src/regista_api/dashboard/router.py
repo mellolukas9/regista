@@ -300,6 +300,7 @@ async def _by_client(db: Any, since: str) -> list[ClientRow]:
 
 
 async def _client_machines(db: Any) -> tuple[list[MachineRow], list[Silent]]:
+    # Machines that need a look come first (no signal, then busy), so the cut never hides them.
     rows = (
         await db.execute(
             text(
@@ -310,7 +311,8 @@ async def _client_machines(db: Any) -> tuple[list[MachineRow], list[Silent]]:
                 "   WHERE j.tenant_id = m.tenant_id AND j.machine_id = m.id"
                 "   AND j.status IN ('assigned', 'running') LIMIT 1) cur ON true"
                 " WHERE NOT t.is_internal AND m.status <> 'revoked'"
-                " ORDER BY lower(m.name) LIMIT 12"
+                " ORDER BY (m.status = 'offline') DESC, (cur.id IS NOT NULL) DESC,"
+                " lower(m.name), m.id LIMIT 12"
             )
         )
     ).all()
@@ -326,18 +328,22 @@ async def _client_machines(db: Any) -> tuple[list[MachineRow], list[Silent]]:
         )
         for r in rows
     ]
-    online_by_pool: dict[Any, str] = {}
-    for r in rows:
-        if r.status == "online":
-            online_by_pool.setdefault(r.pool_id, r.name)
-    silent = [
-        Silent(
-            id=str(r.id),
-            name=r.name,
-            last_seen_at=r.last_seen_at,
-            other_online=online_by_pool.get(r.pool_id),
+    # The banner does not depend on the cut above: the oldest silences, and who takes over.
+    silent_rows = (
+        await db.execute(
+            text(
+                "SELECT m.id, m.name, m.last_seen_at,"
+                " (SELECT o.name FROM machines o WHERE o.tenant_id = m.tenant_id"
+                "   AND o.pool_id = m.pool_id AND o.status = 'online'"
+                "   ORDER BY lower(o.name) LIMIT 1) AS other_online"
+                " FROM machines m JOIN tenants t ON t.id = m.tenant_id"
+                " WHERE NOT t.is_internal AND m.status = 'offline'"
+                " ORDER BY m.last_seen_at NULLS LAST, m.id LIMIT 5"
+            )
         )
-        for r in rows
-        if r.status == "offline"
+    ).all()
+    silent = [
+        Silent(id=str(r.id), name=r.name, last_seen_at=r.last_seen_at, other_online=r.other_online)
+        for r in silent_rows
     ]
     return machines, silent

@@ -55,6 +55,15 @@ async def test_machines_pending_runs_and_silent_machines(rig: Rig) -> None:
     other = await enrolled_agent(
         panel, panel.tenant_a, panel.admin_a, rig.bot["pool_id"], rig.agent_client
     )
+    # The test database is shared: retire the machines other tests left so the card is ours.
+    async with tenant_session(panel.env.app.state.session_factory, tenant_id=panel.tenant_a) as db:
+        await db.execute(
+            text(
+                "UPDATE machines SET status = 'revoked', revoked_at = now()"
+                " WHERE id NOT IN (:a, :b) AND status <> 'revoked'"
+            ),
+            {"a": rig.agent.machine_id, "b": other.machine_id},
+        )
     job = await run(panel.admin_a, rig.bot["id"])
     assert (await rig.agent.next_job()).json()["job_id"] == job["id"]
     await rig.agent.job_call(job["id"], "start")
