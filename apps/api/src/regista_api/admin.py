@@ -289,7 +289,7 @@ async def seed_dev(factory: Factory, state: AppState) -> SeedResult:
         )
         result.users.append(SeedUser(pending, "viewer", "Escritório Exemplo", invitation_sent=True))
 
-        # The demonstration robot (bots/demo_busca_google) and the pool it runs in. The machine
+        # The demonstration robot (bots/demo_busca_wikipedia) and the pool it runs in. The machine
         # is registered in the panel, so the dev sees the whole flow (docs/STATUS.md, M3).
         await _enter_tenant(db, demo)
         demo_pool: uuid.UUID = (
@@ -304,8 +304,8 @@ async def seed_dev(factory: Factory, state: AppState) -> SeedResult:
         await db.execute(
             text(
                 "INSERT INTO bots (tenant_id, pool_id, name, package_name, description)"
-                " VALUES (:t, :p, 'Busca no Google', 'demo_busca_google',"
-                " 'Pesquisa um termo no Google e tira uma captura de tela.')"
+                " VALUES (:t, :p, 'Busca na Wikipédia', 'demo_busca_wikipedia',"
+                " 'Pesquisa um termo na Wikipédia e tira uma captura de tela.')"
             ),
             {"t": demo, "p": demo_pool},
         )

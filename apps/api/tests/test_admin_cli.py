@@ -284,8 +284,8 @@ async def test_seed_dev_builds_the_sample_data(empty_db_urls: DbUrls) -> None:
             ).all()
         assert [tuple(r) for r in seeded_bots] == [
             (
-                "Busca no Google",
-                "demo_busca_google",
+                "Busca na Wikipédia",
+                "demo_busca_wikipedia",
                 "Artemisys – Demonstração",  # noqa: RUF001  (the design-system sample name)
                 "Artemisys (demonstração)",
             )

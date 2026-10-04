@@ -12,6 +12,24 @@ uv run regista-agent diagnose
 
 Em desenvolvimento, `REGISTA_HOME` aponta para uma pasta própria (configuração, chave e logs), para não usar `%ProgramData%\Regista`.
 
+## Rodar robôs em desenvolvimento (M3)
+
+Antes dos pacotes assinados (M4), o agente só executa robôs de uma pasta local, e **só em desenvolvimento**:
+
+```powershell
+$env:REGISTA_HOME = "$env:TEMP\regista-agent-dev"
+$env:REGISTA_ENVIRONMENT = "dev"          # sem isto o agente assume produção
+$env:REGISTA_DEV_UNSIGNED = "1"           # em produção o agente recusa iniciar com isto ligado
+$env:REGISTA_DEV_BOTS_DIR = "$PWD\bots"   # <pasta>/<nome do pacote>/main.py
+uv run regista-agent run
+```
+
+Outros ajustes (todos `REGISTA_*`): `DEV_PYTHON` (interpretador do robô; padrão o do próprio agente), `JOB_PRIORITY` (`below_normal` ou `normal`), `CANCEL_GRACE_SECONDS` (15), `LOG_FLUSH_SECONDS` (2), `POLL_WAIT_SECONDS` (30).
+
+O robô roda como processo filho, sem shell, com um ambiente mínimo (nenhum token nem variável do agente), numa pasta temporária por execução. Cancelar ou passar do prazo para o robô e tudo que ele iniciou. Limite conhecido: se o agente for morto à força (corte de energia), o robô que ele iniciou pode ficar rodando até alguém encerrá-lo; a execução vira "falhou" por `machine_lost`.
+
+Playwright e navegador (uma vez, na raiz do repositório): `uv sync --group bots` e `uv run playwright install chromium`.
+
 ## Máquinas clonadas
 
 > **VMs são cadastradas depois de clonadas.** A imagem-modelo não pode ter um agente cadastrado (rode o `sysprep` antes de clonar). O `enroll` recusa sobrescrever uma identidade existente sem `--force`.

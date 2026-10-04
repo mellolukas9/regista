@@ -897,7 +897,7 @@ Use estes dados para desenvolvimento e testes visuais. "Hoje" é sex 02/10/2026,
   - Artemisys – Demonstração: vm-demo-01 (online).
 - **Bots:**
   - Controle de Acordos (fila `acordos`, modo Referência, retenção 90, 3 tentativas, v1.4.2 em uso; agendamentos `0 8 * * 2,4` ativo e `0 18 * * 1-5` pausado);
-  - Busca no Google (fila `buscas-demo`, modo Central, retenção 30, v0.3.0; `0 8-18 * * 1-5`).
+  - Busca na Wikipédia (fila `buscas-demo`, modo Central, retenção 30, v0.3.0; `0 8-18 * * 1-5`).
 - **Lotes:**
 
 | Lote | Arquivo | Linhas | Resultado | Status |
@@ -1169,4 +1169,89 @@ Telas e estados de Máquinas e pools (7.13 e 7.14) que as seções 7 e 9 não tr
 - Histórico, títulos e detalhes: "Máquina cadastrada" (Agente <versão>), "Agente cadastrado de novo" (O agente anterior deixou de funcionar.), "Ficou online pela primeira vez", "Voltou a ficar online", "Ficou sem sinal", "Agente atualizado" (<versão antiga> → <nova>), "Máquina revogada". Vazio: "Nenhum evento ainda" / "Os eventos aparecem aqui assim que a máquina se cadastrar." Botão "Mostrar mais". Erro: "Não foi possível carregar o histórico".
 - Contador ao lado de Máquinas na sidebar, com o plural no `aria-label`: "1 máquina sem sinal" / "N máquinas sem sinal". No seletor de cliente: "N sem sinal".
 
-**Fica para o M3** (dependem de `bots` e `jobs`): coluna "Agora", linha "Roda: …" (e "Nenhum bot usa este pool ainda"), aba Execuções e "A execução em andamento será cancelada." no AlertDialog de revogar.
+**Entregue no M3** (dependiam de `bots` e `jobs`): coluna "Agora", linha "Roda: …", aba Execuções e "A execução em andamento será cancelada." no AlertDialog de revogar. Os textos estão na §14.
+
+---
+
+## 14. Textos complementares do M3
+
+Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e itens de Máquinas) que as seções 7, 9 e 13 não trazem. Mesma regra: usar exatamente estes textos. **Aprovados na revisão do M3.**
+
+**Decisões de escopo do M3 (aprovadas)**
+- O Dashboard do cliente não tem gráfico no M3 (o gráfico "Itens processados por dia" volta com os itens, no M5). A visão consolidada da equipe tem o gráfico "Execuções por dia · 14 dias".
+- O Detalhe da execução não tem a aba "Itens" no M3 (volta no M5). "Fila", "Lote" e "Versão do bot" aparecem como "—".
+- Em Bots, "Agendar" e "Próxima" ficam ocultos até o M7; a aba Versões do Detalhe do bot fica para o M4.
+- Em Execuções, "Executar agora" leva a Bots, como no Dashboard.
+
+**Bots (7.5) e Detalhe do bot (7.6)**
+
+| Tela | Elemento | Texto |
+|---|---|---|
+| Bots | Subtítulo do bot na lista (no lugar de "fila · versão") | `pacote demo_busca_wikipedia` |
+| Bots | Última execução, bot que nunca rodou | "Nunca rodou" |
+| Bots | Busca sem resultado | "Nenhum bot com essa busca" / "Confira o nome ou limpe a busca." / "Limpar filtros" |
+| Bots | Botão com a execução sendo criada | "Executando…" |
+| Dialog "Cadastrar bot" | Título e texto | "Cadastrar bot" / "O bot roda nas máquinas do pool escolhido. A versão assinada é publicada depois." |
+| Dialog "Cadastrar bot" | Campos | "Nome do bot" (exemplo "Busca na Wikipédia"); "Nome do pacote" (ajuda "É o nome da pasta do robô. Não muda depois de cadastrado."); "Pool" (sem pools: "Crie um pool antes de cadastrar o bot."); "Descrição (opcional)" |
+| Dialog "Cadastrar bot" | Botões | "Voltar" e "Cadastrar bot" (carregando: "Cadastrando…") |
+| Dialog "Cadastrar bot" | Erros | "Escreva um nome para o bot." · "Use letras minúsculas, números e _, começando por letra. Ex.: demo_busca_wikipedia" · "Já existe um bot com esse nome neste cliente." · "Já existe um bot com esse nome de pacote neste cliente." |
+| Cadastrar bot | Toast | "Bot cadastrado" |
+| Detalhe do bot | Faixa meta | "Pool", "Máquinas no pool" ("1 de 2 online"), "Sucesso · 30 dias" ("75% das execuções" ou "Sem execuções nos últimos 30 dias"), "Pacote" |
+| Detalhe do bot | Abas | "Visão geral" e "Execuções" |
+| Detalhe do bot | Aba Execuções vazia | "Este bot ainda não rodou" / "Use Executar agora para fazer a primeira execução." |
+| Detalhe do bot | Link da aba Execuções | "Ver todas →" |
+| Detalhe do bot | Erro ao carregar a aba | "Não foi possível carregar as execuções" / "O servidor não respondeu. Tente de novo em alguns segundos." / "Tentar de novo" |
+| Detalhe do bot | Bot inexistente ou de outro cliente | "Bot não encontrado" / "Confira o endereço ou volte para a lista de bots." / "Voltar para Bots" |
+| Detalhe do bot | Erro de carregamento | "Não foi possível carregar o bot" / "O servidor não respondeu. Tente de novo em alguns segundos." |
+
+**Execuções (7.3)**
+
+| Tela | Elemento | Texto |
+|---|---|---|
+| Execuções | Contagem | "1 execução" / "N execuções" |
+| Execuções | Coluna Itens (até o M5) | "0 · 0" |
+| Execuções | Gatilho de quem é da equipe Artemisys | "Manual" + "Equipe Artemisys" |
+| Execuções | Vazio com filtro | "Nenhuma execução com esses filtros" / "Troque o período ou limpe os filtros." / "Limpar filtros" |
+| Sidebar | Contador de Execuções (`aria-label`) | "1 execução pendente" / "N execuções pendentes" |
+
+**Detalhe da execução (7.4)**
+
+| Tela | Elemento | Texto |
+|---|---|---|
+| Detalhe da execução | Faixa meta | "Gatilho", "Pool", "Fila", "Lote" e "Versão do bot" (os três últimos "—" até o M4 e o M5) |
+| Detalhe da execução | Botões em andamento | "Reexecutando…" e "Cancelando…" |
+| Detalhe da execução | Toasts | "Execução criada" (ação "Ver execução") · "Cancelamento pedido" · "Execução cancelada" |
+| Detalhe da execução | Banner danger de execução que falhou | "A execução falhou" + o motivo abaixo |
+| Detalhe da execução | Motivo por código | `machine_lost`: "A máquina parou de responder durante a execução." · `machine_revoked`: "A máquina foi revogada durante a execução." · `timeout`: "O robô passou do tempo máximo." · `robot_failed`: "O robô terminou com erro." · `robot_not_found`: "O robô não foi encontrado nesta máquina." · `internal`: "O agente teve um problema durante a execução." · outro código: "A execução terminou com erro." |
+| Timeline | Etapa final | "Finalizada" · "Finalizada · Falhou" · "Finalizada · Cancelada" |
+| Timeline | Notas das etapas | "há 2 h · nenhuma máquina livre" · "há 12 min · esperando a vez" (a partir de 10 min na fila) · "esperando o robô iniciar" (atribuída) · "cancelamento pedido" (rodando) |
+| Detalhe da execução | Aba de captura | "Captura de tela" (execução sem falha) ou "Captura de erro" (falhou), com a contagem |
+| Detalhe da execução | Captura de execução sem falha | Título "Captura de tela"; legenda "Captura feita pelo robô durante a execução. Ela fica guardada pelo prazo de retenção da fila." (com falha valem os textos do 7.4) |
+| LogViewer | Copiar | "Copiar logs" vira "Copiados" por 3 s |
+| LogViewer | Execução ativa sem "ao vivo" | "Atualizando a cada 15 s." |
+| LogViewer | Execução que terminou sem linhas | "Esta execução não gerou logs." |
+| Erros da API | Execuções e bots | "Este bot está desativado e não pode ser executado." · "Este bot ainda não tem uma versão publicada para rodar." · "Essa execução não foi encontrada. Atualize a lista e tente de novo." · "Essa execução já terminou. Atualize a tela para ver como ficou." · "Essa execução ainda está em andamento. Espere terminar para reexecutar." · "Os parâmetros da execução são grandes demais." · "Esse bot não foi encontrado. Atualize a lista e tente de novo." |
+
+**Dashboard (7.2)**
+
+| Tela | Elemento | Texto |
+|---|---|---|
+| Dashboard do cliente | Banner de máquina sem sinal, sem outra máquina online no pool | "<nome> está sem sinal desde 08:20" / "Até o agente voltar, as execuções do pool ficam pendentes. Verifique se o computador está ligado e conectado à internet." (com outra máquina online vale o texto do 7.2) |
+| Dashboard do cliente | KPI "Máquinas online" | contexto "0 de 1 · 1 sem sinal" |
+| Dashboard do cliente | Card "Máquinas" | "Ver máquinas →" · "Executando exec-7f3a24" · "Último sinal há 3 min" · "Ainda sem sinal" · sem máquinas: "Nenhuma máquina cadastrada ainda." |
+| Dashboard do cliente | Card "Parados" (só execuções pendentes até o M5) | "Nada parado agora." |
+| Dashboard | Últimas execuções sem dados | "Nenhuma execução ainda." |
+| Visão geral (equipe) | Banner | "N pontos precisam de atenção" / "1 máquina sem sinal e 1 execução esperando máquina." |
+| Visão geral (equipe) | KPIs | "Clientes ativos"; "Execuções · 7 dias" ("1 executando · 1 pendente"); "Taxa de sucesso · 7 dias" ("N execuções terminadas" ou "Nenhuma execução terminada"); "Máquinas sem sinal" ("1 de 3 online") |
+| Visão geral (equipe) | Gráfico sem dados | "Nenhuma execução terminada nos últimos 14 dias." |
+| Visão geral (equipe) | Card "Precisa de atenção" vazio | "Nada precisa de atenção agora." |
+| Visão geral (equipe) | Tabela "Por cliente" | Colunas "Cliente", "Execuções · 7 dias", "Sucesso", "Máquinas" ("1 de 3 online" e "1 sem sinal"), "Última execução"; ação "Ver clientes →" |
+
+**Máquinas e pools (7.13) e Detalhe da máquina (7.14)**
+
+| Tela | Elemento | Texto |
+|---|---|---|
+| Máquinas e pools | Linha do pool | "Roda: Controle de Acordos, Busca na Wikipédia" ou "Nenhum bot usa este pool ainda" |
+| Máquinas e pools | Coluna "Agora" | "Executando exec-7f3a24" (link) ou "—" |
+| Detalhe da máquina | Aba Execuções | Colunas "Execução", "Bot", "Status", "Gatilho", "Início", "Duração"; vazio: "Nenhuma execução nesta máquina ainda" / "As execuções que ela rodar aparecem aqui."; erro: "Não foi possível carregar as execuções" |
+| Detalhe da máquina | Revogar com execução em andamento | acrescenta ao texto: "A execução em andamento será cancelada." |

@@ -81,6 +81,14 @@ async def test_machines_pending_runs_and_silent_machines(rig: Rig) -> None:
 
 async def test_a_run_waiting_too_long_needs_attention(rig: Rig) -> None:
     panel = rig.panel
+    # Other tests leave old pending runs behind and the list shows only the 5 oldest: clear them.
+    async with tenant_session(panel.env.app.state.session_factory, tenant_id=panel.tenant_a) as db:
+        await db.execute(
+            text(
+                "UPDATE jobs SET status = 'cancelled', finished_at = now(),"
+                " cancel_requested_at = now() WHERE status = 'pending'"
+            )
+        )
     job = await run(panel.admin_a, rig.bot["id"])
     await set_job(
         panel,

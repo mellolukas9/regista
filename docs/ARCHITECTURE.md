@@ -103,7 +103,7 @@ regista/
 │   └── tests/
 ├── bots/
 │   ├── _template/                   # template async com SDK
-│   └── demo_busca_google/           # robô de demonstração (M3)
+│   └── demo_busca_wikipedia/           # robô de demonstração (M3)
 ├── infra/
 │   ├── compose/                     # docker-compose.dev.yml (M0), docker-compose.prod.yml (M8)
 │   └── cloudformation/              # EC2 com agente na conta do cliente (M8, opcional)

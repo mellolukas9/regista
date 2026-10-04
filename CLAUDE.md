@@ -52,7 +52,7 @@ uv run python -c "from regista_api.core.keys import LocalKeyProvider; print(Loca
 ```
 
 ```powershell
-# infraestrutura local (Postgres 18)
+# infraestrutura local (Postgres 18 e o S3 local SeaweedFS, ADR 0019)
 docker compose -f infra/compose/docker-compose.dev.yml up -d
 
 # backend / sdk / agente (workspace uv na raiz)
@@ -70,7 +70,7 @@ cd apps/web ; npm install ; npm run dev ; npm run lint ; npm run typecheck ; npm
 uv run pre-commit install
 ```
 
-**Três terminais em desenvolvimento:** API (`uvicorn`), worker (`regista-worker`, sem ele ninguém vira "Sem sinal") e web (`npm run dev`).
+**Três terminais em desenvolvimento:** API (`uvicorn`), worker (`regista-worker`, sem ele ninguém vira "Sem sinal", as execuções de máquina perdida não terminam e as partições dos logs não são criadas) e web (`npm run dev`). Para rodar robôs, um quarto: o agente em modo de desenvolvimento (abaixo).
 
 **Agente (`regista-agent`).** No painel, cadastre a máquina (Máquinas, "Cadastrar máquina") e copie a chave de registro (aparece uma vez). Em dev, `REGISTA_HOME` aponta o agente para uma pasta própria (configuração, chave e logs) em vez de `%ProgramData%\Regista`:
 
@@ -82,6 +82,30 @@ uv run regista-agent diagnose   # conexão, proxy, TLS, horário, permissões da
 ```
 
 O `enroll` grava a chave numa pasta restrita a SYSTEM, Administradores e à conta do agente (`--agent-account`; ver `agent/README.md`), então um console sem elevação recebe "Sem permissão para gravar a chave". **VMs são cadastradas depois de clonadas.**
+
+**S3 local (capturas de tela).** O `docker compose ... up -d` sobe também o SeaweedFS (porta 8333, credenciais só de dev em `infra/compose/seaweedfs/s3.json`). A API precisa das variáveis `REGISTA_S3_*` do `.env.example`; num `.env` antigo, copie o bloco "S3 local" do `.env.example`. Em produção a API e o worker se recusam a subir com chave de acesso ou endpoint local (só role IAM).
+
+**Atualizar um banco de dev que já existe (sem recriar).** Depois de baixar o M3, aplique as migrations novas (a `0004` cria `bots`, `jobs`, `job_logs`, `artifacts`), com o Postgres ligado:
+
+```powershell
+docker compose -f infra/compose/docker-compose.dev.yml up -d
+uv run alembic -c apps/api/alembic.ini upgrade head
+```
+
+Os dados que já estão no banco ficam. O `seed-dev` só roda em banco vazio, então o bot de demonstração não aparece sozinho num banco antigo: cadastre-o pelo painel. Entre como equipe Artemisys (`equipe@artemisys.example.com`), escolha o cliente na barra lateral (por exemplo "Artemisys (demonstração)"), crie um pool em **Máquinas** se ainda não houver, e em **Bots** clique em **Cadastrar bot** com nome `Busca na Wikipédia`, pacote `demo_busca_wikipedia` e o pool. Só a equipe Artemisys cadastra bots, e o nome do pacote tem de ser igual ao nome da pasta em `bots/`.
+
+**Rodar um robô de ponta a ponta (desenvolvimento).** Uma vez: `uv sync --group bots` e `uv run playwright install chromium` (o robô de demonstração usa o Playwright do próprio workspace; os ambientes por versão com `uv` são do M4). Cadastre a máquina no painel (como acima) e rode o agente com a flag de desenvolvimento, que o agente **recusa em produção**:
+
+```powershell
+$env:REGISTA_HOME = "$env:TEMP\regista-agent-dev"
+$env:REGISTA_ENVIRONMENT = "dev"
+$env:REGISTA_DEV_UNSIGNED = "1"
+$env:REGISTA_DEV_BOTS_DIR = "$PWD\bots"
+uv run regista-agent enroll --url http://127.0.0.1:8000 --key rgk_...   # PowerShell ELEVADO, só na primeira vez
+uv run regista-agent run
+```
+
+Em **Bots**, **Executar agora**: o painel mostra estados, logs e a captura de tela, atualizando sozinho. Mais opções do agente em `agent/README.md`.
 
 **Roles e init do banco.** Os scripts de `infra/compose/initdb/` (que criam `regista_owner` e `regista_app`) só rodam quando o volume do Postgres está **vazio**. Mudou o script ou quer um banco limpo? Recrie o banco de dev do zero (**apaga todos os dados locais**):
 

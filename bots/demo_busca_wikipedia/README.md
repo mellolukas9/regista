@@ -1,14 +1,17 @@
-# demo_busca_google
+# demo_busca_wikipedia
 
-Robô de demonstração do Regista: abre o Google, pesquisa um termo e tira uma captura de tela.
-É o robô que aparece no painel como **Busca no Google** (ver `uv run regista-admin seed-dev`).
+Robô de demonstração do Regista: pesquisa um termo na Wikipédia (em português) e tira uma captura
+de tela. É o robô que aparece no painel como **Busca na Wikipédia** (ver
+`uv run regista-admin seed-dev`, ou cadastre-o pelo painel, como explica a seção Comandos do
+`CLAUDE.md`).
 
-- **Parâmetro:** `term` (texto; padrão "Regista Artemisys"). O painel do M3 dispara sem parâmetros.
-- **Saída:** linhas de log (os cinco primeiros resultados) e `resultado.png` (ou `erro.png`).
+- **Parâmetro:** `term` (texto; padrão "automação de processos"). O painel do M3 dispara sem
+  parâmetros.
+- **Saída:** linhas de log (os cinco primeiros títulos de resultado) e `resultado.png` (ou
+  `erro.png`).
 - **Cancelamento:** o agente cria o arquivo `REGISTA_CANCEL_FILE` e pede que o processo pare; o
   robô confere o arquivo entre as etapas.
-- **Risco:** o Google pode pedir uma verificação anti-robô. O robô avisa no log e a captura
-  mostra a página que apareceu.
+- **Rede:** só acessa `pt.wikipedia.org`, e se identifica com um agente de usuário próprio.
 
 ## Rodar no ambiente de desenvolvimento (antes dos pacotes assinados, M4)
 
@@ -27,6 +30,6 @@ Para testar o robô sozinho, sem o agente:
 
 ```powershell
 $env:REGISTA_ARTIFACTS_DIR = "$env:TEMP\demo-artifacts"
-$env:REGISTA_JOB_PARAMS = '{"term": "Regista Artemisys"}'
-uv run python bots/demo_busca_google/main.py
+$env:REGISTA_JOB_PARAMS = '{"term": "automação de processos"}'
+uv run python bots/demo_busca_wikipedia/main.py
 ```

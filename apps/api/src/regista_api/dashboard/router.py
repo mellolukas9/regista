@@ -259,6 +259,8 @@ async def _attention(db: Any) -> list[AttentionItem]:
                 client_name=r.client,
             )
         )
+    # The five that have waited longest, whichever kind: machines must not crowd out stuck runs.
+    items.sort(key=lambda i: (i.since is None, i.since))
     return items[:5]
 
 

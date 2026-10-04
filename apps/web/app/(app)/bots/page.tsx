@@ -35,7 +35,7 @@ import { useRunNow } from "@/lib/run-now";
 import { listQuery, useListState } from "@/lib/url-state";
 
 const PACKAGE_FORMAT_ERROR =
-  "Use letras minúsculas, números e _, começando por letra. Ex.: demo_busca_google";
+  "Use letras minúsculas, números e _, começando por letra. Ex.: demo_busca_wikipedia";
 
 export default function BotsPage() {
   return (
@@ -348,7 +348,7 @@ function RegisterBotDialog({ open, onClose }: Readonly<{ open: boolean; onClose:
                 {...control}
                 autoFocus
                 maxLength={120}
-                placeholder="Busca no Google"
+                placeholder="Busca na Wikipédia"
                 value={name}
                 onChange={(event) => setName(event.target.value)}
               />
@@ -366,7 +366,7 @@ function RegisterBotDialog({ open, onClose }: Readonly<{ open: boolean; onClose:
                 autoCapitalize="none"
                 spellCheck={false}
                 className="font-mono"
-                placeholder="demo_busca_google"
+                placeholder="demo_busca_wikipedia"
                 value={packageName}
                 onChange={(event) => setPackageName(event.target.value)}
               />

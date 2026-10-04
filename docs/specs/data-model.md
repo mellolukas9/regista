@@ -78,7 +78,7 @@ id, tenant_id, machine_id, kind (`enrolled`, `re_enrolled`, `first_signal`, `wen
 id, tenant_id, machine_id, key_hash (sha256, único), expires_at, used_at, revoked_at, created_by, created_at. Uma chave viva (nem usada nem revogada) por máquina: gerar nova chave revoga a anterior na mesma transação. A chave em si (`rgk_…`) só aparece na resposta que a cria.
 
 ### `bots` (M3)
-id, tenant_id, pool_id, name, description, concurrency int default 1, is_active, current_version_id (M4).
+id, tenant_id, pool_id, name (único por cliente, sem diferenciar maiúsculas), `package_name` (`^[a-z][a-z0-9_]{0,62}$`, único por cliente, não muda: é a pasta do robô em dev e o pacote no M4), description, concurrency int default 1, is_active, created_by, current_version_id (M4).
 
 ### `bot_versions` (M4)
 id, tenant_id, bot_id, version text, package_sha256, signature bytea, storage_key, size_bytes, release_note text, created_by. Só a equipe Artemisys publica versões.
@@ -97,15 +97,18 @@ id, tenant_id, bot_id, version text, package_sha256, signature bytea, storage_ke
 | error_code, error_message | text | mensagem mascarada |
 | cancel_requested_at | timestamptz | |
 | short_code | text | código exibido (ex.: `exec-7f3a24`), único por tenant |
+| assigned_at | timestamptz | quando um agente assumiu (alimenta a Timeline) |
 | items_successful, items_failed, items_abandoned, items_total | int | contagem para a coluna Itens |
+
+`error_code` aceita: `machine_lost`, `machine_revoked`, `timeout`, `robot_failed`, `robot_not_found`, `cancelled`, `internal`.
 
 Regras: `failed` quando qualquer item termina com falha, mesmo que o robô encerre normalmente. "Executar agora" com execução ativa do mesmo bot cria outro job `pending` (não bloqueia). Cancelar só em `pending`, `assigned` ou `running`.
 
 ### `job_logs` (M3), particionada por mês em `ts`
-tenant_id, job_id, item_id (nulo), item_ref (nulo), attempt (nulo), ts, level, message (limite de tamanho), extra jsonb.
+tenant_id, job_id, `seq` (numeração do agente por execução; `UNIQUE (job_id, seq, ts)` evita duplicar reenvios), item_id (nulo), item_ref (nulo), attempt (nulo), ts, level (`INFO`, `WARN`, `ERROR`), message (até 8 KB no banco; o servidor corta em 4 KB), extra jsonb. Sem partição `DEFAULT`; RLS forçado também nas partições, que não recebem grant (o app acessa pela tabela-mãe).
 
 ### `artifacts` (M3)
-id, tenant_id, job_id, item_id, attempt_id, kind (`screenshot`, `file`), storage_key, size_bytes, created_at.
+id, tenant_id, job_id, item_id, attempt_id, kind (`screenshot`, `file`), storage_key (montada só pelo servidor: `tenants/<tenant>/jobs/<job>/<id>.png`), `content_type` (`image/png`, `image/jpeg`), size_bytes, `uploaded_at` (nulo até o servidor ver o objeto no S3), created_at.
 
 ## Filas
 

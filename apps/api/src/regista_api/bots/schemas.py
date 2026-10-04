@@ -19,10 +19,10 @@ class CreateBotRequest(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "name": "Busca no Google",
-                    "package_name": "demo_busca_google",
+                    "name": "Busca na Wikipédia",
+                    "package_name": "demo_busca_wikipedia",
                     "pool_id": "00000000-0000-4000-8000-000000000000",
-                    "description": "Pesquisa um termo e tira uma captura de tela.",
+                    "description": "Pesquisa um termo na Wikipédia e tira uma captura de tela.",
                 }
             ]
         },

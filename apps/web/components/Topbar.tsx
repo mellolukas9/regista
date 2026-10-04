@@ -3,6 +3,7 @@
 import { Bell, Menu, Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { contextName, useCurrentUser } from "@/lib/me-context";
+import { useSyncStatus, type SyncState } from "@/lib/sync-status";
 
 const PAGE_NAMES: Record<string, string> = {
   "/": "Início",
@@ -25,6 +26,29 @@ function useTrail(): string {
   return `${contextName(me)} / ${parent}${rest.length > 0 ? " / Detalhe" : ""}`;
 }
 
+const SYNC_DOT: Record<SyncState, string> = {
+  ok: "bg-success",
+  syncing: "bg-running animate-pulse-dot",
+  late: "bg-warning",
+  offline: "bg-danger",
+};
+
+/** Clicar força a atualização (design-system.md §5, Topbar). O texto muda, não só a cor. */
+function SyncIndicator() {
+  const { state, text, refresh } = useSyncStatus();
+  return (
+    <button
+      type="button"
+      onClick={refresh}
+      aria-label={`${text}. Atualizar agora`}
+      className="flex min-h-11 items-center gap-2 text-caption text-text-label hover:text-text"
+    >
+      <span aria-hidden className={`size-2 rounded-full ${SYNC_DOT[state]}`} />
+      {text}
+    </button>
+  );
+}
+
 export function Topbar({
   menuOpen,
   onMenu,
@@ -45,10 +69,7 @@ export function Topbar({
 
       <p className="mr-auto min-w-0 truncate font-mono text-caption text-text-label">{trail}</p>
 
-      <p className="flex items-center gap-2 text-caption text-text-label">
-        <span aria-hidden className="size-2 rounded-full bg-success" />
-        Sincronizado
-      </p>
+      <SyncIndicator />
 
       {/* Busca e notificações chegam com os marcos que têm dados (M3 e M7). */}
       <button
