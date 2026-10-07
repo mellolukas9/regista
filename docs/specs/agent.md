@@ -27,6 +27,7 @@ Todas as chamadas são HTTPS iniciadas pelo agente. Corpo JSON. Limites de taman
 | `POST /agent/heartbeat` | Status, versão, recursos livres e `current_job_id`; resposta inclui `cancellations` (execuções desta máquina que devem parar) |
 | `GET /agent/jobs/next?wait=30` | Long-polling por job do pool da máquina |
 | `POST /agent/jobs/{id}/start` | Robô iniciou |
+| `POST /agent/jobs/{id}/release` | Devolve à fila uma execução já atribuída que o agente não vai iniciar (o kill switch local ligou durante o long-polling); com cancelamento pedido, ela termina `cancelled` (M4) |
 | `POST /agent/jobs/{id}/complete` | Sucesso |
 | `POST /agent/jobs/{id}/fail` | Falha com código e mensagem mascarada; no `package_invalid`, também um `reason` de lista fechada (validado no servidor). O painel mostra texto fixo por código e motivo; a mensagem livre só vai nos logs da execução |
 | `GET /agent/packages/{bot_version_id}` | Manifesto, sha256, assinatura, `key_id` e uma URL pré-assinada de GET (120 s) do pacote (M4). Só de uma versão que está numa execução `assigned`/`running` desta máquina; senão 404 |

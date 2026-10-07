@@ -119,6 +119,14 @@ class JobExecutor:
                 continue
             if assignment is None:
                 continue
+            if policy.is_paused(self._settings):
+                # The switch went on while the request waited: hand the run back untouched.
+                log.info("run %s given back: the kill switch is on", assignment.short_code)
+                try:
+                    self._api.release(assignment.job_id)
+                except (JobGone, ServerUnavailable) as exc:
+                    log.warning("run %s could not be given back: %s", assignment.short_code, exc)
+                continue
             self.execute(assignment)
 
     # --- one run ------------------------------------------------------------------------------

@@ -80,6 +80,10 @@ class JobApi(Protocol):
 
     def start(self, job_id: str) -> Ack: ...
 
+    def release(self, job_id: str) -> None:
+        """Give a run back to the queue without starting it (the kill switch went on)."""
+        ...
+
     def complete(self, job_id: str) -> None: ...
 
     def fail(
@@ -146,6 +150,9 @@ class HttpJobApi:
 
     def complete(self, job_id: str) -> None:
         self._post(job_id, "complete", {})
+
+    def release(self, job_id: str) -> None:
+        self._post(job_id, "release", {})
 
     def fail(self, job_id: str, error_code: str, message: str, reason: str | None = None) -> None:
         body: dict[str, Any] = {"error_code": error_code, "message": message}

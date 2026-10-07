@@ -19,6 +19,7 @@ class FakeApi:
         self.queue: list[Assignment | Exception | None] = []
         self.started: list[str] = []
         self.completed: list[str] = []
+        self.released: list[str] = []
         self.failed: list[tuple[str, str, str]] = []
         self.failed_reasons: dict[str, str | None] = {}
         self.offers: dict[str, PackageOffer] = {}
@@ -53,6 +54,9 @@ class FakeApi:
 
     def complete(self, job_id: str) -> None:
         self.completed.append(job_id)
+
+    def release(self, job_id: str) -> None:
+        self.released.append(job_id)
 
     def fail(self, job_id: str, error_code: str, message: str, reason: str | None = None) -> None:
         self.failed.append((job_id, error_code, message))

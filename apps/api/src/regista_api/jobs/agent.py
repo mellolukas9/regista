@@ -216,6 +216,63 @@ async def start_job(
     return JobAck(status=row.status, cancel_requested=row.cancel_requested_at is not None)
 
 
+@router.post("/jobs/{job_id}/release", response_model=JobAck)
+async def release_job(
+    job_id: uuid.UUID,
+    body: EmptyRequest,
+    machine: Annotated[MachineAuth, Depends(MachineRoute())],
+) -> JobAck:
+    """The machine took a run and then cannot start it (its local kill switch went on while the
+    request was waiting). The run goes back to the queue for another machine, as if never taken;
+    a cancellation the panel already asked for wins and ends it."""
+    async with machine.session() as db:
+        row = (
+            await db.execute(
+                text(
+                    "SELECT pool_id, cancel_requested_at IS NOT NULL AS cancelled FROM jobs"
+                    " WHERE id = :j AND machine_id = :m AND status = 'assigned' FOR UPDATE"
+                ),
+                {"j": job_id, "m": machine.machine_id},
+            )
+        ).first()
+        if row is None:
+            raise await _why_not(machine, db, job_id)
+        if row.cancelled:
+            await service.finish_job(
+                db,
+                job_id=job_id,
+                from_statuses=("assigned",),
+                status="cancelled",
+                machine_id=machine.machine_id,
+            )
+            status = "cancelled"
+        else:
+            await db.execute(
+                text(
+                    "UPDATE jobs SET status = 'pending', machine_id = NULL, assigned_at = NULL,"
+                    " bot_version_id = NULL, updated_at = now() WHERE id = :j"
+                ),
+                {"j": job_id},
+            )
+            # Wake the machines of the pool that wait for work: nothing else announces this run.
+            await db.execute(
+                text("SELECT pg_notify('regista_jobs', :p)"),
+                {"p": f"{machine.tenant_id}:{row.pool_id}"},
+            )
+            status = "pending"
+        await audit.record(
+            db,
+            tenant_id=machine.tenant_id,
+            actor_type="machine",
+            actor_id=machine.machine_id,
+            action="job.released",
+            target_type="job",
+            target_id=job_id,
+            ip=machine.ip,
+        )
+    return JobAck(status=status, cancel_requested=False)
+
+
 @router.post("/jobs/{job_id}/complete", response_model=JobAck)
 async def complete_job(
     job_id: uuid.UUID,

@@ -522,3 +522,33 @@ def test_old_environments_are_cleaned_up(agent_home: Path) -> None:
 
 def test_the_identity_reader_is_what_the_executor_uses(agent_home: Path) -> None:
     assert KeyStore(agent_home / "keys", agent_account=None).read_tenant_id() == TENANT_ID
+
+
+def test_a_run_taken_just_as_the_kill_switch_went_on_is_given_back_untouched(
+    agent_home: Path, key: TestKey
+) -> None:
+    """The switch can go on while a long poll waits; the run that comes back anyway is released
+    to the queue, never started."""
+    cfg = settings()
+    stop = threading.Event()
+
+    class PausingApi(FakeApi):
+        def next_job(self, wait: int) -> Assignment | None:
+            job = super().next_job(wait)
+            if job is not None:
+                policy.pause(cfg)  # it goes on while the request was waiting
+            return job
+
+        def release(self, job_id: str) -> None:
+            super().release(job_id)
+            stop.set()
+
+    api = PausingApi()
+    api.queue = [assignment()]
+    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted())
+    worker = threading.Thread(target=executor.loop, daemon=True)
+    worker.start()
+    worker.join(15)
+    assert api.released == [assignment().job_id]
+    assert api.started == [] and api.completed == [] and api.failed == []
+    policy.resume(cfg)

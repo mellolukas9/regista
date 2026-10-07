@@ -322,3 +322,47 @@ async def test_no_route_of_the_panel_pauses_or_resumes_a_machine(rig: Rig) -> No
     app = rig.panel.env.app
     paths = {getattr(r, "path", "") for r in app.routes}
     assert not [p for p in paths if "pause" in p or "resume" in p]
+
+
+# --- giving a run back (the kill switch went on while the agent waited) ----------------------
+
+
+async def test_a_machine_can_give_back_a_run_it_has_not_started(
+    rig: Rig, signing: SigningKey
+) -> None:
+    await _publish(rig.panel, signing, rig.bot, version="1.0.0", activate=True)
+    job = await run(rig.panel.admin_a, rig.bot["id"])
+    await _take(rig)
+    assert (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()["status"] == "assigned"
+
+    r = await rig.agent.job_call(job["id"], "release")
+    assert r.status_code == 200 and r.json()["status"] == "pending"
+    detail = (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()
+    assert detail["status"] == "pending" and detail["machine_id"] is None
+    assert detail["assigned_at"] is None and detail["bot_version"] is None
+
+    other = await rig.second_agent()  # another machine of the pool takes it
+    taken = (await other.next_job()).json()
+    assert taken["job_id"] == job["id"] and taken["version"] == "1.0.0"
+
+
+async def test_only_the_machine_that_holds_the_run_can_give_it_back(rig: Rig) -> None:
+    job = await run(rig.panel.admin_a, rig.bot["id"])
+    await _take(rig)
+    other = await rig.second_agent()
+    assert (await other.job_call(job["id"], "release")).status_code == 404
+    await rig.agent.job_call(job["id"], "start")
+    r = await rig.agent.job_call(job["id"], "release")  # running: too late to give back
+    assert r.status_code == 409
+
+
+async def test_a_run_the_panel_asked_to_cancel_ends_cancelled_when_given_back(rig: Rig) -> None:
+    job = await run(rig.panel.admin_a, rig.bot["id"])
+    await _take(rig)
+    cancel = await rig.panel.admin_a.post(
+        f"/jobs/{job['id']}/cancel", headers=csrf(rig.panel.admin_a)
+    )
+    assert cancel.status_code == 200, cancel.text
+    r = await rig.agent.job_call(job["id"], "release")
+    assert r.status_code == 200 and r.json()["status"] == "cancelled"
+    assert (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()["status"] == "cancelled"
