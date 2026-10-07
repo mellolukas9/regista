@@ -112,7 +112,7 @@ export function VersionsTab({
                 <TableCell>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="font-mono text-caption text-text-secondary">{shortHash(version.package_sha256)}</span>
+                      <span className="whitespace-nowrap font-mono text-caption text-text-secondary">{shortHash(version.package_sha256)}</span>
                     </TooltipTrigger>
                     <TooltipContent className="font-mono">{version.package_sha256}</TooltipContent>
                   </Tooltip>
