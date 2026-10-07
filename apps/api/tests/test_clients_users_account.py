@@ -2,6 +2,7 @@
 
 import re
 import uuid
+from typing import Any
 
 import httpx
 from sqlalchemy import text
@@ -490,13 +491,22 @@ async def test_artemisys_reads_every_client_but_writes_in_one(
     in_b = await onboard(env.app, new_client(env.app), seed.tenant_b, env.clock)
 
     # "Todos os clientes": consolidated read, internal staff excluded, client name per row.
-    everyone = (await env.client.get("/users", params={"per_page": 50, "sort": "-email"})).json()
-    clients = {i["client_id"] for i in everyone["items"]}
-    assert {str(seed.tenant_a), str(seed.tenant_b)} <= clients
-    assert str(internal_tenant) not in clients
-    names = {i["client_name"] for i in everyone["items"]}
-    assert {"Tenant A", "Tenant B"} <= names
-    assert {in_a.email, in_b.email} & {i["email"] for i in everyone["items"]}
+    # Each person is looked up by e-mail: the test database is shared by the whole suite, so the
+    # first page of "everyone" is not all of it.
+    found: dict[str, dict[str, Any]] = {}
+    for person in (in_a, in_b):
+        listed = (await env.client.get("/users", params={"per_page": 50, "q": person.email})).json()
+        rows = [i for i in listed["items"] if i["email"] == person.email]
+        assert len(rows) == 1
+        found[person.email] = rows[0]
+    assert found[in_a.email]["client_id"] == str(seed.tenant_a)
+    assert found[in_b.email]["client_id"] == str(seed.tenant_b)
+    assert {found[in_a.email]["client_name"], found[in_b.email]["client_name"]} == {
+        "Tenant A",
+        "Tenant B",
+    }
+    everyone = (await env.client.get("/users", params={"per_page": 50})).json()
+    assert str(internal_tenant) not in {i["client_id"] for i in everyone["items"]}
 
     # Writes need one client.
     blocked = await _post(
