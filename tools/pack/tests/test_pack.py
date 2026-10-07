@@ -14,7 +14,7 @@ from regista_pack.keys import ENV_PASSPHRASE, PackError
 from regista_pkg import PackageError, parse_signature_doc
 from regista_pkg import archive as arch
 
-from .support import make_playwright_wheel, make_robot, make_wheel
+from .pack_support import make_playwright_wheel, make_robot, make_wheel
 
 PASSWORD = "uma-senha-bem-longa-e-unica"
 CLIENT_A = str(uuid.uuid4())
