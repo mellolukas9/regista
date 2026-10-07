@@ -1,0 +1,22 @@
+[project]
+name = "regista-pack"
+version = "0.0.0"
+description = "Builds and signs Regista robot packages (runs on the Artemisys build machine)"
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=46.0",
+    "regista-pkg",
+    # `pip download` fetches the wheels that go inside the package; `uv` resolves the lockfile.
+    "pip>=25.0",
+    "uv>=0.9",
+]
+
+[project.scripts]
+regista-pack = "regista_pack.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/regista_pack"]
