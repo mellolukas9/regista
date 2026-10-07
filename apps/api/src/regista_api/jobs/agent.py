@@ -37,10 +37,17 @@ AgentErrorCode = Literal[
     "robot_not_allowed",
     "runtime_missing",
     "environment_failed",
+    "robot_host_unavailable",
 ]
 # Codes whose free message is not kept: the panel shows a fixed text per code (design-system 15).
 _FIXED_TEXT_CODES = frozenset(
-    {"package_invalid", "robot_not_allowed", "runtime_missing", "environment_failed"}
+    {
+        "package_invalid",
+        "robot_not_allowed",
+        "runtime_missing",
+        "environment_failed",
+        "robot_host_unavailable",
+    }
 )
 _SAFETY_TICK_SECONDS = 10
 

@@ -15,6 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -22,6 +23,7 @@ import httpx
 import truststore
 
 from regista_agent import layout, policy, runtime, trust
+from regista_agent import service as service_module
 from regista_agent.config import AgentSettings
 from regista_agent.errors import AgentError, IdentityRejected, ServerUnavailable
 from regista_agent.jobapi import HttpJobApi, RuntimeNeed
@@ -365,6 +367,7 @@ def local_checks(settings: AgentSettings, store: KeyStore) -> list[Check]:
         )
     )
     checks.extend(runtime_acl_checks(settings))
+    checks.extend(host_checks(settings))
     return checks
 
 
@@ -402,6 +405,161 @@ def runtime_acl_checks(settings: AgentSettings) -> list[Check]:
             "os pacotes nem o cache; usuários comuns não alcançam nada.",
         )
     ]
+
+
+def _service_user(name: str, run: "service_module.Run") -> tuple[str, str]:
+    """(state, the account the service's process runs as) as the system reports them."""
+    import psutil
+
+    info = service_module.query(run, name)
+    if not info.installed:
+        return "", ""
+    pid = None
+    for line in (run(["sc.exe", "queryex", name]).stdout or "").splitlines():
+        if "PID" in line and ":" in line:
+            text = line.split(":", 1)[1].strip()
+            pid = int(text) if text.isdigit() else None
+    user = ""
+    if pid:
+        try:
+            user = psutil.Process(pid).username()
+        except (psutil.Error, OSError):
+            user = ""
+    return info.state, user
+
+
+def host_checks(settings: AgentSettings, run: "service_module.Run | None" = None) -> list[Check]:
+    """The agent and the robot host as the system really runs them (ADR 0022): the agent as a
+    service with its own account, the host (service or logon task) with the robot's account, the
+    pipe in place, the dedicated user not an administrator, and the program files unchangeable by
+    anyone but administrators."""
+    if sys.platform != "win32":
+        return []
+    from regista_agent import _windows
+    from regista_agent.config import (
+        AGENT_SERVICE_NAME,
+        DEFAULT_SERVICE_ACCOUNT,
+        ROBOT_HOST_PIPE,
+        ROBOT_SERVICE_NAME,
+    )
+
+    runner = run or service_module._default_run
+    checks: list[Check] = []
+
+    def add(name: str, status: Status, detail: str) -> None:
+        checks.append(Check(name, status, detail))
+
+    expected_agent = settings.agent_account or DEFAULT_SERVICE_ACCOUNT
+    state, user = _service_user(AGENT_SERVICE_NAME, runner)
+    if not state:
+        add(
+            "Serviço do agente",
+            "erro",
+            f"O serviço {AGENT_SERVICE_NAME} não está instalado. Rode `regista-agent service "
+            "install` como administrador.",
+        )
+    elif "RUNNING" not in state:
+        add("Serviço do agente", "erro", f"O serviço {AGENT_SERVICE_NAME} está parado ({state}).")
+    elif user and user.upper() != expected_agent.upper():
+        add(
+            "Serviço do agente",
+            "erro",
+            f"O agente roda como {user}, e deveria rodar como {expected_agent}.",
+        )
+    else:
+        add(
+            "Serviço do agente",
+            "ok",
+            f"{AGENT_SERVICE_NAME} rodando como {user or expected_agent}.",
+        )
+
+    robot = settings.effective_robot_account
+    if settings.mode == "session":
+        task = runner(["schtasks.exe", "/Query", "/TN", service_module.TASK_NAME])
+        if task.returncode != 0:
+            add(
+                "Hospedeiro do robô",
+                "erro",
+                f"A tarefa de logon {service_module.TASK_NAME} não está instalada. Rode "
+                "`regista-agent service install --mode session --robot-account <usuário>`.",
+            )
+        else:
+            add(
+                "Hospedeiro do robô",
+                "ok",
+                f"Tarefa de logon instalada para {robot or '?'}; o hospedeiro roda quando esse "
+                "usuário está logado.",
+            )
+        if robot:
+            try:
+                if _windows.is_local_administrator(robot):
+                    add(
+                        "Usuário dedicado",
+                        "erro",
+                        f"{robot} é administrador desta máquina. Um robô com essa conta pode tudo, "
+                        "inclusive ler a chave. Use um usuário comum.",
+                    )
+                else:
+                    add("Usuário dedicado", "ok", f"{robot} não é administrador.")
+            except OSError as exc:
+                add("Usuário dedicado", "aviso", f"Não foi possível conferir: {exc}")
+    else:
+        state, user = _service_user(ROBOT_SERVICE_NAME, runner)
+        expected_robot = robot or ""
+        if not state:
+            add(
+                "Hospedeiro do robô",
+                "erro",
+                f"O serviço {ROBOT_SERVICE_NAME} não está instalado. Rode `regista-agent service "
+                "install` como administrador.",
+            )
+        elif "RUNNING" not in state:
+            add(
+                "Hospedeiro do robô",
+                "erro",
+                f"O serviço {ROBOT_SERVICE_NAME} está parado ({state}).",
+            )
+        elif user and expected_robot and user.upper() != expected_robot.upper():
+            add(
+                "Hospedeiro do robô",
+                "erro",
+                f"O hospedeiro roda como {user}, e deveria rodar como {expected_robot}.",
+            )
+        elif user and user.upper() == expected_agent.upper():
+            add("Hospedeiro do robô", "erro", "O hospedeiro roda com a conta do agente.")
+        else:
+            add(
+                "Hospedeiro do robô",
+                "ok",
+                f"{ROBOT_SERVICE_NAME} rodando como {user or expected_robot}.",
+            )
+
+    if os.path.exists("\\\\.\\pipe\\" + ROBOT_HOST_PIPE):
+        add(
+            "Canal do hospedeiro",
+            "ok",
+            "O pipe do agente existe (instância única, só o robô abre).",
+        )
+    else:
+        add(
+            "Canal do hospedeiro",
+            "aviso",
+            "O pipe do agente não existe: o agente não está rodando, e as execuções vão falhar com "
+            "robot_host_unavailable.",
+        )
+
+    problems = service_module.insecure_paths(Path(sys.executable).resolve())
+    if problems:
+        add(
+            "Arquivos do programa",
+            "aviso",
+            "Podem ser alterados por contas que não são administradores: "
+            + "; ".join(problems[:4])
+            + ". Instale o programa em uma pasta só de administradores.",
+        )
+    else:
+        add("Arquivos do programa", "ok", "Só administradores e SYSTEM alteram o programa.")
+    return checks
 
 
 def runtime_check(settings: AgentSettings, api: HttpJobApi) -> Check:
