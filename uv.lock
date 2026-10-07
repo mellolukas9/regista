@@ -12,6 +12,7 @@ members = [
     "regista",
     "regista-agent",
     "regista-api",
+    "regista-pkg",
     "regista-sdk",
 ]
 
@@ -1565,6 +1566,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "regista-agent" },
     { name = "regista-api" },
+    { name = "regista-pkg" },
     { name = "regista-sdk" },
     { name = "ruff" },
     { name = "testcontainers" },
@@ -1582,6 +1584,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.4" },
     { name = "regista-agent", editable = "agent" },
     { name = "regista-api", editable = "apps/api" },
+    { name = "regista-pkg", editable = "libs/pkg" },
     { name = "regista-sdk", editable = "sdk" },
     { name = "ruff", specifier = ">=0.16" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.15" },
@@ -1596,6 +1599,7 @@ dependencies = [
     { name = "httpx" },
     { name = "psutil" },
     { name = "pydantic-settings" },
+    { name = "regista-pkg" },
     { name = "tomli-w" },
     { name = "truststore" },
 ]
@@ -1606,6 +1610,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "psutil", specifier = ">=7.2.2" },
     { name = "pydantic-settings", specifier = ">=2.15.0" },
+    { name = "regista-pkg", editable = "libs/pkg" },
     { name = "tomli-w", specifier = ">=1.2.0" },
     { name = "truststore", specifier = ">=0.10.4" },
 ]
@@ -1626,6 +1631,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pyotp" },
+    { name = "regista-pkg" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1644,10 +1650,22 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13" },
     { name = "pydantic-settings", specifier = ">=2.15" },
     { name = "pyotp", specifier = ">=2.9" },
+    { name = "regista-pkg", editable = "libs/pkg" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.1" },
     { name = "structlog", specifier = ">=26.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54" },
 ]
+
+[[package]]
+name = "regista-pkg"
+version = "0.0.0"
+source = { editable = "libs/pkg" }
+dependencies = [
+    { name = "cryptography" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "cryptography", specifier = ">=46.0" }]
 
 [[package]]
 name = "regista-sdk"

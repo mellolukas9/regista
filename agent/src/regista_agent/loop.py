@@ -12,7 +12,7 @@ import logging
 import threading
 from typing import Protocol, cast
 
-from regista_agent import modes, sysinfo
+from regista_agent import modes, sysinfo, trust
 from regista_agent.config import AgentSettings
 from regista_agent.errors import AgentError, MachineRevoked, NotEnrolled, ServerUnavailable
 from regista_agent.jobapi import HttpJobApi, JobApi
@@ -77,6 +77,7 @@ def run(
             "escolhido no cadastro da máquina, no painel."
         )
     settings.check_dev_unsigned()
+    trust.trusted_keys(settings.environment)  # refuses the dev override in production
     modes.preflight(mode)
 
     store = KeyStore(settings.keys_dir, agent_account=settings.agent_account)

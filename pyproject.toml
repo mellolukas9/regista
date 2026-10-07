@@ -6,12 +6,13 @@ requires-python = ">=3.12"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["apps/api", "sdk", "agent"]
+members = ["apps/api", "sdk", "agent", "libs/pkg"]
 
 [tool.uv.sources]
 regista-api = { workspace = true }
 regista-sdk = { workspace = true }
 regista-agent = { workspace = true }
+regista-pkg = { workspace = true }
 
 [dependency-groups]
 bots = [
@@ -21,6 +22,7 @@ dev = [
     "regista-api",
     "regista-sdk",
     "regista-agent",
+    "regista-pkg",
     "pytest>=9.1",
     "pytest-asyncio>=1.4",
     "testcontainers[postgres]>=4.15",
@@ -39,7 +41,7 @@ extend-exclude = ["apps/web", "docs"]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["regista_api", "regista", "regista_agent"]
+known-first-party = ["regista_api", "regista", "regista_agent", "regista_pkg"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "S105", "S106"]
@@ -52,9 +54,9 @@ known-first-party = ["regista_api", "regista", "regista_agent"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-mypy_path = ["apps/api/src", "sdk/src", "agent/src"]
+mypy_path = ["apps/api/src", "sdk/src", "agent/src", "libs/pkg/src"]
 explicit_package_bases = true
-files = ["apps/api", "sdk", "agent"]
+files = ["apps/api", "sdk", "agent", "libs/pkg"]
 exclude = ["migrations/versions/", "agent/tests/fixtures/", "bots/"]
 
 [[tool.mypy.overrides]]
@@ -63,7 +65,7 @@ module = ["boto3", "boto3.*", "botocore", "botocore.*", "asyncpg", "asyncpg.*", 
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["apps/api/tests", "sdk/tests", "agent/tests"]
+testpaths = ["apps/api/tests", "sdk/tests", "agent/tests", "libs/pkg/tests"]
 addopts = "--import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
