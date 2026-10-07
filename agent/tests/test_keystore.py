@@ -302,3 +302,24 @@ def test_check_fails_when_the_agent_account_is_blocked(tmp_path: Path) -> None:
     )
     problems = KeyStore(folder, agent_account=account).check_acl().problems
     assert any("bloqueada" in p for p in problems), problems
+
+
+@windows_only
+def test_the_runtime_folders_are_read_only_for_the_agent_account(tmp_path: Path) -> None:
+    """A robot runs as the agent's account, so that account must be able to run the Python and the
+    browser but never change them (docs/adr/0021)."""
+    from regista_agent import _windows
+
+    folder = tmp_path / "python"
+    folder.mkdir()
+    agent_sid = _windows.resolve_sid(r"NT SERVICE\RegistaAgent")
+    _windows.restrict_directory_read_only(folder, agent_sid)
+
+    dacl = _windows.read_dacl(folder)
+    assert dacl.protected
+    principals = {a.sid for a in dacl.aces if a.kind == "A"}
+    assert principals == {_windows.SYSTEM_SID, _windows.ADMINISTRATORS_SID, agent_sid}
+    agent_ace = next(a for a in dacl.aces if a.sid == agent_sid)
+    assert agent_ace.can_read and not agent_ace.can_write
+    for sid in (_windows.SYSTEM_SID, _windows.ADMINISTRATORS_SID):
+        assert next(a for a in dacl.aces if a.sid == sid).can_write
