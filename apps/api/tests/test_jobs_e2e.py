@@ -30,6 +30,7 @@ from .test_agent_e2e import (
     Stack,
     _csrf,
     _eventually,
+    go_silent,
     running_stack,
 )
 
@@ -327,6 +328,7 @@ async def test_a_machine_that_goes_away_in_the_middle_makes_the_run_machine_lost
         rig.agent.popen.kill()  # no goodbye: a power cut, not a clean stop
         await asyncio.to_thread(rig.agent.popen.wait, 15)
 
+        await go_silent(rig.stack, rig.machine_id)
         await rig.wait_status(job_id, "failed", seconds=40)
         job = await rig.job(job_id)
         assert job["error_code"] == "machine_lost" and job["finished_at"]

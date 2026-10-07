@@ -13,6 +13,7 @@ import pytest_asyncio
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
@@ -58,6 +59,13 @@ def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
     return asyncio.DefaultEventLoopPolicy()
 
 
+class _TestSettings(Settings):
+    """No `.env`: a developer's own file (S3 keys, a master key...) must never change what a test
+    says about the settings."""
+
+    model_config = SettingsConfigDict(env_file=None)
+
+
 def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
     """Settings for tests: real test database, in-memory e-mail, throwaway master key."""
     values: dict[str, object] = {
@@ -75,7 +83,7 @@ def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
         "rate_agent_auth_machine_per_minute": 100_000,
         **overrides,
     }
-    return Settings.model_validate(values)
+    return _TestSettings.model_validate(values)
 
 
 @dataclass(frozen=True)

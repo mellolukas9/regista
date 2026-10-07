@@ -42,7 +42,10 @@ pytestmark = pytest.mark.e2e
 Factory = async_sessionmaker[AsyncSession]
 
 HEARTBEAT_SECONDS = 1
-OFFLINE_AFTER_SECONDS = 3
+# Far longer than any run: a live agent never turns "Sem sinal" because the test machine was busy.
+# Tests that need a silent machine move that machine's clock instead (`go_silent`), so nothing
+# depends on how long a real silence takes.
+OFFLINE_AFTER_SECONDS = 3600
 PASSWORD = "uma-senha-bem-longa-e-unica-1"
 REVOKED_TEXT = "Esta máquina foi revogada no Regista"
 REJECTED_TEXT = "não aceita mais a identidade desta máquina"
@@ -131,6 +134,7 @@ class Stack:
     tenant_id: uuid.UUID
     master_key: str
     processes: list[Proc]
+    factory: Factory
     # Extra settings of the agent (the job tests turn on the development mode through these).
     agent_extra: dict[str, str] = field(default_factory=dict)
 
@@ -278,6 +282,7 @@ async def running_stack(
             tenant_id=seed.tenant_a,
             master_key=master_key,
             processes=processes,
+            factory=app_factory,
             agent_extra=agent_extra or {},
         )
     finally:
@@ -296,6 +301,25 @@ async def _machine(stack: Stack, machine_id: str) -> dict[str, object]:
     assert response.status_code == 200, response.text
     body: dict[str, object] = response.json()
     return body
+
+
+async def go_silent(stack: Stack, machine_id: str, *, seconds: float = 30) -> None:
+    """Make the machine silent for longer than the "Sem sinal" limit by moving its last signal
+    back in time, then wait for the real worker to notice. Call it after the agent is gone: the
+    wait repeats the move, so a heartbeat that was still in flight cannot undo it."""
+
+    async def silent() -> bool:
+        async with tenant_session(stack.factory, tenant_id=stack.tenant_id) as db:
+            await db.execute(
+                text(
+                    "UPDATE machines SET last_seen_at = now() - interval '2 hours'"
+                    " WHERE id = :m AND status = 'online'"
+                ),
+                {"m": uuid.UUID(machine_id)},
+            )
+        return (await _machine(stack, machine_id))["status"] == "offline"
+
+    await _eventually(silent, seconds=seconds, what="the worker to mark the machine as silent")
 
 
 async def _events(stack: Stack, machine_id: str) -> list[str]:
@@ -345,10 +369,7 @@ async def test_a_real_agent_enrolls_goes_silent_comes_back_and_is_refused_after_
     # 4. Kill the agent: after the silence the worker marks the machine "Sem sinal".
     agent.stop()
 
-    async def went_offline() -> bool:
-        return (await _machine(stack, machine_id))["status"] == "offline"
-
-    await _eventually(went_offline, seconds=30, what="the machine to be marked as without signal")
+    await go_silent(stack, machine_id)
     assert "went_offline" in await _events(stack, machine_id)
 
     summary = (await admin.get("/machines/summary")).json()
