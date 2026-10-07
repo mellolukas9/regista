@@ -30,6 +30,7 @@ UNKNOWN_IDS = (
     "job_id",
     "artifact_id",
     "version_id",
+    "bot_version_id",
 )
 
 # Rows of the permission table (design-system.md section 4) that M1 implements.

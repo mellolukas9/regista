@@ -140,3 +140,9 @@ class AgentSim:
         return await self.client.post(
             f"/agent/artifacts/{artifact_id}/uploaded", json={}, headers=self._auth()
         )
+
+    async def package(self, version_id: str) -> httpx.Response:
+        return await self.client.get(f"/agent/packages/{version_id}", headers=self._auth())
+
+    async def runtimes(self) -> httpx.Response:
+        return await self.client.get("/agent/runtimes", headers=self._auth())

@@ -48,6 +48,10 @@ class JobItem(BaseModel):
     cancel_requested_at: datetime | None
     error_code: str | None
     error_message: str | None
+    # Why a package was refused (closed list, only for package_invalid): fixed text in the panel.
+    error_reason: str | None
+    # The version the run was taken with ("v1.2.0" in the run detail); null in development.
+    bot_version: str | None
     items_successful: int
     items_failed: int
     items_abandoned: int

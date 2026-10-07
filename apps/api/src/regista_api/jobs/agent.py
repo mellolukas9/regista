@@ -22,11 +22,26 @@ from regista_api.core.errors import api_error
 from regista_api.core.redact import clean_line
 from regista_api.jobs import logs, service
 from regista_api.jobs.waiters import JobWaiters, TooManyWaiters
+from regista_pkg import REASONS
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 # Codes an agent may report. `machine_lost` and `machine_revoked` are decided by the server.
-AgentErrorCode = Literal["robot_failed", "robot_not_found", "timeout", "cancelled", "internal"]
+AgentErrorCode = Literal[
+    "robot_failed",
+    "robot_not_found",
+    "timeout",
+    "cancelled",
+    "internal",
+    "package_invalid",
+    "robot_not_allowed",
+    "runtime_missing",
+    "environment_failed",
+]
+# Codes whose free message is not kept: the panel shows a fixed text per code (design-system 15).
+_FIXED_TEXT_CODES = frozenset(
+    {"package_invalid", "robot_not_allowed", "runtime_missing", "environment_failed"}
+)
 _SAFETY_TICK_SECONDS = 10
 
 
@@ -37,6 +52,10 @@ class JobAssignment(BaseModel):
     package_name: str
     params: dict[str, object]
     timeout_seconds: int
+    # The version in use when this machine took the run (null only in development, where the
+    # robot comes from a local folder). The agent fetches the package by this id.
+    bot_version_id: uuid.UUID | None = None
+    version: str | None = None
 
 
 class JobAck(BaseModel):
@@ -56,6 +75,8 @@ class FailRequest(BaseModel):
     )
     error_code: AgentErrorCode
     message: Annotated[str, Field(max_length=2000)] = ""
+    # Only for `package_invalid`: why, from a closed list. Anything else is dropped by the server.
+    reason: Annotated[str | None, Field(max_length=40)] = None
 
 
 # Takes the oldest pending run of this machine's pool, atomically. The machine row is locked so
@@ -69,21 +90,38 @@ _TAKE = text(
     "  WHERE j.tenant_id = :t AND j.status = 'pending' AND j.cancel_requested_at IS NULL"
     "    AND NOT EXISTS (SELECT 1 FROM jobs a WHERE a.tenant_id = :t AND a.machine_id = :m"
     "                    AND a.status IN ('assigned', 'running'))"
+    "    AND (NOT :prod OR EXISTS (SELECT 1 FROM bots b WHERE b.tenant_id = j.tenant_id"
+    "                              AND b.id = j.bot_id AND b.current_version_id IS NOT NULL))"
     "  ORDER BY j.created_at, j.id FOR UPDATE OF j SKIP LOCKED LIMIT 1)"
     " UPDATE jobs SET status = 'assigned', machine_id = :m, assigned_at = now(),"
-    "  updated_at = now()"
-    " WHERE id IN (SELECT id FROM picked) RETURNING id, short_code, bot_id, params"
+    "  updated_at = now(),"
+    "  bot_version_id = (SELECT b.current_version_id FROM bots b"
+    "                    WHERE b.tenant_id = jobs.tenant_id AND b.id = jobs.bot_id)"
+    " WHERE id IN (SELECT id FROM picked)"
+    " RETURNING id, short_code, bot_id, params, bot_version_id"
 )
 
 
 async def _take(machine: MachineAuth) -> JobAssignment | None:
     async with machine.session() as db:
-        row = (await db.execute(_TAKE, {"m": machine.machine_id, "t": machine.tenant_id})).first()
+        # In production only a bot with a version in use is taken: nothing runs unsigned.
+        prod = machine.state.settings.environment == "prod"
+        row = (
+            await db.execute(_TAKE, {"m": machine.machine_id, "t": machine.tenant_id, "prod": prod})
+        ).first()
         if row is None:
             return None
         package: str = (
             await db.execute(text("SELECT package_name FROM bots WHERE id = :b"), {"b": row.bot_id})
         ).scalar_one()
+        version: str | None = None
+        if row.bot_version_id is not None:
+            version = (
+                await db.execute(
+                    text("SELECT version FROM bot_versions WHERE id = :v"),
+                    {"v": row.bot_version_id},
+                )
+            ).scalar_one()
         await audit.record(
             db,
             tenant_id=machine.tenant_id,
@@ -100,6 +138,8 @@ async def _take(machine: MachineAuth) -> JobAssignment | None:
         package_name=package,
         params=row.params if isinstance(row.params, dict) else {},
         timeout_seconds=machine.state.settings.job_timeout_seconds,
+        bot_version_id=row.bot_version_id,
+        version=version,
     )
 
 
@@ -206,6 +246,11 @@ async def fail_job(
     """`cancelled` is only believed when the panel did ask for it. Everything else is a failure,
     with the message scrubbed and cut: it came from the robot's own output."""
     message = clean_line(body.message, max_bytes=1000)
+    reason: str | None = None
+    if body.error_code in _FIXED_TEXT_CODES:
+        message = ""  # the free text only travels in the run's logs
+    if body.error_code == "package_invalid" and body.reason in REASONS:
+        reason = body.reason
     async with machine.session() as db:
         status = "failed"
         code: str | None = body.error_code
@@ -231,6 +276,7 @@ async def fail_job(
             status=status,
             error_code=code,
             error_message=message,
+            error_reason=reason,
             machine_id=machine.machine_id,
         )
         if not done:
@@ -243,7 +289,7 @@ async def fail_job(
             action=f"job.{status}",
             target_type="job",
             target_id=job_id,
-            metadata={"error_code": code},
+            metadata={"error_code": code, "error_reason": reason},
             ip=machine.ip,
         )
     return JobAck(status=status, cancel_requested=False)

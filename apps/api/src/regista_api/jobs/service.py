@@ -67,6 +67,7 @@ async def finish_job(
     status: str,
     error_code: str | None = None,
     error_message: str | None = None,
+    error_reason: str | None = None,
     machine_id: uuid.UUID | None = None,
     when: datetime | None = None,
 ) -> bool:
@@ -79,7 +80,7 @@ async def finish_job(
     result = await db.execute(
         text(
             "UPDATE jobs SET status = :s, finished_at = coalesce(CAST(:w AS timestamptz), now()),"
-            " error_code = :c, error_message = :m, updated_at = now()"
+            " error_code = :c, error_message = :m, error_reason = :r, updated_at = now()"
             " WHERE id = :j AND status = ANY(:from)"
             " AND (CAST(:mid AS uuid) IS NULL OR machine_id = :mid) RETURNING id"
         ),
@@ -88,6 +89,7 @@ async def finish_job(
             "w": when,
             "c": error_code,
             "m": (error_message or "")[:1000] or None,
+            "r": error_reason,
             "j": job_id,
             "from": list(from_statuses),
             "mid": machine_id,

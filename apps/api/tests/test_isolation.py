@@ -45,6 +45,7 @@ RESOURCE_PARAMS = {
     "job_id",
     "artifact_id",
     "version_id",
+    "bot_version_id",
 }
 
 
@@ -189,6 +190,7 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     "job_id": str(job_id),
                     "artifact_id": str(artifact_id),
                     "version_id": str(version_id),
+                    "bot_version_id": str(version_id),
                 },
                 a_markers=[
                     str(seed.tenant_a),

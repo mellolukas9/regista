@@ -114,6 +114,8 @@ class MachineItem(BaseModel):
     key_created_at: datetime | None
     created_at: datetime
     current_job: CurrentJob | None = None
+    # The agent says its local kill switch is on ("Pausada nesta máquina"). Indication only.
+    paused_locally: bool = False
 
 
 class MachineList(Page):

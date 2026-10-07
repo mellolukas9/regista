@@ -60,6 +60,7 @@ _FROM = (
     " JOIN tenants t ON t.id = j.tenant_id"
     " LEFT JOIN machines m ON m.tenant_id = j.tenant_id AND m.id = j.machine_id"
     " LEFT JOIN users u ON u.id = j.triggered_by"
+    " LEFT JOIN bot_versions bv ON bv.tenant_id = j.tenant_id AND bv.id = j.bot_version_id"
 )
 # Staff (internal tenant) are not visible under a client's RLS, so a run they started is shown as
 # theirs whichever way the row is read.
@@ -70,7 +71,8 @@ _COLUMNS = (
     "      ELSE 'Equipe Artemisys' END AS triggered_by,"
     " j.machine_id, m.name AS machine_name, j.pool_id, p.name AS pool_name, j.tenant_id,"
     " t.name AS client_name, j.created_at, j.assigned_at, j.started_at, j.finished_at,"
-    " j.cancel_requested_at, j.error_code, j.error_message, j.items_successful,"
+    " j.cancel_requested_at, j.error_code, j.error_message, j.error_reason,"
+    " bv.version AS bot_version, j.items_successful,"
     " j.items_failed, j.items_abandoned, j.items_total"
 )
 
@@ -97,6 +99,8 @@ def job_item(r: Row[Any]) -> JobItem:
         cancel_requested_at=r.cancel_requested_at,
         error_code=r.error_code,
         error_message=r.error_message,
+        error_reason=r.error_reason,
+        bot_version=r.bot_version,
         items_successful=r.items_successful,
         items_failed=r.items_failed,
         items_abandoned=r.items_abandoned,
@@ -126,11 +130,26 @@ async def load_detail(db: AsyncSession, job_id: uuid.UUID) -> JobDetail:
     )
 
 
-def _refuse_in_production(auth: Auth) -> None:
-    # Until M4 there is no signed version, and the dev runner is refused in production, so a run
-    # created there could never start. Better to say so than to leave it pending forever.
-    if auth.state.settings.environment == "prod":
-        raise api_error(409, "bot_has_no_version")
+async def _require_version_in_production(auth: Auth, db: AsyncSession, bot_id: uuid.UUID) -> None:
+    """In production only a signed version runs, so a bot without one in use could never start.
+    Better to say so than to leave the run pending forever. Development may run a local folder."""
+    if auth.state.settings.environment != "prod":
+        return
+    in_use = (
+        await db.execute(text("SELECT current_version_id FROM bots WHERE id = :b"), {"b": bot_id})
+    ).scalar_one_or_none()
+    if in_use is not None:
+        return
+    published: bool = (
+        await db.execute(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM bot_versions"
+                " WHERE bot_id = :b AND status = 'published')"
+            ),
+            {"b": bot_id},
+        )
+    ).scalar_one()
+    raise api_error(409, "bot_has_no_version_in_use" if published else "bot_has_no_version")
 
 
 # --- create -----------------------------------------------------------------------------------
@@ -140,7 +159,6 @@ def _refuse_in_production(auth: Auth) -> None:
 async def create_job(body: CreateJobRequest, auth: Annotated[Auth, _RUN]) -> JobDetail:
     if len(json.dumps(body.params)) > 8192:
         raise api_error(422, "params_too_large")
-    _refuse_in_production(auth)
     async with auth.writing() as db:
         bot = (
             await db.execute(
@@ -151,6 +169,7 @@ async def create_job(body: CreateJobRequest, auth: Annotated[Auth, _RUN]) -> Job
             raise api_error(404, "bot_not_found")
         if not bot.is_active:
             raise api_error(409, "bot_inactive")
+        await _require_version_in_production(auth, db, bot.id)
         job_id = await service.create_job(
             db,
             tenant_id=auth.client_id,
@@ -312,7 +331,6 @@ async def cancel_job(job_id: uuid.UUID, auth: Annotated[Auth, _RUN]) -> JobDetai
 @router.post("/jobs/{job_id}/rerun", response_model=JobDetail, status_code=201)
 async def rerun_job(job_id: uuid.UUID, auth: Annotated[Auth, _RUN]) -> JobDetail:
     """A new run of the same bot with the same parameters, for a run that already ended."""
-    _refuse_in_production(auth)
     async with auth.writing() as db:
         job = (
             await db.execute(
@@ -330,6 +348,7 @@ async def rerun_job(job_id: uuid.UUID, auth: Annotated[Auth, _RUN]) -> JobDetail
             raise api_error(409, "job_still_active")
         if not job.is_active:
             raise api_error(409, "bot_inactive")
+        await _require_version_in_production(auth, db, job.bot_id)
         new_id = await service.create_job(
             db,
             tenant_id=auth.client_id,

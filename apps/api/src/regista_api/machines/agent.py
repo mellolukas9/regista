@@ -130,6 +130,9 @@ class EnrollRequest(_Request):
 
 class EnrollResponse(BaseModel):
     machine_id: uuid.UUID
+    # The client of this machine. The agent keeps it in its protected folder and compares it with
+    # the client named in every signed package it is asked to run (ADR 0021).
+    tenant_id: uuid.UUID
     mode: str
     heartbeat_seconds: int
 
@@ -188,6 +191,9 @@ class HeartbeatRequest(_Request):
     # The run the agent is busy with, if any. The server answers `cancellations` with it when the
     # panel asked to cancel it or when it already ended on the server side (machine lost).
     current_job_id: uuid.UUID | None = None
+    # The local kill switch is on: the agent takes no new runs. Only an indication for the panel;
+    # nothing in the panel can pause or resume a machine.
+    paused: bool = False
 
 
 class HeartbeatResponse(BaseModel):
@@ -301,7 +307,10 @@ async def enroll(body: EnrollRequest, request: Request) -> EnrollResponse:
             ip=ip,
         )
     return EnrollResponse(
-        machine_id=found["machine_id"], mode=machine.mode, heartbeat_seconds=s.heartbeat_seconds
+        machine_id=found["machine_id"],
+        tenant_id=found["tenant_id"],
+        mode=machine.mode,
+        heartbeat_seconds=s.heartbeat_seconds,
     )
 
 
@@ -442,9 +451,11 @@ async def _record_signal(db: AsyncSession, machine: MachineAuth, body: Heartbeat
     await db.execute(
         text(
             "UPDATE machines SET last_seen_at = now(), status = 'online', agent_version = :v,"
-            " os_info = CAST(:os AS jsonb), updated_at = now() WHERE id = :m"
+            " os_info = CAST(:os AS jsonb), paused_locally = :p, updated_at = now()"
+            " WHERE id = :m"
         ),
         {
+            "p": body.paused,
             "v": body.agent_version,
             "os": body.os_info.model_dump_json(exclude_none=True),
             "m": machine.machine_id,
