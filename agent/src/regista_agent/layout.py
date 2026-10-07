@@ -76,13 +76,18 @@ def sddl_for(entry: Entry, agent_sid: str, robot_sid: str) -> str:
 
 
 def lock_applies(settings: AgentSettings) -> bool:
-    """Whether to write ACLs at all. A development agent run by a person without elevation would
-    lock its own folders for that person: there it is skipped. Production and any elevated console
-    always apply it."""
-    from regista_agent import policy
+    """Whether to write ACLs at all. Only a development agent whose robots are its own children
+    (`REGISTA_DEV_DIRECT_ROBOT`, run by a person without elevation) would lock its own folders
+    against that person, so there it is skipped. Whenever a robot host is involved, and in
+    production, the permissions are always written."""
+    from regista_agent import launcher, policy
 
-    return sys.platform == "win32" and not (
-        settings.environment == "dev" and not policy.is_elevated()
+    if sys.platform != "win32":
+        return False
+    return not (
+        settings.environment == "dev"
+        and not policy.is_elevated()
+        and launcher.direct_allowed(settings)
     )
 
 

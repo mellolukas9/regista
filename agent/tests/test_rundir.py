@@ -26,7 +26,7 @@ def settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[AgentS
         if name.startswith("REGISTA_"):
             monkeypatch.delenv(name)
     monkeypatch.setenv("REGISTA_HOME", str(tmp_path / "Regista"))
-    yield AgentSettings(environment="dev")
+    yield AgentSettings(environment="dev", dev_direct_robot=True)
 
 
 def _link_dir(link: Path, target: Path) -> None:

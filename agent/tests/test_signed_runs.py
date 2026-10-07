@@ -592,10 +592,12 @@ def test_a_development_setup_without_elevation_does_not_lock_the_folders(
 
     monkeypatch.setattr(layout, "apply", record)
     monkeypatch.setattr(policy, "is_elevated", lambda: False)
-    runtime.prepare_folders(settings(), SID, SID)
+    runtime.prepare_folders(settings(dev_direct_robot=True), SID, SID)
     assert applied == []
     runtime.prepare_folders(settings(environment="prod"), SID, SID)  # production always locks
     assert len(applied) == 1
     monkeypatch.setattr(policy, "is_elevated", lambda: True)
-    runtime.prepare_folders(settings(), SID, SID)  # an elevated dev console too
+    runtime.prepare_folders(
+        settings(dev_direct_robot=True), SID, SID
+    )  # an elevated dev console too
     assert len(applied) == 2

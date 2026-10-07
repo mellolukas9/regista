@@ -32,8 +32,13 @@ jobs:
   # Linux. The runner is an administrator, so the tests that create local users run here (and
   # are skipped, with the reason, on a developer's unelevated session).
   agent-windows:
-    name: Agent on Windows (DPAPI, ACLs)
+    name: Agent on Windows (DPAPI, ACLs, services, robot host)
     runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      # Installs the real services (NT SERVICE accounts) and runs signed probe robots through the
+      # robot host (agent/tests/test_windows_host.py, ADR 0022). Only this job sets it.
+      REGISTA_TEST_REAL_SERVICES: "1"
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0

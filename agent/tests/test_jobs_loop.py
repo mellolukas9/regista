@@ -134,6 +134,7 @@ def test_without_the_dev_flag_a_run_with_no_version_never_runs_a_folder_robot(
     server that sends one in production, or a dev agent without the flag) is refused as not found,
     and no robot is started, whatever folder of robots sits on the machine."""
     monkeypatch.setenv("REGISTA_ENVIRONMENT", "dev")  # dev alone is not enough
+    monkeypatch.setenv("REGISTA_DEV_DIRECT_ROBOT", "1")  # (the host has its own tests)
     monkeypatch.setenv("REGISTA_DEV_BOTS_DIR", str(FIXTURE_BOTS))
     settings = AgentSettings()
     assert settings.dev_unsigned is False
