@@ -561,3 +561,95 @@ def read_regular_file(path: Path, max_bytes: int) -> bytes | None:
     with os.fdopen(descriptor, "rb") as stream:
         data = stream.read(max_bytes + 1)  # it may have grown since the check
     return data if len(data) <= max_bytes else None
+
+
+# --- who is an administrator --------------------------------------------------------------------
+
+_netapi32 = ctypes.WinDLL("netapi32")
+_netapi32.NetLocalGroupGetMembers.argtypes = [
+    wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p),
+    wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.DWORD),
+    ctypes.c_void_p,
+]  # fmt: skip
+_netapi32.NetApiBufferFree.argtypes = [ctypes.c_void_p]
+_advapi32.LookupAccountSidW.argtypes = [
+    wintypes.LPCWSTR, ctypes.c_void_p, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
+    wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.DWORD),
+]  # fmt: skip
+
+
+def _group_name(sid_text: str) -> str:
+    """The (localized) name of a well-known group, from its SID."""
+    sid = ctypes.c_void_p()
+    if not _advapi32.ConvertStringSidToSidW(sid_text, ctypes.byref(sid)):
+        raise WindowsApiError(f"SID inválido: {sid_text}")
+    try:
+        name_size, domain_size, use = wintypes.DWORD(256), wintypes.DWORD(256), wintypes.DWORD()
+        name = ctypes.create_unicode_buffer(256)
+        domain = ctypes.create_unicode_buffer(256)
+        if not _advapi32.LookupAccountSidW(
+            None, sid, name, ctypes.byref(name_size), domain, ctypes.byref(domain_size),
+            ctypes.byref(use),
+        ):  # fmt: skip
+            raise WindowsApiError(f"LookupAccountSid falhou (erro {ctypes.get_last_error()})")
+        return name.value
+    finally:
+        _kernel32.LocalFree(sid)
+
+
+def is_local_administrator(account: str) -> bool:
+    """Is `account` a direct member of the local Administrators group? Nested groups and a domain
+    account that gets there through a group are not followed (the check says "not that I can
+    see"), so it can only miss, never invent, an administrator."""
+    sid_text = resolve_sid(account)
+    buffer = ctypes.c_void_p()
+    read, total = wintypes.DWORD(), wintypes.DWORD()
+    status = _netapi32.NetLocalGroupGetMembers(
+        None, _group_name(ADMINISTRATORS_SID), 0, ctypes.byref(buffer), 0xFFFFFFFF,
+        ctypes.byref(read), ctypes.byref(total), None,
+    )  # fmt: skip
+    if status != 0:
+        raise WindowsApiError(f"NetLocalGroupGetMembers falhou (erro {status})")
+    try:
+        entries = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_void_p))
+        for index in range(read.value):
+            text = wintypes.LPWSTR()
+            if _advapi32.ConvertSidToStringSidW(entries[index], ctypes.byref(text)):
+                try:
+                    if text.value == sid_text:
+                        return True
+                finally:
+                    _kernel32.LocalFree(ctypes.cast(text, ctypes.c_void_p))
+        return False
+    finally:
+        _netapi32.NetApiBufferFree(buffer)
+
+
+# SIDs that may change the program files of a service: SYSTEM, Administrators and the installer.
+TRUSTED_INSTALLER_SID = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
+_DANGEROUS_BITS = 0x2 | 0x40 | 0x10000 | _CONTROL_BITS  # add file, delete child, delete, ACL, owner
+
+
+def writable_by_others(path: Path) -> list[str]:
+    """Who, besides SYSTEM, Administrators and the installer, can change what is at `path` or
+    replace it (any folder above it included). Each entry names the SID and the folder."""
+    problems: list[str] = []
+    trusted = {SYSTEM_SID, ADMINISTRATORS_SID, TRUSTED_INSTALLER_SID, "S-1-3-0"}
+    current = path.resolve()
+    while True:
+        try:
+            dacl = read_dacl(current)
+        except OSError:
+            break
+        for ace in dacl.aces:
+            if ace.kind != "A" or ace.sid in trusted or "IO" in ace.flags:
+                continue
+            if (
+                rights_mask(ace.rights) & _DANGEROUS_BITS
+                or mask_level(rights_mask(ace.rights)) == "F"
+            ):
+                problems.append(f"{ace.sid} em {current}")
+        if current.parent == current:
+            break
+        current = current.parent
+    return problems

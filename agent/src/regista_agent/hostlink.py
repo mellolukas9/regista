@@ -21,8 +21,10 @@ import logging
 import os
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
-from regista_agent import launcher
+from regista_agent import launcher, modes
 from regista_agent.config import (
     DEFAULT_SERVICE_ACCOUNT,
     ROBOT_HOST_PIPE,
@@ -34,17 +36,29 @@ from regista_agent.errors import AgentError
 log = logging.getLogger("regista_agent")
 
 
-def make_launcher(settings: AgentSettings) -> tuple[launcher.Launcher, Callable[[], None]]:
-    """The launcher for this machine and a function that releases what it holds."""
+@dataclass(frozen=True)
+class RobotLink:
+    """How robots are started on this machine: the launcher, what to release at the end, and
+    whether the robots' session is interactive (the interactive session of the panel)."""
+
+    launcher: launcher.Launcher
+    close: Callable[[], None]
+    interactive: Callable[[], bool]
+
+
+def make_launcher(settings: AgentSettings) -> RobotLink:
+    """The launcher for this machine."""
     if launcher.direct_allowed(settings):
         log.warning("robots start as children of the agent (no robot host): development only")
-        return launcher.DirectLauncher(), lambda: None
+        return RobotLink(launcher.DirectLauncher(), lambda: None, modes.is_interactive_session)
     if sys.platform != "win32":  # pragma: no cover  (direct_allowed is true there)
         raise AgentError("O hospedeiro do robô só existe no Windows.")
     return _windows_launcher(settings)
 
 
-def _windows_launcher(settings: AgentSettings) -> tuple[launcher.Launcher, Callable[[], None]]:
+def _windows_launcher(settings: AgentSettings) -> RobotLink:
+    if sys.platform != "win32":
+        raise RuntimeError("Windows only")
     from regista_agent import _windows, winpipe
 
     account = settings.effective_robot_account
@@ -60,7 +74,7 @@ def _windows_launcher(settings: AgentSettings) -> tuple[launcher.Launcher, Calla
     session_mode = settings.mode == "session"
     my_image = os.path.normcase(os.path.realpath(sys.executable))
 
-    def accept() -> winpipe.PipeConnection | None:
+    def accept() -> launcher.Connection | None:
         connection = server.accept(timeout=2.0)  # a timeout is a TimeoutError: just asked again
         refusal = _refusal(connection)
         if refusal is not None:
@@ -69,7 +83,7 @@ def _windows_launcher(settings: AgentSettings) -> tuple[launcher.Launcher, Calla
             return None
         return connection
 
-    def _refusal(connection: winpipe.PipeConnection) -> str | None:
+    def _refusal(connection: Any) -> str | None:
         try:
             peer = connection.peer()
         except OSError as exc:
@@ -92,4 +106,9 @@ def _windows_launcher(settings: AgentSettings) -> tuple[launcher.Launcher, Calla
         channel.close()
         server.close()
 
-    return launcher.HostLauncher(channel), close
+    def interactive() -> bool:
+        # In `session` mode the host is in the dedicated user's desktop session: the machine has
+        # an interactive session for robots only while that host is connected.
+        return session_mode and channel.connected
+
+    return RobotLink(launcher.HostLauncher(channel), close, interactive)

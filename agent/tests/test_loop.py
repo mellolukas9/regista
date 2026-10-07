@@ -15,6 +15,7 @@ from regista_agent.errors import (
     NotEnrolled,
     ServerUnavailable,
 )
+from regista_agent.launcher import DirectLauncher
 from regista_agent.modes import session as session_mode
 from regista_agent.transport import HeartbeatInfo
 
@@ -157,8 +158,22 @@ def test_the_loop_checks_the_mode_before_it_starts(
     monkeypatch.setattr(session_mode, "is_interactive_session", lambda: False)
     session = FakeSession([_info()])
     with pytest.raises(AgentError, match="sessão 0"):
-        loop.run(AgentSettings(), stop=FakeStop(beats=1), session=session)
+        loop.run(
+            AgentSettings(),
+            stop=FakeStop(beats=1),
+            session=session,
+            robot_launcher=DirectLauncher(),  # the robot is the agent's child: it needs a desktop
+        )
     assert session.sent == []  # it never said it was alive
+
+
+def test_through_the_host_the_agent_needs_no_desktop_the_host_does(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(session_mode, "is_interactive_session", lambda: False)
+    modes.preflight("session", through_host=True)  # the agent is a service in session 0
+    with pytest.raises(AgentError, match="sessão 0"):
+        session_mode.preflight()  # what the host runs in session mode
 
 
 # --- the local log ----------------------------------------------------------------------------

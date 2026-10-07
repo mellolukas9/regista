@@ -58,6 +58,8 @@ def _ace(rights: str, sid: str, *, inherit: bool = True) -> str:
 
 def sddl_for(entry: Entry, agent_sid: str, robot_sid: str) -> str:
     """The protected DACL of one folder of the matrix."""
+    if sys.platform != "win32":
+        raise RuntimeError("Windows only")
     from regista_agent import _windows
 
     parts = [
@@ -86,6 +88,8 @@ def lock_applies(settings: AgentSettings) -> bool:
 
 def apply(settings: AgentSettings, agent_sid: str, robot_sid: str) -> list[str]:
     """Create the folders and write the matrix. Idempotent. Returns what it removed (legacy)."""
+    if sys.platform != "win32":
+        raise RuntimeError("Windows only")
     from regista_agent import _windows
 
     removed: list[str] = []
@@ -115,6 +119,8 @@ def apply(settings: AgentSettings, agent_sid: str, robot_sid: str) -> list[str]:
 
 def check(settings: AgentSettings, agent_sid: str, robot_sid: str) -> list[str]:
     """Where the real ACLs differ from the matrix, in plain Portuguese. Empty means they match."""
+    if sys.platform != "win32":
+        raise RuntimeError("Windows only")
     from regista_agent import _windows
 
     problems: list[str] = []

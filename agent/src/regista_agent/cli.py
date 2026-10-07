@@ -31,8 +31,13 @@ def _parser() -> argparse.ArgumentParser:
     enroll.add_argument("--key", required=True, help="Chave de registro (vale uma vez, 24 horas).")
     enroll.add_argument(
         "--agent-account",
-        help="Conta que roda o agente e que poderá ler a chave. No Windows, o padrão é "
-        "NT SERVICE\\RegistaAgent (modo Serviço); no modo Sessão, informe o usuário dedicado.",
+        help="Conta que roda o agente e que poderá ler a chave. No Windows é sempre "
+        "NT SERVICE\\RegistaAgent (o padrão); só muda em testes.",
+    )
+    enroll.add_argument(
+        "--robot-account",
+        help="Conta em que o hospedeiro e os robôs rodam. No modo Serviço é "
+        "NT SERVICE\\RegistaRobot (o padrão); no modo Sessão, informe o usuário dedicado.",
     )
     enroll.add_argument("--force", action="store_true", help="Substitui uma identidade existente.")
 
@@ -45,6 +50,29 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     commands.add_parser("diagnose", help="Verifica por que a máquina fala (ou não) com o servidor.")
+
+    host = commands.add_parser(
+        "host", help="Hospedeiro do robô (iniciado pelo serviço ou pela tarefa de logon)."
+    )
+    host.add_argument("--mode", choices=("service", "session"), default="service")
+
+    service = commands.add_parser(
+        "service", help="Instala, remove ou mostra os serviços do Regista (console elevado)."
+    )
+    actions = service.add_subparsers(dest="service_command", required=True)
+    install = actions.add_parser("install", help="Cria os serviços (ou a tarefa de logon).")
+    install.add_argument("--mode", choices=("service", "session"), help="Padrão: o do cadastro.")
+    install.add_argument("--robot-account", help="Usuário dedicado (modo Sessão).")
+    install.add_argument(
+        "--allow-insecure-path",
+        action="store_true",
+        help="Aceita instalar de uma pasta que não é só de administradores (desenvolvimento).",
+    )
+    install.add_argument("--start", action="store_true", help="Inicia os serviços ao final.")
+    actions.add_parser("uninstall", help="Remove os serviços e a tarefa de logon.")
+    actions.add_parser("status", help="Mostra os serviços, as contas e a segurança do caminho.")
+    run_service = actions.add_parser("run", help="Usado pelo gerenciador de serviços.")
+    run_service.add_argument("which", choices=("agent", "host"))
 
     setup = commands.add_parser(
         "setup",
@@ -82,13 +110,23 @@ def _parser() -> argparse.ArgumentParser:
 
 def _enroll(settings: AgentSettings, args: argparse.Namespace) -> int:
     result = enroll_module.enroll(
-        settings, url=args.url, key=args.key, agent_account=args.agent_account, force=args.force
+        settings,
+        url=args.url,
+        key=args.key,
+        agent_account=args.agent_account,
+        robot_account=args.robot_account,
+        force=args.force,
     )
     print(f"Máquina cadastrada: {result.machine_id} (modo {result.mode}).")
     print(f"Configuração gravada em {result.config_path}.")
     if result.agent_account:
         print(f"A chave só pode ser lida por {result.agent_account}, SYSTEM e Administradores.")
-    print("Agora rode `regista-agent run`, ou instale o agente como serviço.")
+    if result.robot_account:
+        print(f"Os robôs rodam como {result.robot_account}, sem acesso à chave.")
+    print(
+        "Agora prepare a máquina (`regista-agent setup`) e instale os serviços "
+        "(`regista-agent service install`)."
+    )
     return 0
 
 
@@ -100,6 +138,75 @@ def _run(settings: AgentSettings, args: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         stop.set()
         print("Agente encerrado.")
+    return 0
+
+
+def _host(args: argparse.Namespace) -> int:
+    from regista_agent import host as host_module
+    from regista_agent.modes import session as session_mode
+
+    logging.basicConfig(
+        level=logging.INFO, stream=sys.stderr, format="%(asctime)s %(levelname)s %(message)s"
+    )
+    if args.mode == "session":
+        session_mode.preflight()
+    stop = threading.Event()
+    try:
+        host_module.run_host(stop)
+    except KeyboardInterrupt:
+        stop.set()
+    return 0
+
+
+def _service(settings: AgentSettings, args: argparse.Namespace) -> int:
+    from regista_agent import service as service_module
+
+    command = args.service_command
+    if command == "install":
+        mode = args.mode or settings.mode or "service"
+        service_module.install(
+            settings,
+            mode=mode,
+            robot_account=args.robot_account or settings.robot_account,
+            allow_insecure_path=args.allow_insecure_path,
+            start=args.start,
+        )
+        print("Pronto. Confira com `regista-agent service status` e `regista-agent diagnose`.")
+    elif command == "uninstall":
+        service_module.uninstall(settings)
+    else:
+        service_module.status(settings)
+    return 0
+
+
+def _service_run(args: argparse.Namespace) -> int:
+    """The body of a Windows service: hands this process to the service manager."""
+    if sys.platform != "win32":
+        raise AgentError("Os serviços só existem no Windows.")
+    from regista_agent import host as host_module
+    from regista_agent import winservice
+
+    log = logging.getLogger("regista_agent")
+
+    def agent_work(stop: threading.Event) -> None:
+        settings = AgentSettings()
+        logs.configure(settings)
+        try:
+            loop.run(settings, stop=stop)
+        except MachineRevoked as exc:
+            log.error("%s", exc)  # a revoked machine stops for good, it is not restarted
+
+    def host_work(stop: threading.Event) -> None:
+        logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+        host_module.run_host(stop)
+
+    name = "RegistaAgent" if args.which == "agent" else "RegistaRobot"
+    code = winservice.run_service(name, agent_work if args.which == "agent" else host_work)
+    if code:
+        raise AgentError(
+            f"Este comando é do gerenciador de serviços (erro {code}); para instalar use "
+            "`regista-agent service install`."
+        )
     return 0
 
 
@@ -173,6 +280,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             reconfigure(errors="replace")
     args = _parser().parse_args(argv)
     try:
+        # The host and the body of a service never read `agent.toml`: the host has no right to.
+        if args.command == "host":
+            raise SystemExit(_host(args))
+        if args.command == "service" and args.service_command == "run":
+            raise SystemExit(_service_run(args))
         settings = AgentSettings()
         if args.command == "enroll":
             code = _enroll(settings, args)
@@ -182,6 +294,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             code = _setup(settings, args)
         elif args.command in ("allow", "disallow", "pause", "resume"):
             code = _policy(settings, args)
+        elif args.command == "service":
+            code = _service(settings, args)
         else:
             code = _diagnose(settings)
     except MachineRevoked as exc:

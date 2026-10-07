@@ -8,6 +8,7 @@ def preflight() -> None:
     if not is_interactive_session():
         raise AgentError(
             "O modo Sessão precisa rodar no desktop de um usuário logado, e este processo está "
-            "na sessão 0 do Windows (a dos serviços), que não tem desktop. Inicie o agente no "
-            'logon do usuário dedicado, por exemplo com uma tarefa agendada "ao fazer logon".'
+            "na sessão 0 do Windows (a dos serviços), que não tem desktop. O hospedeiro do robô "
+            "deve rodar no logon do usuário dedicado (`regista-agent service install --mode "
+            'session` cria a tarefa "ao fazer logon").'
         )

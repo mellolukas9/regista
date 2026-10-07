@@ -144,6 +144,8 @@ def locked(settings: AgentSettings) -> Iterator[tuple[AgentSettings, str, str]]:
 def test_each_part_of_a_run_folder_is_born_with_the_right_permissions(
     locked: tuple[AgentSettings, str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    if sys.platform != "win32":
+        pytest.skip("Windows only")
     from regista_agent import _windows
 
     settings, agent_sid, robot_sid = locked

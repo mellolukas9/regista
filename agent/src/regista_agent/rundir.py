@@ -19,6 +19,7 @@ agent out of what it created (and cannot hand itself, or anyone, more access).
 
 import logging
 import secrets
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -110,6 +111,8 @@ def create(
     try:
         subfolders = ("build", "package", "venv", "tmp", "artifacts")
         if lock:
+            if sys.platform != "win32":
+                raise RuntimeError("Windows only")
             from regista_agent import _windows
 
             assert agent_sid is not None and robot_sid is not None  # noqa: S101  (checked above)

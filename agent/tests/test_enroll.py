@@ -37,7 +37,7 @@ def _enroll(
 
 def test_enrolling_gives_the_machine_its_identity(settings: AgentSettings) -> None:
     server = EnrollServer(mode="session")
-    result = _enroll(settings, server)
+    result = _enroll(settings, server, robot_account="usuario-dedicado")
 
     assert (result.machine_id, result.mode, result.heartbeat_seconds) == (MACHINE_ID, "session", 30)
     assert server.proof_valid == [True]  # the server verified the proof of possession
@@ -49,6 +49,7 @@ def test_enrolling_gives_the_machine_its_identity(settings: AgentSettings) -> No
     assert saved.enrolled and saved.machine_id == MACHINE_ID and saved.mode == "session"
     assert saved.server_url == SERVER  # normalised: no trailing slash
     assert saved.agent_account == "tester"
+    assert saved.robot_account == "usuario-dedicado", "the robot never runs as the agent"
     # What was sent as the public key is the half of the key now on disk.
     on_disk = KeyStore(saved.keys_dir, agent_account="tester").load()
     assert base64.b64decode(str(body["public_key"])) == _public(on_disk)
@@ -142,13 +143,17 @@ def test_a_url_that_is_not_https_is_refused(bad: str) -> None:
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the account rule is about Windows services")
 def test_session_mode_needs_the_dedicated_users_account(settings: AgentSettings) -> None:
-    with pytest.raises(AgentError, match="--agent-account"):
+    with pytest.raises(AgentError, match="--robot-account"):
         _enroll(settings, EnrollServer(mode="session"), account=None)
     assert not settings.key_path.exists() and not settings.config_path.exists()
-    assert "--agent-account" in SESSION_NEEDS_ACCOUNT
+    assert "--robot-account" in SESSION_NEEDS_ACCOUNT
 
-    result = _enroll(settings, EnrollServer(mode="session"), account="usuario-dedicado")
-    assert result.agent_account == "usuario-dedicado"
+    result = _enroll(
+        settings, EnrollServer(mode="session"), account=None, robot_account="usuario-dedicado"
+    )
+    assert result.robot_account == "usuario-dedicado"
+    if sys.platform == "win32":
+        assert result.agent_account == r"NT SERVICE\RegistaAgent", "the agent is always a service"
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="the default account is a Windows service")

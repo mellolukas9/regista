@@ -547,6 +547,8 @@ _SPAWNER = (
 @pytest.mark.skipif(sys.platform != "win32", reason="Job Objects are Windows only")
 @pytest.mark.parametrize("how", ["terminate", "close"])
 def test_a_job_object_kills_the_robot_and_what_it_started(tmp_path: Path, how: str) -> None:
+    if sys.platform != "win32":
+        pytest.skip("Job Objects are Windows only")
     import psutil
 
     from regista_agent import winjob

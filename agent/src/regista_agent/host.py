@@ -91,12 +91,15 @@ class _JobContainment:
     """Windows: a Job Object (see `winjob`)."""
 
     def __init__(self) -> None:
+        if sys.platform != "win32":
+            raise RuntimeError("Windows only")
         from regista_agent import winjob
 
-        self._job = winjob.Job()
+        self._job: Any = winjob.Job()
 
     def start(self, args: list[str], **kwargs: Any) -> "subprocess.Popen[bytes]":
-        return self._job.start(args, **kwargs)
+        popen: subprocess.Popen[bytes] = self._job.start(args, **kwargs)
+        return popen
 
     def kill(self) -> None:
         self._job.terminate()
@@ -281,3 +284,43 @@ class HostCore:
                 time.sleep(0.1)
         if not active.done.is_set():
             active.containment.kill()
+
+
+def run_host(
+    stop: threading.Event,
+    *,
+    runs_root: Path | None = None,
+    agent_service: str | None = None,
+    pipe: str | None = None,
+) -> None:
+    """The host's life on Windows: connect to the agent's pipe, check that the server really is the
+    agent (the service manager's process id for the agent's service must be the pipe server's),
+    serve until the connection ends, and do it again. It never gives up while `stop` is clear: the
+    agent may be restarted, and the host comes back by itself."""
+    if sys.platform != "win32":
+        raise RuntimeError("Windows only")
+    from regista_agent import winpipe
+    from regista_agent.config import AGENT_SERVICE_NAME, ROBOT_HOST_PIPE, default_home
+
+    root = runs_root or default_home() / "runs"
+    service = agent_service or AGENT_SERVICE_NAME
+    name = pipe or ROBOT_HOST_PIPE
+    while not stop.is_set():
+        try:
+            connection = winpipe.connect(name, timeout=5.0)
+        except (TimeoutError, OSError) as exc:
+            log.debug("agent pipe not available yet: %s", exc)
+            stop.wait(2.0)
+            continue
+        try:
+            if not winpipe.server_is_service(connection, service):
+                log.warning("the pipe server is not the %s service: not trusted", service)
+                stop.wait(5.0)
+                continue
+            log.info("connected to the agent")
+            HostCore(connection, runs_root=root).serve()
+        except (OSError, ProtocolViolation) as exc:
+            log.warning("connection to the agent ended: %s", exc)
+        finally:
+            connection.close()
+        stop.wait(1.0)

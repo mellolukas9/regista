@@ -176,9 +176,15 @@ class HostChannel:
         self._thread = threading.Thread(target=self._loop, name="robot-host-channel", daemon=True)
         self._returned = threading.Condition()
         self._dropped: set[int] = set()
+        self._connected = threading.Event()
 
     def start(self) -> None:
         self._thread.start()
+
+    @property
+    def connected(self) -> bool:
+        """Is a verified host connected right now (idle or running a robot)?"""
+        return self._connected.is_set()
 
     def close(self) -> None:
         self._stop.set()
@@ -203,10 +209,13 @@ class HostChannel:
                 continue
             log.info("robot host connected")
             self._ready.put((conn, conversation))
+            self._connected.set()
             with self._returned:
                 while not self._stop.is_set() and id(conn) not in self._dropped:
                     self._returned.wait(0.5)
                 self._dropped.discard(id(conn))
+            self._connected.clear()
+            log.info("robot host disconnected")
 
     def acquire(self, timeout: float) -> tuple[Connection, HostConversation] | None:
         """The connected host, or None if none connects in `timeout` seconds."""

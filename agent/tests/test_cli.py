@@ -113,6 +113,7 @@ def test_enroll_reports_what_it_did(
         "url": "https://regista.exemplo.com.br",
         "key": "rgk_x",
         "agent_account": "tester",
+        "robot_account": None,
         "force": True,
     }
 

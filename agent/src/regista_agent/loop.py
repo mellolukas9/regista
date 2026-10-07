@@ -10,7 +10,6 @@ execute signed packages. `REGISTA_DEV_UNSIGNED=1` (development only) adds robots
 
 import logging
 import threading
-from collections.abc import Callable
 from typing import Protocol, cast
 
 from regista_agent import hostlink, launcher, modes, policy, rundir, sysinfo, trust
@@ -81,7 +80,12 @@ def run(
         )
     settings.check_dev_unsigned()
     trust.trusted_keys(settings.environment)  # refuses the dev override in production
-    modes.preflight(mode)
+    through_host = not (
+        isinstance(robot_launcher, launcher.DirectLauncher)
+        if robot_launcher is not None
+        else launcher.direct_allowed(settings)
+    )
+    modes.preflight(mode, through_host=through_host)
 
     store = KeyStore(settings.keys_dir, agent_account=settings.agent_account)
     session = session or build_session(settings, store)
@@ -99,15 +103,15 @@ def run(
     if jobs is None and isinstance(session, AgentSession):
         jobs = HttpJobApi(session)
     if jobs is not None:
-        release: Callable[[], None] = lambda: None  # noqa: E731
-        if robot_launcher is None:
-            robot_launcher, release = hostlink.make_launcher(settings)
+        link = (
+            hostlink.RobotLink(robot_launcher, lambda: None, lambda: interactive)
+            if robot_launcher is not None
+            else hostlink.make_launcher(settings)
+        )
         try:
-            _run_with_jobs(
-                settings, cast(JobsHeartbeater, session), jobs, stop, interactive, robot_launcher
-            )
+            _run_with_jobs(settings, cast(JobsHeartbeater, session), jobs, stop, link)
         finally:
-            release()
+            link.close()
         log.info("agent stopped")
         return
 
@@ -132,8 +136,7 @@ def _run_with_jobs(
     session: JobsHeartbeater,
     jobs: JobApi,
     stop: threading.Event,
-    interactive: bool,
-    robot_launcher: launcher.Launcher,
+    link: hostlink.RobotLink,
 ) -> None:
     rundir.sweep(settings)  # a crash may have left a run folder; nothing is running yet
     state = JobState()
@@ -146,7 +149,7 @@ def _run_with_jobs(
                 info = session.heartbeat(
                     agent_version=sysinfo.agent_version(),
                     os_info=sysinfo.collect(),
-                    interactive_session=interactive,
+                    interactive_session=link.interactive(),
                     current_job_id=state.current,
                     paused=policy.is_paused(settings),
                 )
@@ -164,7 +167,7 @@ def _run_with_jobs(
     thread = threading.Thread(target=beats, name="heartbeat", daemon=True)
     thread.start()
     try:
-        JobExecutor(settings, jobs, state, stop, robot_launcher=robot_launcher).loop()
+        JobExecutor(settings, jobs, state, stop, robot_launcher=link.launcher).loop()
     except MachineRevoked as exc:
         fatal.append(exc)
     finally:

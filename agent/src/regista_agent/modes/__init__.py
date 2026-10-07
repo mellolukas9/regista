@@ -23,8 +23,14 @@ def is_interactive_session() -> bool:
     return True
 
 
-def preflight(mode: str) -> None:
-    """Refuse to start in a place where the mode cannot work, with a message that says why."""
+def preflight(mode: str, *, through_host: bool = False) -> None:
+    """Refuse to start in a place where the mode cannot work, with a message that says why.
+
+    `through_host`: robots are started by the robot host (ADR 0022). The agent is then always a
+    service in session 0, and the interactive session of the `session` mode is the host's to
+    have (it checks that itself), not the agent's."""
+    if through_host and mode == "session":
+        return
     from regista_agent.modes import oneshot, service, session
 
     checks = {
