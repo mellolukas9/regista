@@ -597,6 +597,16 @@ def test_discovery_finds_every_real_route(bare_app: FastAPI) -> None:
         "POST /machines/{machine_id}/enrollment-key",
         "POST /machines/{machine_id}/revoke",
     } <= labels
+    # The routes of M4 are in every sweep: nothing about them is listed by hand elsewhere.
+    assert {
+        "GET /bots/{bot_id}/versions",
+        "POST /bots/{bot_id}/versions/uploads",
+        "POST /bots/{bot_id}/versions/{version_id}/complete",
+        "PUT /bots/{bot_id}/current-version",
+        "GET /agent/packages/{bot_version_id}",
+        "GET /agent/runtimes",
+        "POST /agent/jobs/{job_id}/release",
+    } <= labels
     assert {s.marker.kind for s in specs} == {
         "public",
         "stage",

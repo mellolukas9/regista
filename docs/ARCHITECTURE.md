@@ -85,13 +85,19 @@ regista/
 │       ├── app/                     # rotas
 │       ├── components/              # Sidebar, StatusPill, DataTable, LogViewer...
 │       └── lib/                     # cliente da API, tema
+├── libs/
+│   └── pkg/                         # regista_pkg: formato do pacote, assinatura, extração segura (API, agente e regista-pack)
+├── tools/
+│   └── pack/                        # regista-pack: keygen, build e verify (roda na máquina de build da Artemisys)
 ├── agent/
 │   ├── pyproject.toml
 │   ├── src/regista_agent/
 │   │   ├── cli.py                   # enroll, run, diagnose
 │   │   ├── enroll.py
 │   │   ├── transport.py             # HTTPS, proxy, tokens curtos
-│   │   ├── runner.py                # pacote, assinatura, uv, execução
+│   │   ├── jobs.py, robot.py        # execução do robô, processo filho
+│   │   ├── packages.py, trust.py    # download, verificação (hash, assinatura, cliente) e extração
+│   │   ├── runtime.py, environment.py  # Python e Chromium (setup) e ambiente por versão com uv
 │   │   ├── modes/                   # service.py, session.py, oneshot.py
 │   │   ├── policy.py                # allowlist local, kill switch
 │   │   └── diagnose.py

@@ -4,10 +4,21 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 
 ## Agora
 
-- **Marco atual:** M4 — Pacotes de robô assinados (branch `m4-packages`, PR #5 em rascunho; o M3 está mergeado, PR #4)
-- **Situação:** plano do M4 aprovado (ver "Decisões aprovadas para o M4"). Passo 0 pronto: os testes que dependiam de tempo real ficaram determinísticos. Passo 1 pronto: ADR 0021, runbook da chave de assinatura, specs e ROADMAP atualizados, e a **§15 do `design-system.md` proposta**. Nada de código do M4 foi escrito.
-- **Próximo passo:** o responsável aprova (ou ajusta) a §15 de `docs/specs/design-system.md`; depois, passo 2 do plano (migration `0005_bot_versions`).
-- **Pendências para decisão:** ESLint 10 (depois do M3, abaixo) e o teste do `enroll` real em console elevado antes do primeiro cliente (abaixo).
+- **Marco atual:** M5 — Filas de itens (o M4 está pronto; PR #5 aguardando revisão e merge pelo responsável do projeto)
+- **Situação:** M4 concluído (ADR 0021): `regista-pack` (chave Ed25519 cifrada, wheels `win_amd64` dentro do pacote), `bot_versions` com FKs compostas, publicação em três passos com conferência do hash no servidor, agente que verifica hash, assinatura, cliente, nome e versão antes de abrir o zip, extração contra zip slip, runtime preparado por `regista-agent setup`, ambiente por versão com `uv` offline, lista local de robôs e kill switch, `diagnose` com o estado local, aba Versões e textos da §15. Conferido de ponta a ponta com o agente real e o robô de demonstração (ver o registro de 2026-10-07).
+- **Próximo passo:** depois do merge do PR #5, abrir a branch `m5-queues` a partir da `main` e planejar o M5 (filas de itens, SDK async, retirada atômica, tentativas). Ler `docs/specs/orchestration.md` e as ADRs 0011 e 0013 antes do plano, que deve ser aprovado antes de implementar.
+- **Pendências para decisão:** ESLint 10 (depois do M3, abaixo) e a decisão da ADR 0022 (conta separada para o robô).
+
+## PRÉ-REQUISITOS OBRIGATÓRIOS ANTES DO PRIMEIRO CLIENTE EM PRODUÇÃO
+
+Não são evolução opcional: o primeiro cliente não entra em produção sem os dois.
+
+1. **O robô deve rodar com uma conta separada, de privilégio menor** (ADR 0022, proposta), que só lê o cache e o ambiente da própria versão e **não enxerga `keys\`**. Hoje o robô roda com a mesma conta do agente e, verificado no código e nas ACLs herdadas de `%ProgramData%`, consegue:
+   - **(a) `packages\` e `envs\`:** alterar ou apagar os de **qualquer** versão. A adulteração do zip é detectada (o hash é conferido a cada execução), mas o ambiente em `envs\` é reaproveitado **sem reverificação**: código plantado ali persiste e roda nas próximas execuções;
+   - **(b) `uv-cache\`:** alterar o cache de onde os ambientes são montados;
+   - **(c) `keys\`:** **ler** `machine.key` (DPAPI com escopo de máquina e entropia fixa no código) e `identity.json`, e portanto se passar pela máquina junto ao servidor;
+   - além disso: editar `agent.toml` (lista de robôs) e o arquivo `PAUSED`, e todos os usuários locais leem `packages\`, `envs\`, `logs\` e `agent.toml` (herança de `ProgramData`). Só `python\` e `browsers\` ficam somente leitura (ACL do `setup`, com teste no CI do Windows).
+2. **Chaves de produção (ativa e reserva) geradas e listadas em `libs/pkg/src/regista_pkg/trusted_keys.py`.** A lista está vazia: sem chave confiável nenhum pacote roda em produção (falha segura). Procedimento, backup e roteiro de vazamento em `docs/runbooks/chave-de-assinatura.md`.
 
 ## Decisões já aprovadas para o M0 (não perguntar de novo)
 
@@ -140,6 +151,7 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 | 2026-10-03 | M2 | Telas 7.13 e 7.14, sidebar com contador de "sem sinal", seletor de cliente com "N sem sinal" e coluna Máquinas em Clientes. Conferido no navegador contra o stack de dev: cadastrar pool e máquina, KeyReveal (sem Esc, "Concluir" só após o checkbox), máquina online, "Sem sinal" com banner e contador, revogação com nome digitado, 390 px. Docs fechados (ADR 0018 aceita, specs, runbook, ROADMAP). |
 | 2026-10-03 | M3 | Plano aprovado e M3 implementado em 14 passos (PR #4): ADRs 0019 e 0020; migration `0004`; bots, execuções, distribuição por long-polling, cancelamento, `machine_lost`, logs, capturas por URL pré-assinada; runner do agente em modo de desenvolvimento; robô de demonstração; telas Bots, Execuções, Detalhe da execução e Dashboard. Conferido no navegador com o agente real (Executar agora, cancelar no meio, agente derrubado, revogar com execução em andamento); a conferência achou um traceback no thread de logs ao revogar, corrigido com teste. O robô de demonstração passou do Google (verificação anti-robô) para a Wikipédia. |
 | 2026-10-07 | M4 | Branch `m4-packages`, PR #5 em rascunho. Plano aprovado com ajustes (chave fora da CI, só wheels `win_amd64`, runbook com reserva e roteiro de vazamento, kill switch só como indicação). **Passo 0:** carga de CPU sozinha (8 e 14 processos) não reproduziu as instabilidades (16 de 16 rodadas passaram); a falha original veio de uma suíte inteira com contêineres competindo. A análise do código achou o que dependia de tempo real e o teste do worker passou a controlar o relógio (dois deferidores periódicos recebem ticks de horário fixo e a fila é esvaziada a cada tick); nos e2e o limite de "Sem sinal" subiu para 1 h e a máquina "parada" é simulada recuando o `last_seen_at`. Uma primeira versão do teste novo falhou 1 de 3 rodadas completas (sobra de um job de varredura de outro teste segurando o `queueing_lock`) e foi corrigida. Evidência: os dois testes 20 de 20 sob 14 processos de carga; 3 de 3 rodadas completas (449 passaram, 6 pulados). O teste `test_prod_accepts_the_iam_role_setup...` falhava só localmente porque o `.env` entrava nas settings do teste; os testes agora ignoram o `.env`. **Passo 1:** ADR 0021, runbook, specs e §15 proposta. |
+| 2026-10-07 | M4 | M4 concluído em 13 passos (PR #5). Libs novas `regista_pkg` e `regista-pack`, migration `0005`, rotas de versões, rotas de pacote e de runtime para o agente, `release`, aba Versões. **Conferência manual com o agente real** (pilha isolada, robô de demonstração assinado): versão assinada rodou e a captura saiu; troca de versão pela tela (a execução seguinte usou a nova); pacote adulterado no S3 recusado (`hash_mismatch`); pacote assinado para outro cliente servido por um "servidor comprometido" recusado (`wrong_client`) e a publicação dele pela tela recusada pelo servidor; robô fora da lista local recusado; kill switch (execução fica pendente, "Pausada nesta máquina" no painel, retomar roda); `setup --from-server --wheels` instalou Python 3.13.1 e o Chromium 1243. Os textos de recusa conferem com a §15. |
 
 ## Desvios e escolhas do M1 para a revisão
 
@@ -153,7 +165,7 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 
 ## Desvios e escolhas do M2 para a revisão
 
-- **Conferência no navegador sem o `regista-agent` real.** O `enroll` grava a chave numa pasta que só um console elevado consegue escrever (por desenho), e a sessão de desenvolvimento não era elevada. A conferência usou um script que fala o mesmo protocolo (enroll, desafio, token, heartbeat) por HTTP. O agente real é coberto pelo teste ponta a ponta e, no Windows, pelo job `agent-windows` da CI (inclui "enroll por um usuário, leitura pela conta do agente"). Falta rodar o agente real num console elevado antes do primeiro cliente.
+- **Conferência no navegador sem o `regista-agent` real.** O `enroll` grava a chave numa pasta que só um console elevado consegue escrever (por desenho), e a sessão de desenvolvimento não era elevada. A conferência usou um script que fala o mesmo protocolo (enroll, desafio, token, heartbeat) por HTTP. O agente real é coberto pelo teste ponta a ponta e, no Windows, pelo job `agent-windows` da CI (inclui "enroll por um usuário, leitura pela conta do agente"). O `enroll` real em console elevado foi testado manualmente pelo responsável, com sucesso, no M2 e no M3.
 - **Não conferido no navegador:** a visão de Operador/Leitor (sem botões; coberta pela matriz de permissões do servidor) e "Gerar nova chave" numa máquina já cadastrada (coberto pelo teste da API; o botão e o diálogo foram escritos mas não exercitados na tela).
 - **A API ganhou dois campos para as telas:** `key_created_at` em máquinas ("Chave gerada há 10 min, ainda não usada") e `machines_total`/`machines_online` em Clientes.
 - **Aba Execuções, coluna "Agora" e linha "Roda: …"** ficam para o M3 (dependem de `bots` e `jobs`); a aba na URL (`?tab=`) também, pois por ora só existe o Histórico.
@@ -162,10 +174,27 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 
 ## Desvios e escolhas do M3 para a revisão
 
-- **Conferência no navegador sem console elevado.** O `enroll` grava a chave numa pasta que só um console elevado escreve. A conferência rodou o agente real com só o passo da ACL substituído (como o teste ponta a ponta). **Falta rodar o `enroll` real em console elevado antes do primeiro cliente** (já era pendência do M2).
+- **Conferência no navegador sem console elevado.** O `enroll` grava a chave numa pasta que só um console elevado escreve. A conferência rodou o agente real com só o passo da ACL substituído (como o teste ponta a ponta). O `enroll` real em console elevado já foi testado manualmente pelo responsável, com sucesso (M2 e M3).
 - **Leitor não conferido no navegador** (o cliente do seed não tem bot); vale a matriz de permissões do servidor (`test_permissions.py`).
 - **Robô morto à força.** Se o agente for morto sem aviso (corte de energia), o robô que ele iniciou pode continuar rodando; a execução vira "falhou" por `machine_lost` e o robô fica por conta de quem religar a máquina. Na conferência manual o robô não ficou órfão, mas isso não está garantido; no serviço do Windows depende do empacotamento do M8.
 - **Rota nova fora da spec:** `POST /agent/artifacts/{id}/uploaded` (o servidor confere o objeto no S3 antes de marcar a captura). Também novos: `current_job_id` no heartbeat e o limite de corpo de 256 KB só para `/agent/logs`.
 - **Dependências novas:** `boto3` (API), `psutil` (agente), `recharts` (web) e o grupo `bots` com o `playwright` (não entra no CI).
 - **`/health` agora pode responder `degraded`** (HTTP 200) quando falta a partição do mês seguinte de `job_logs`.
 - **Dev:** o `seed-dev` cria o pool "Artemisys – Demonstração" e o bot de demonstração só em banco vazio; num banco antigo, o bot se cadastra pelo painel (ver `CLAUDE.md`).
+
+## Desvios e escolhas do M4 para a revisão
+
+- **Estrutura.** Duas libs novas no workspace, fora do plano original: `libs/pkg` (`regista_pkg`: formato, mensagem assinada, verificação, extração segura e a lista de chaves confiáveis; API, agente e `regista-pack` importam a mesma implementação, então não podem divergir) e `tools/pack` (`regista-pack`). A lista de chaves confiáveis é uma só (a API e o agente leem `regista_pkg.trusted_keys`).
+- **Achados da conferência manual e da CI, corrigidos:**
+  - uma execução "atribuída" a um agente que morreu (long poll respondido depois da queda; falha antiga do M3) ficava presa: o heartbeat agora devolve à fila a execução atribuída há mais de 60 s (`assigned_orphan_seconds`) que o agente não reconhece;
+  - pausa durante um long poll: nova rota `POST /agent/jobs/{id}/release`, e o agente devolve a execução;
+  - uma nova tentativa de upload substitui a anterior incompleta (antes dava "versão já publicada");
+  - `setup`: `--wheels` (Playwright a partir das wheels de um pacote, sem PyPI), proxy e CA repassados ao `uv`, pasta do ambiente com 20 caracteres do hash (limite de 260 caracteres do Windows);
+  - o SeaweedFS do teste ficava sem volumes depois de ~60 buckets e devolvia `InternalError`; o limite foi aumentado. Duas asserções de listagem dependiam do tamanho do banco compartilhado.
+- **Publicação nos testes ponta a ponta** é feita direto no banco e no S3 (as rotas têm testes próprios): o objetivo é provar o que o agente faz com o que o servidor entrega, inclusive um servidor que mente.
+- **Máquinas cadastradas antes do M4** não têm o `identity.json`: o `diagnose` avisa e é preciso "Gerar nova chave" e novo `enroll`.
+- **Máquina de build:** o `regista-pack build` precisa de acesso ao PyPI (resolve o lockfile e baixa as wheels); o cliente nunca precisa.
+- **Limites aceitos:** pacotes só para Windows 64 bits (`win_amd64`); o Chromium do CDN do Playwright só tem HTTPS, sem hash verificável (saída: MSI offline do M8); o ambiente reaproveitado por versão pode ser alterado por um robô comprometido (ver os pré-requisitos acima e a ADR 0022).
+- **CORS do bucket:** em dev a API configura o CORS do bucket para a origem do painel (o SeaweedFS suporta); em produção a regra do bucket é da infraestrutura (M8). O CORS só é aplicado quando a API sobe: com o S3 fora do ar nessa hora, é preciso reiniciar a API.
+- **Capturas de tela no repositório.** As capturas da conferência manual (`m4-*.png`) entraram por engano num commit e foram removidas no seguinte; ficam no histórico, sem force-push (como no M2). Contêm só a interface de uma pilha descartável de dev; nenhuma senha, chave ou token.
+- **Não conferido no navegador:** a visão de Operador e Leitor da aba Versões (sem botões; coberta pela matriz de permissões do servidor) e a tela mobile (390 px) da aba.

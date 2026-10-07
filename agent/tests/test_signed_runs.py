@@ -593,3 +593,24 @@ def test_uv_gets_the_proxy_and_certificates_the_agent_is_configured_with(
     env = environment.uv_env(settings(proxy="http://proxy.corp:3128", ca_bundle=ca))
     assert env["HTTPS_PROXY"] == "http://proxy.corp:3128" and env["SSL_CERT_FILE"] == str(ca)
     assert "REGISTA_MASTER_KEY" not in env and "REGISTA_HOME" not in env
+
+
+def test_a_development_setup_without_elevation_does_not_lock_the_folders(
+    agent_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The read-only ACL would shut out the very person running a dev agent."""
+    if sys.platform != "win32":
+        pytest.skip("the ACL is a Windows thing")
+    from regista_agent import _windows
+
+    locked: list[Path] = []
+    monkeypatch.setattr(_windows, "restrict_directory_read_only", lambda d, sid: locked.append(d))
+    monkeypatch.setattr(policy, "is_elevated", lambda: False)
+    runtime.prepare_folders(settings(), SID)
+    assert locked == []
+    runtime.prepare_folders(settings(environment="prod"), SID)  # production always locks them
+    assert len(locked) == 2
+    locked.clear()
+    monkeypatch.setattr(policy, "is_elevated", lambda: True)
+    runtime.prepare_folders(settings(), SID)  # an elevated dev console too
+    assert len(locked) == 2

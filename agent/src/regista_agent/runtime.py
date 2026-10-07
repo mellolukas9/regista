@@ -25,6 +25,7 @@ from typing import Protocol
 
 import uv
 
+from regista_agent import policy
 from regista_agent.config import AgentSettings
 from regista_agent.environment import Runner, default_runner, uv_env, venv_python
 from regista_agent.errors import AgentError
@@ -158,9 +159,15 @@ Progress = Callable[[str], None]
 def prepare_folders(settings: AgentSettings, agent_sid: str | None) -> None:
     """Create `python` and `browsers` writable only by Administrators and SYSTEM, readable (and
     runnable) by the agent's account. On Windows that is an ACL with inheritance off."""
+    # A development agent run by a person without elevation would lock its own folders for that
+    # person (the ACL leaves out whoever is not an administrator): there it is skipped. Production
+    # (and any elevated console) always applies it.
+    lock = sys.platform == "win32" and not (
+        settings.environment == "dev" and not policy.is_elevated()
+    )
     for folder in (settings.python_dir, settings.browsers_dir):
         folder.mkdir(parents=True, exist_ok=True)
-        if sys.platform == "win32":
+        if lock:
             if agent_sid is None:
                 raise AgentError("Não achei a conta do agente. Cadastre a máquina antes (enroll).")
             from regista_agent import _windows

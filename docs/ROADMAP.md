@@ -92,16 +92,20 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 
 ## M4 — Pacotes de robô assinados
 
-- [ ] Tabela `bot_versions`
-- [ ] CLI `regista-pack`: empacota o robô, calcula sha256 e assina com Ed25519 (chave privada fora do repositório e do servidor)
-- [ ] Publicação de versão (só equipe Artemisys) com nota do que mudou; o servidor guarda pacote, hash e assinatura
-- [ ] Frontend: aba de versões do Detalhe do bot (7.6)
-- [ ] Agente verifica assinatura com a chave pública embutida antes de executar; recusa pacote inválido
-- [ ] Ambiente isolado por versão com `uv` (cache local)
-- [ ] Lista local de robôs permitidos por máquina e kill switch local
-- [ ] A flag de desenvolvimento do M3 (`REGISTA_DEV_UNSIGNED`) **continua, só em dev**: o agente se recusa a iniciar com ela em produção e o servidor recusa criar execução em produção de bot sem versão em uso (com teste das duas travas)
-- [ ] `regista-agent setup` (Python e Chromium exatos em `%ProgramData%\Regista`) e `diagnose` com runtimes, chaves confiáveis e estado local
-- [ ] ADR 0021 e runbook `chave-de-assinatura.md`
+- [x] Tabela `bot_versions`
+- [x] CLI `regista-pack`: empacota o robô, calcula sha256 e assina com Ed25519 (chave privada fora do repositório e do servidor)
+- [x] Publicação de versão (só equipe Artemisys) com nota do que mudou; o servidor guarda pacote, hash e assinatura
+- [x] Frontend: aba de versões do Detalhe do bot (7.6)
+- [x] Agente verifica assinatura com a chave pública embutida antes de executar; recusa pacote inválido
+- [x] Ambiente isolado por versão com `uv` (cache local)
+- [x] Lista local de robôs permitidos por máquina e kill switch local
+- [x] A flag de desenvolvimento do M3 (`REGISTA_DEV_UNSIGNED`) **continua, só em dev**: o agente se recusa a iniciar com ela em produção e o servidor recusa criar execução em produção de bot sem versão em uso (com teste das duas travas)
+- [x] `regista-agent setup` (Python e Chromium exatos em `%ProgramData%\Regista`) e `diagnose` com runtimes, chaves confiáveis e estado local
+- [x] ADR 0021 e runbook `chave-de-assinatura.md`
+- [x] Lib compartilhada `regista_pkg` (formato, assinatura, extração segura) usada pela API, pelo agente e pelo `regista-pack`
+- [x] `POST /agent/jobs/{id}/release` (devolve à fila uma execução que o agente não vai iniciar) e devolução automática de execução "atribuída" que o heartbeat não reconhece
+- [x] Tarefa do worker que expira uploads de versão abandonados
+- [ ] **Fora do M4, pré-requisito do primeiro cliente:** conta separada para o robô (ADR 0022, proposta) e chaves de produção (`docs/STATUS.md`)
 
 **Pronto quando:** pacote adulterado é recusado pelo agente e o painel mostra o motivo; pacote de outro cliente é recusado mesmo que o servidor o envie; robô fora da lista local não executa; trocar a versão em uso faz a próxima execução usar a nova.
 

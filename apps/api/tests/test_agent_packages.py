@@ -406,3 +406,23 @@ async def test_a_run_the_agent_holds_or_just_took_is_left_alone(rig: Rig) -> Non
     await _age_assignment(rig, job["id"], 600)
     assert (await rig.agent.heartbeat(current_job_id=job["id"])).status_code == 200
     assert (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()["status"] == "assigned"
+
+
+async def test_a_machine_of_another_client_cannot_give_back_a_run_of_this_one(
+    rig: Rig, signing: SigningKey
+) -> None:
+    """The cross-client case of `release`, with a run that really is assigned: client B's machine
+    gets a 404 and the run of A stays exactly as it was."""
+    job = await run(rig.panel.admin_a, rig.bot["id"])
+    await _take(rig)
+    b_client = new_client(rig.panel.env.app)
+    try:
+        bot_b = await make_bot(rig.panel, rig.panel.tenant_b, rig.panel.admin_b)
+        agent_b = await enrolled_agent(
+            rig.panel, rig.panel.tenant_b, rig.panel.admin_b, bot_b["pool_id"], b_client
+        )
+        assert (await agent_b.job_call(job["id"], "release")).status_code == 404
+    finally:
+        await b_client.aclose()
+    detail = (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()
+    assert detail["status"] == "assigned" and detail["machine_id"] == rig.agent.machine_id
