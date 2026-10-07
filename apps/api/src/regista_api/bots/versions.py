@@ -148,11 +148,12 @@ async def start_upload(
             bot = await _load_bot(db, bot_id)
             signed, signature = _check_signature(body.signature, bot, auth.client_id, settings)
             version_label = signed.manifest.version
-            # An upload that was never finished does not hold the version number.
+            # A new attempt replaces an earlier one that never finished (a failed upload, a closed
+            # dialog): the abandoned one cannot be completed any more, and never holds the number.
             await db.execute(
                 text(
                     "UPDATE bot_versions SET status = 'expired' WHERE bot_id = :b AND version = :v"
-                    " AND status = 'uploading' AND upload_expires_at < now()"
+                    " AND status = 'uploading'"
                 ),
                 {"b": bot_id, "v": signed.manifest.version},
             )

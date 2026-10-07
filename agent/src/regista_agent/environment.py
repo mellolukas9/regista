@@ -42,6 +42,12 @@ def default_runner(args: list[str], env: Mapping[str, str]) -> "subprocess.Compl
 def uv_env(settings: AgentSettings) -> dict[str, str]:
     """A small environment for uv: its own cache, no downloads, no index, no project files."""
     base = {k: v for k, v in os.environ.items() if k in _KEEP or k.upper() in _KEEP}
+    # What the agent itself uses to reach the server also applies to uv (setup downloads): the
+    # proxy and the CA bundle from `agent.toml`, and the standard variables a company sets.
+    if settings.proxy:
+        base["HTTPS_PROXY"] = base["HTTP_PROXY"] = settings.proxy
+    if settings.ca_bundle is not None:
+        base["SSL_CERT_FILE"] = str(settings.ca_bundle)
     base.update(
         {
             "UV_CACHE_DIR": str(settings.uv_cache_dir),
@@ -53,15 +59,25 @@ def uv_env(settings: AgentSettings) -> dict[str, str]:
     return base
 
 
-_KEEP = ("PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "TEMP", "TMP", "HOME")
+_KEEP = (
+    "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "TEMP", "TMP", "HOME",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "SSL_CERT_FILE", "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE", "UV_NATIVE_TLS", "UV_HTTP_TIMEOUT",
+)  # fmt: skip
 
 
 def venv_python(venv: Path) -> Path:
     return venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
 
 
+# Windows paths are limited to 260 characters and an environment holds deep ones (site-packages),
+# so its folder is named with the first 20 hex characters of the package hash. The marker inside
+# holds the whole hash.
+NAME_LENGTH = 20
+
+
 def env_path(settings: AgentSettings, sha256: str) -> Path:
-    return settings.envs_dir / sha256
+    return settings.envs_dir / sha256[:NAME_LENGTH]
 
 
 def ensure(
@@ -81,7 +97,7 @@ def ensure(
     shutil.rmtree(final, ignore_errors=True)  # a half-made one from a crash
 
     settings.envs_dir.mkdir(parents=True, exist_ok=True)
-    building = settings.envs_dir / f"{sha256}.{uuid.uuid4().hex[:8]}.tmp"
+    building = settings.envs_dir / f"{sha256[:NAME_LENGTH]}.{uuid.uuid4().hex[:6]}.tmp"
     env = uv_env(settings)
     try:
         _run(runner, [uv.find_uv_bin(), "venv", "--python", str(base_python), str(building)], env)
@@ -117,8 +133,9 @@ def prune(settings: AgentSettings, *, live: set[str]) -> None:
     """Remove the environments of packages that are no longer in the cache."""
     if not settings.envs_dir.is_dir():
         return
+    names = {sha[:NAME_LENGTH] for sha in live}
     for entry in settings.envs_dir.iterdir():
         name = entry.name.split(".")[0]
-        if name in live and not entry.name.endswith(".tmp"):
+        if name in names and not entry.name.endswith(".tmp"):
             continue
         shutil.rmtree(entry, ignore_errors=True)

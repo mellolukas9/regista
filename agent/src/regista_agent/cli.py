@@ -8,6 +8,7 @@ import logging
 import sys
 import threading
 from collections.abc import Sequence
+from pathlib import Path
 
 from regista_agent import diagnose as diagnose_module
 from regista_agent import enroll as enroll_module
@@ -55,6 +56,10 @@ def _parser() -> argparse.ArgumentParser:
     setup.add_argument("--playwright", help="Versão do Playwright, para instalar o Chromium dela.")
     setup.add_argument(
         "--chromium-revision", help="Revisão do Chromium que ela traz (conferência)."
+    )
+    setup.add_argument(
+        "--wheels",
+        help="Pasta com wheels (as de um pacote) para instalar o Playwright sem acessar o PyPI.",
     )
     setup.add_argument(
         "--from-server",
@@ -127,7 +132,8 @@ def _setup(settings: AgentSettings, args: argparse.Namespace) -> int:
             "Diga o que preparar: --from-server, ou --python X.Y.Z (e --playwright X.Y.Z para o "
             "Chromium)."
         )
-    chosen = runtime.run_setup(settings, needs, agent_sid=agent_sid)
+    wheels = Path(args.wheels) if args.wheels else None
+    chosen = runtime.run_setup(settings, needs, agent_sid=agent_sid, wheels=wheels)
     print("Máquina preparada: Python " + ", ".join(chosen.pythons or ("nenhum",)) + ".")
     print(
         "Libere os robôs com `regista-agent allow <pacote>` e confira com `regista-agent diagnose`."

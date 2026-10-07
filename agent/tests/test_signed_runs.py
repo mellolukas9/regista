@@ -514,10 +514,10 @@ def test_the_environment_is_installed_from_the_package_wheels_offline(
 
 def test_old_environments_are_cleaned_up(agent_home: Path) -> None:
     cfg = settings()
-    for name in ("a" * 64, "b" * 64, "c" * 64 + ".deadbeef.tmp"):
+    for name in ("a" * 20, "b" * 20, "c" * 20 + ".deadbe.tmp"):
         (cfg.envs_dir / name).mkdir(parents=True)
     environment.prune(cfg, live={"a" * 64})
-    assert sorted(p.name for p in cfg.envs_dir.iterdir()) == ["a" * 64]
+    assert sorted(p.name for p in cfg.envs_dir.iterdir()) == ["a" * 20]
 
 
 def test_the_identity_reader_is_what_the_executor_uses(agent_home: Path) -> None:
@@ -552,3 +552,44 @@ def test_a_run_taken_just_as_the_kill_switch_went_on_is_given_back_untouched(
     assert api.released == [assignment().job_id]
     assert api.started == [] and api.completed == [] and api.failed == []
     policy.resume(cfg)
+
+
+def test_setup_with_a_folder_of_wheels_never_asks_the_pypi_for_playwright(
+    agent_home: Path, no_runtime_acl: None, tmp_path: Path
+) -> None:
+    cfg = settings(dev_python=None)
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], env: Any) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args[1:3] == ["python", "install"]:
+            _fake_python(cfg, args[3])
+        if args[1:2] == ["venv"]:
+            exe = environment.venv_python(Path(args[-1]))
+            exe.parent.mkdir(parents=True, exist_ok=True)
+            exe.write_text("", encoding="utf-8")
+        if args[-3:] == ["playwright", "install", "chromium"]:
+            (cfg.browsers_dir / "chromium-1187").mkdir(parents=True)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    runtime.run_setup(
+        cfg,
+        [runtime.SimpleNeed("3.13.5", "1.55.0", "1187")],
+        agent_sid=SID,
+        say=print,
+        runner=runner,
+        wheels=tmp_path / "wheels",
+    )
+    pip = next(c for c in calls if c[1:3] == ["pip", "install"])
+    for flag in ("--offline", "--no-index"):
+        assert flag in pip
+    assert pip[pip.index("--find-links") + 1] == str(tmp_path / "wheels")
+
+
+def test_uv_gets_the_proxy_and_certificates_the_agent_is_configured_with(
+    agent_home: Path, tmp_path: Path
+) -> None:
+    ca = tmp_path / "company-ca.pem"
+    env = environment.uv_env(settings(proxy="http://proxy.corp:3128", ca_bundle=ca))
+    assert env["HTTPS_PROXY"] == "http://proxy.corp:3128" and env["SSL_CERT_FILE"] == str(ca)
+    assert "REGISTA_MASTER_KEY" not in env and "REGISTA_HOME" not in env

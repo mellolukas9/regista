@@ -7,7 +7,6 @@ exactly what was signed never becomes a version, and only the Artemisys team can
 
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import boto3
@@ -373,25 +372,36 @@ async def test_a_version_number_can_be_published_once(panel: Panel, signing: Sig
     assert r.status_code == 409 and await _code(r) == "version_exists"
 
 
-async def test_an_upload_that_expired_does_not_hold_the_number(
-    panel: Panel, signing: SigningKey, owner_factory: Factory
+async def test_a_new_attempt_replaces_an_upload_that_never_finished(
+    panel: Panel, signing: SigningKey
 ) -> None:
+    """A failed upload or a closed dialog must not lock the number: trying again just works, and
+    the abandoned attempt can no longer be completed."""
     bot = await _bot(panel)
     staff = await _staff(panel)
     pkg = make_package(
         signing, tenant_id=panel.tenant_a, package_name=bot["package_name"], version="1.0.0"
     )
     first = (await _start(staff, bot["id"], pkg)).json()
-    # Still open: a second start for the same number is refused.
-    assert (await _start(staff, bot["id"], pkg)).status_code == 409
-    async with tenant_session(owner_factory, tenant_id=panel.tenant_a) as db:
-        await db.execute(
-            text("UPDATE bot_versions SET upload_expires_at = :t WHERE id = :v"),
-            {"t": datetime.now(UTC) - timedelta(minutes=1), "v": uuid.UUID(first["version_id"])},
-        )
-    assert (await _complete(staff, bot["id"], first["version_id"])).status_code == 409
     second = await _start(staff, bot["id"], pkg)
     assert second.status_code == 201 and second.json()["version_id"] != first["version_id"]
+    stale = await _complete(staff, bot["id"], first["version_id"])
+    assert stale.status_code == 409 and await _code(stale) == "upload_not_open"
+    await _put(second.json(), pkg.package)
+    done = await _complete(staff, bot["id"], second.json()["version_id"])
+    assert done.status_code == 200
+
+
+async def test_a_published_version_number_cannot_be_replaced(
+    panel: Panel, signing: SigningKey
+) -> None:
+    bot = await _bot(panel)
+    await _publish(panel, signing, bot, version="1.0.0")
+    pkg = make_package(
+        signing, tenant_id=panel.tenant_a, package_name=bot["package_name"], version="1.0.0"
+    )
+    r = await _start(await _staff(panel), bot["id"], pkg)
+    assert r.status_code == 409 and await _code(r) == "version_exists"
 
 
 # --- what was uploaded ------------------------------------------------------------------------

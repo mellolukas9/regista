@@ -427,6 +427,24 @@ async def heartbeat(
     async with machine.session() as db:
         await _record_signal(db, machine, body)
         cancellations = await job_service.cancellations(db, machine.machine_id, body.current_job_id)
+        for job_id in await job_service.release_orphans(
+            db,
+            tenant_id=machine.tenant_id,
+            machine_id=machine.machine_id,
+            current_job_id=body.current_job_id,
+            older_than_seconds=machine.state.settings.assigned_orphan_seconds,
+        ):
+            await audit.record(
+                db,
+                tenant_id=machine.tenant_id,
+                actor_type="system",
+                actor_id=None,
+                action="job.orphan_released",
+                target_type="job",
+                target_id=job_id,
+                metadata={"machine_id": str(machine.machine_id)},
+                ip=machine.ip,
+            )
     return HeartbeatResponse(
         server_time=datetime.now(UTC),
         heartbeat_seconds=machine.state.settings.heartbeat_seconds,

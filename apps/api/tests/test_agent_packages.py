@@ -8,7 +8,9 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy import text
 
+from regista_api.core.db import tenant_session
 from regista_pkg import parse_signature_doc, verify
 
 from .helpers import csrf, new_client
@@ -366,3 +368,41 @@ async def test_a_run_the_panel_asked_to_cancel_ends_cancelled_when_given_back(ri
     r = await rig.agent.job_call(job["id"], "release")
     assert r.status_code == 200 and r.json()["status"] == "cancelled"
     assert (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()["status"] == "cancelled"
+
+
+# --- a run assigned to an agent that is gone ---------------------------------------------------
+
+
+async def _age_assignment(rig: Rig, job_id: str, seconds: int) -> None:
+    async with tenant_session(
+        rig.panel.env.app.state.session_factory, tenant_id=rig.panel.tenant_a
+    ) as db:
+        await db.execute(
+            text("UPDATE jobs SET assigned_at = now() - make_interval(secs => :s) WHERE id = :j"),
+            {"s": seconds, "j": uuid.UUID(job_id)},
+        )
+
+
+async def test_a_run_assigned_to_an_agent_that_is_gone_goes_back_to_the_queue(rig: Rig) -> None:
+    """A long poll answered after the agent died leaves a run assigned to an online machine that
+    nobody will start. The heartbeat, which says what the agent holds, frees it."""
+    job = await run(rig.panel.admin_a, rig.bot["id"])
+    await _take(rig)
+    await _age_assignment(rig, job["id"], 600)
+    assert (await rig.agent.heartbeat()).status_code == 200  # holds nothing
+    detail = (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()
+    assert detail["status"] == "pending" and detail["machine_id"] is None
+    again = (await rig.agent.next_job()).json()  # and it can be taken again
+    assert again["job_id"] == job["id"]
+
+
+async def test_a_run_the_agent_holds_or_just_took_is_left_alone(rig: Rig) -> None:
+    job = await run(rig.panel.admin_a, rig.bot["id"])
+    await _take(rig)
+    # Just taken: the agent may be about to start it.
+    assert (await rig.agent.heartbeat()).status_code == 200
+    assert (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()["status"] == "assigned"
+    # Old, but the agent says it is the one it holds.
+    await _age_assignment(rig, job["id"], 600)
+    assert (await rig.agent.heartbeat(current_job_id=job["id"])).status_code == 200
+    assert (await rig.panel.admin_a.get(f"/jobs/{job['id']}")).json()["status"] == "assigned"

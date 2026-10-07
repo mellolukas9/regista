@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     # "audience"), so a signature made for another environment is worthless here.
     api_public_url: str = "http://127.0.0.1:8000"
     heartbeat_seconds: int = 30
+    # A run `assigned` to a machine for this long that its heartbeat does not recognise (the
+    # response was lost: the agent restarted while a long poll was open) goes back to the queue.
+    assigned_orphan_seconds: int = 60
     # "Sem sinal" (docs/STATUS.md): an online machine silent for this long becomes offline. The
     # sweep that does it runs on this cron (6 fields, the last one is the second).
     machine_offline_after_seconds: int = 120

@@ -14,6 +14,7 @@ out (docs/STATUS.md).
 """
 
 import logging
+import re
 import shutil
 import sys
 import uuid
@@ -96,7 +97,11 @@ def installed(settings: AgentSettings) -> tuple[list[str], list[str]]:
     """(Pythons, Chromium revisions) found on this machine, for `diagnose`."""
     pythons = []
     if settings.python_dir.is_dir():
-        pythons = sorted(p.name.split("-")[1] for p in settings.python_dir.glob("cpython-*"))
+        pythons = sorted(
+            p.name.split("-")[1]
+            for p in settings.python_dir.glob("cpython-*")
+            if re.fullmatch(r"cpython-\d+\.\d+\.\d+-.*", p.name)  # not uv's `3.13` alias
+        )
     revisions = []
     base = browsers_path(settings)
     if base.is_dir():
@@ -189,6 +194,7 @@ def install_chromium(
     python: Path,
     revision: str | None,
     runner: Runner = default_runner,
+    wheels: Path | None = None,
 ) -> None:
     """Install the Chromium that exactly this Playwright version expects, with the Python of the
     package. A throwaway environment runs `playwright install`; browsers land in `browsers\\`."""
@@ -203,10 +209,11 @@ def install_chromium(
                 "install",
                 "--python",
                 str(venv_python(scratch)),
+                *_wheel_flags(wheels),
                 f"playwright=={playwright}",
             ],
         ):
-            result = runner(args, {**env, "UV_OFFLINE": "0"})
+            result = runner(args, env)
             if result.returncode != 0:
                 raise AgentError(f"{args[1]} falhou: {(result.stderr or result.stdout)[-500:]}")
         browsers_env: Mapping[str, str] = {
@@ -228,6 +235,14 @@ def install_chromium(
         )
 
 
+def _wheel_flags(wheels: Path | None) -> list[str]:
+    """With a folder of wheels (the ones inside a signed package, say) nothing is fetched from the
+    PyPI: for machines that cannot reach it."""
+    if wheels is None:
+        return []
+    return ["--offline", "--no-index", "--find-links", str(wheels)]
+
+
 def run_setup(
     settings: AgentSettings,
     needs: Iterable[Needs],
@@ -235,6 +250,7 @@ def run_setup(
     agent_sid: str | None,
     say: Progress = print,
     runner: Runner = default_runner,
+    wheels: Path | None = None,
 ) -> SetupPlan:
     """Prepare the machine for `needs`: the exact Pythons and Chromium revisions, nothing else."""
     chosen = plan(needs)
@@ -249,5 +265,5 @@ def run_setup(
             say(f"Chromium {revision}: já instalado.")
             continue
         say(f"Chromium do Playwright {playwright}: instalando...")
-        install_chromium(settings, playwright, pythons[py_version], revision, runner)
+        install_chromium(settings, playwright, pythons[py_version], revision, runner, wheels)
     return chosen
