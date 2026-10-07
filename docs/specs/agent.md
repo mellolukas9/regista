@@ -28,7 +28,7 @@ Todas as chamadas são HTTPS iniciadas pelo agente. Corpo JSON. Limites de taman
 | `GET /agent/jobs/next?wait=30` | Long-polling por job do pool da máquina |
 | `POST /agent/jobs/{id}/start` | Robô iniciou |
 | `POST /agent/jobs/{id}/complete` | Sucesso |
-| `POST /agent/jobs/{id}/fail` | Falha com código e mensagem mascarada |
+| `POST /agent/jobs/{id}/fail` | Falha com código e mensagem mascarada; no `package_invalid`, também um `reason` de lista fechada (validado no servidor). O painel mostra texto fixo por código e motivo; a mensagem livre só vai nos logs da execução |
 | `GET /agent/packages/{bot_version_id}` | Manifesto, sha256, assinatura, `key_id` e uma URL pré-assinada de GET (120 s) do pacote (M4). Só de uma versão que está numa execução `assigned`/`running` desta máquina; senão 404 |
 | `GET /agent/runtimes` | Runtimes (Python, Playwright, revisão do Chromium) das versões em uso dos bots do pool da máquina; alimenta `setup --from-server` e o `diagnose` (M4) |
 | `GET /agent/jobs/{id}/secrets` | Segredos do job, uma única vez, somente durante a execução |

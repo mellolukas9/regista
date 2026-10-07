@@ -1263,7 +1263,7 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 **PROPOSTA, aguardando aprovação do responsável.** Telas e estados do M4 (aba Versões, publicação, versão em uso, motivos de recusa do agente e a indicação de máquina pausada) que as seções 7, 9 e 14 não trazem. Depois de aprovada, vale a mesma regra: usar exatamente estes textos.
 
 **Decisões de escopo do M4 (aprovadas no plano)**
-- Publicar versão e colocar uma versão em uso: só a equipe Artemisys.
+- Publicar versão e colocar uma versão em uso: só a equipe Artemisys. A ativação tem registro próprio no `audit_log` (`bot.version_activated`), separado da publicação (`bot.version_published`), mesmo quando feita pela caixa do dialog.
 - O painel **não** pausa nem retoma máquinas: o kill switch é local. O painel só mostra a indicação "Pausada nesta máquina".
 - A versão de uma execução é a que estiver em uso **quando uma máquina a assume**. Trocar a versão em uso vale para a próxima execução assumida, inclusive as pendentes.
 
@@ -1286,7 +1286,7 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 | Elemento | Texto |
 |---|---|
 | Título e texto | "Publicar versão" / "O pacote e a assinatura saem do regista-pack. A versão é lida da assinatura." |
-| Campos | "Pacote (.rgpkg)"; "Assinatura (.rgsig)"; "O que mudou" (ajuda "Aparece na lista de versões. Até 2000 caracteres."); caixa "Colocar em uso assim que for publicada" |
+| Campos | "Pacote (.rgpkg)"; "Assinatura (.rgsig)"; "O que mudou" (ajuda "Aparece na lista de versões. Até 2000 caracteres."); caixa "Colocar em uso assim que for publicada" (desmarcada por padrão) |
 | Botões | "Voltar" e "Publicar versão" (carregando: "Conferindo…" na assinatura e "Enviando…" no pacote) |
 | Erros de campo | "Escolha o arquivo do pacote (.rgpkg)." · "Escolha o arquivo da assinatura (.rgsig)." · "Esse arquivo não é uma assinatura do regista-pack." · "Escreva até 2000 caracteres." |
 | Erros da API | "A assinatura não confere com nenhuma chave confiável. Gere o pacote de novo com o regista-pack." · "Este pacote é de outro cliente. Gere o pacote para o cliente deste bot." · "Este pacote não é deste bot. O nome do pacote do bot é <pacote>." · "A versão 1.2.0 já foi publicada para este bot." · "O arquivo enviado não é o que foi assinado. Gere o pacote de novo e publique outra vez." · "O pacote passa de 200 MB." · "Não foi possível enviar o pacote. Tente de novo." |
@@ -1304,14 +1304,26 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 
 **Detalhe da execução (7.4): motivos de recusa do agente**
 
-O banner "A execução falhou" (§14) ganha estes motivos por código. Nos casos `package_invalid`, a segunda linha é a mensagem curta enviada pelo agente, exibida escapada (é dado não confiável).
+O banner "A execução falhou" (§14) ganha um texto **fixo por código**. O painel nunca exibe texto livre vindo do agente nestes casos: o agente envia o código do erro e, no `package_invalid`, um **código de motivo de uma lista fechada**, validado no servidor (valor fora da lista é descartado e o banner mostra só a primeira linha). A mensagem livre do agente aparece apenas nos logs da execução, escapada. Para `robot_not_allowed`, `runtime_missing` e `environment_failed` o servidor também não guarda a mensagem livre.
 
-| Código | Motivo |
+| Código | Texto do banner |
 |---|---|
-| `package_invalid` | "A máquina recusou o pacote do robô." e, abaixo, o motivo do agente. Motivos que o agente envia: "O arquivo do pacote não bate com o hash publicado." · "A assinatura do pacote não é de uma chave confiável." · "O pacote é de outro cliente." · "O pacote não é deste robô." · "A versão do pacote não é a desta execução." · "O pacote tem um arquivo com caminho inseguro." · "O pacote tem arquivos demais ou grandes demais." |
+| `package_invalid` | Primeira linha: "A máquina recusou o pacote do robô." Segunda linha: o texto do motivo (tabela abaixo) |
 | `robot_not_allowed` | "Este robô não está na lista de robôs permitidos desta máquina." |
-| `runtime_missing` | "Falta preparar esta máquina para a versão 1.2.0 do robô: rode regista-agent setup como administrador." |
+| `runtime_missing` | "Falta preparar esta máquina para a versão 1.2.0 do robô: rode regista-agent setup como administrador." (a versão vem da execução, não do agente) |
 | `environment_failed` | "Não foi possível montar o ambiente do robô nesta máquina." |
+
+| Motivo (`package_invalid`) | Segunda linha do banner |
+|---|---|
+| `hash_mismatch` | "O arquivo do pacote não bate com o hash publicado." |
+| `signature_invalid` | "A assinatura do pacote não confere." |
+| `unknown_key` | "O pacote foi assinado com uma chave em que esta máquina não confia." |
+| `wrong_client` | "O pacote é de outro cliente." |
+| `wrong_package` | "O pacote não é deste robô." |
+| `wrong_version` | "A versão do pacote não é a desta execução." |
+| `unsafe_archive` | "O pacote tem um arquivo com caminho inseguro." |
+| `too_large` | "O pacote tem arquivos demais ou grandes demais." |
+| `malformed_package` | "O pacote está corrompido ou fora do formato esperado." |
 
 **Máquinas (7.13 e 7.14): indicação de máquina pausada localmente**
 
