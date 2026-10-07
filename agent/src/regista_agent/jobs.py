@@ -11,7 +11,7 @@ scrubbed message. A revoked machine kills the robot at once and stops.
 import json
 import logging
 import os
-import tempfile
+import shutil
 import threading
 import time
 from collections.abc import Mapping
@@ -20,7 +20,17 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from regista_agent import environment, packages, policy, robot, runtime, trust
+from regista_agent import (
+    environment,
+    layout,
+    packages,
+    policy,
+    robot,
+    rundir,
+    runtime,
+    safefs,
+    trust,
+)
 from regista_agent.config import AgentSettings
 from regista_agent.errors import MachineRevoked, ServerUnavailable
 from regista_agent.jobapi import Assignment, JobApi, JobGone
@@ -178,33 +188,34 @@ class JobExecutor:
         if ack.cancel_requested or self._state.cancel.is_set():
             return Outcome("cancelled")
 
-        with tempfile.TemporaryDirectory(prefix="regista-job-") as folder:
-            work = Path(folder)
-            artifacts = work / "artifacts"
-            temp = work / "tmp"
-            artifacts.mkdir()
-            temp.mkdir()
-            cancel_file = work / "cancel"
+        run = rundir.create(self._settings, *layout.identities(self._settings))
+        try:
             shipper = LogShipper(
                 self._api, job.job_id, flush_seconds=self._settings.log_flush_seconds
             )
             shipper.start()
             try:
-                prepared = self._prepare(job, work, shipper)
+                prepared = self._prepare(job, run, shipper)
                 if isinstance(prepared, Outcome):
                     return prepared
-                outcome = self._supervise(job, prepared, shipper, artifacts, temp, cancel_file)
+                outcome = self._supervise(
+                    job, prepared, shipper, run.artifacts, run.tmp, run.cancel_file
+                )
             finally:
                 shipper.close()
-            self._upload_screenshots(job, artifacts)
+            self._upload_screenshots(job, run.artifacts)
             return outcome
+        finally:
+            rundir.remove(run)  # always: nothing a robot wrote is kept or reused
 
     # --- what to run --------------------------------------------------------------------------
 
-    def _prepare(self, job: Assignment, work: Path, shipper: LogShipper) -> Prepared | Outcome:
+    def _prepare(
+        self, job: Assignment, run: rundir.RunDir, shipper: LogShipper
+    ) -> Prepared | Outcome:
         """Get the robot ready, or say why it cannot run. In order: no version means a folder
         robot (development only); then the local list; then the package (hash, signature, client,
-        name, version, unpacking); then the runtime; then the environment."""
+        name, version, unpacking); then the runtime; then a new environment for this run."""
         if job.bot_version_id is None:
             return self._prepare_unsigned(job)
 
@@ -235,7 +246,10 @@ class JobExecutor:
                 packages.Expected(tenant_id, job.package_name, job.version or ""),
                 keys,
             )
-            packages.extract(verified, work / "package")
+            packages.extract(verified, run.build)
+            # The robot never sees `build`: it gets a copy of the code only, born with the
+            # permissions of `package` (a move would bring the ones of `build`).
+            shutil.copytree(run.build / "bot", run.package / "bot", dirs_exist_ok=True)
         except PackageError as exc:
             shipper.note("ERROR", f"Pacote recusado ({exc.reason}): {exc.detail or '-'}")
             return Outcome("failed", "package_invalid", reason=exc.reason)
@@ -251,12 +265,12 @@ class JobExecutor:
             )
             return Outcome("failed", "runtime_missing")
         try:
-            python = environment.ensure(
+            python = environment.build(
                 self._settings,
-                sha256=verified.signed.sha256,
                 base_python=base_python,
-                wheels=work / "package" / "wheels",
-                lock=work / "package" / "requirements.lock",
+                wheels=run.build / "wheels",
+                lock=run.build / "requirements.lock",
+                venv=run.venv,
             )
         except (environment.EnvironmentFailed, OSError) as exc:
             shipper.note("ERROR", f"Não foi possível montar o ambiente: {exc}")
@@ -264,7 +278,7 @@ class JobExecutor:
 
         self._housekeeping(cache, job.package_name, verified.signed.sha256)
         return Prepared(
-            entry=work / "package" / "bot" / "main.py",
+            entry=run.package / "bot" / "main.py",
             python=str(python),
             browsers=runtime.browsers_path(self._settings),
         )
@@ -287,13 +301,6 @@ class JobExecutor:
         """Old versions go; the one running now stays. Failing to clean never fails a run."""
         try:
             cache.prune(package_name, protect={running})
-            live = {
-                p.stem
-                for folder in cache.root.glob("*")
-                if folder.is_dir()
-                for p in folder.glob("*.rgpkg")
-            }
-            environment.prune(self._settings, live=live)
         except OSError as exc:
             log.warning("cleanup skipped: %s", exc)
 
@@ -360,18 +367,19 @@ class JobExecutor:
     # --- screenshots --------------------------------------------------------------------------
 
     def _upload_screenshots(self, job: Assignment, artifacts: Path) -> None:
-        files = sorted(
-            p
-            for p in artifacts.iterdir()
-            if p.is_file() and p.suffix.lower() in _SCREENSHOT_SUFFIXES
-        )
+        # What the robot left in `artifacts` is not trusted: only ordinary files, never a link or a
+        # junction (it could point at the agent's key), read through a handle that is checked.
+        files = [
+            p for p in safefs.regular_files(artifacts) if p.suffix.lower() in _SCREENSHOT_SUFFIXES
+        ]
         for path in files[:MAX_SCREENSHOTS]:
-            size = path.stat().st_size
-            if size == 0 or size > MAX_SCREENSHOT_BYTES:
-                log.warning("screenshot %s skipped (size %s)", path.name, size)
+            data = safefs.read_regular_file(path, MAX_SCREENSHOT_BYTES)
+            if not data:
+                log.warning(
+                    "screenshot %s skipped (not an ordinary file, empty or too big)", path.name
+                )
                 continue
             try:
-                data = path.read_bytes()
                 artifact_id, url, headers = self._api.presign(
                     job.job_id, _SCREENSHOT_SUFFIXES[path.suffix.lower()], len(data)
                 )

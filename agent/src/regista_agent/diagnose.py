@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 import httpx
 import truststore
 
-from regista_agent import policy, runtime, trust
+from regista_agent import layout, policy, runtime, trust
 from regista_agent.config import AgentSettings
 from regista_agent.errors import AgentError, IdentityRejected, ServerUnavailable
 from regista_agent.jobapi import HttpJobApi, RuntimeNeed
@@ -369,39 +369,39 @@ def local_checks(settings: AgentSettings, store: KeyStore) -> list[Check]:
 
 
 def runtime_acl_checks(settings: AgentSettings) -> list[Check]:
-    """The runtime folders must not be writable by the account that runs the robots."""
+    """The permission matrix of the agent's folders (`layout.py`): nobody may have more, or less,
+    than the table says, and local users get nothing."""
     if sys.platform != "win32":
         return []
     from regista_agent import _windows
 
     if not settings.agent_account:
         return []
+    robot_account = settings.effective_robot_account
+    if robot_account is None:
+        return [Check("Permissões das pastas", "erro", "A conta do robô não está configurada.")]
     try:
         agent_sid = _windows.resolve_sid(settings.agent_account)
+        robot_sid = _windows.resolve_sid(robot_account)
     except OSError as exc:
-        return [Check("Permissões do runtime", "erro", str(exc))]
-    allowed = {_windows.SYSTEM_SID, _windows.ADMINISTRATORS_SID, agent_sid}
-    problems: list[str] = []
-    for folder in (settings.python_dir, settings.browsers_dir):
-        if not folder.exists():
-            continue
-        try:
-            dacl = _windows.read_dacl(folder)
-        except OSError as exc:
-            problems.append(str(exc))
-            continue
-        if not dacl.protected:
-            problems.append(f"{folder} herda permissões da pasta de cima.")
-        for ace in dacl.aces:
-            if ace.kind != "A":
-                continue
-            if ace.sid not in allowed:
-                problems.append(f"Uma conta fora da lista tem acesso a {folder}: {ace.sid}.")
-            elif ace.sid == agent_sid and ace.can_write:
-                problems.append(f"A conta do agente pode alterar {folder}; deveria só ler.")
+        return [Check("Permissões das pastas", "erro", str(exc))]
+    problems = layout.check(settings, agent_sid, robot_sid)
     if problems:
-        return [Check("Permissões do runtime", "erro", " ".join(problems))]
-    return [Check("Permissões do runtime", "ok", "Só administradores e SYSTEM alteram o runtime.")]
+        return [
+            Check(
+                "Permissões das pastas",
+                "erro",
+                " ".join(problems) + " Rode `regista-agent setup` como administrador.",
+            )
+        ]
+    return [
+        Check(
+            "Permissões das pastas",
+            "ok",
+            "Cada pasta tem só o acesso previsto: o robô não alcança a chave, a configuração, "
+            "os pacotes nem o cache; usuários comuns não alcançam nada.",
+        )
+    ]
 
 
 def runtime_check(settings: AgentSettings, api: HttpJobApi) -> Check:

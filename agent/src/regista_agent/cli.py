@@ -115,10 +115,15 @@ def _setup(settings: AgentSettings, args: argparse.Namespace) -> int:
     policy.require_elevation(settings, "O setup")
     needs: list[runtime.Needs] = []
     agent_sid: str | None = None
-    if sys.platform == "win32" and settings.agent_account:
+    robot_sid: str | None = None
+    if sys.platform == "win32":
         from regista_agent import _windows
 
-        agent_sid = _windows.resolve_sid(settings.agent_account)
+        if settings.agent_account:
+            agent_sid = _windows.resolve_sid(settings.agent_account)
+        robot_account = settings.effective_robot_account
+        if robot_account:
+            robot_sid = _windows.resolve_sid(robot_account)
     if args.from_server:
         from regista_agent.jobapi import HttpJobApi
         from regista_agent.keystore import KeyStore
@@ -133,7 +138,9 @@ def _setup(settings: AgentSettings, args: argparse.Namespace) -> int:
             "Chromium)."
         )
     wheels = Path(args.wheels) if args.wheels else None
-    chosen = runtime.run_setup(settings, needs, agent_sid=agent_sid, wheels=wheels)
+    chosen = runtime.run_setup(
+        settings, needs, agent_sid=agent_sid, robot_sid=robot_sid, wheels=wheels
+    )
     print("Máquina preparada: Python " + ", ".join(chosen.pythons or ("nenhum",)) + ".")
     print(
         "Libere os robôs com `regista-agent allow <pacote>` e confira com `regista-agent diagnose`."

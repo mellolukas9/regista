@@ -84,7 +84,7 @@ LOCAL_CHECKS = {
     "Robôs permitidos",
     "Kill switch",
     "Runtimes instalados",
-    "Permissões do runtime",
+    "Permissões das pastas",
     "Runtimes do pool",
 }
 

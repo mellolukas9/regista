@@ -16,7 +16,6 @@ out (docs/STATUS.md).
 import logging
 import re
 import shutil
-import sys
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -25,7 +24,7 @@ from typing import Protocol
 
 import uv
 
-from regista_agent import policy
+from regista_agent import layout
 from regista_agent.config import AgentSettings
 from regista_agent.environment import Runner, default_runner, uv_env, venv_python
 from regista_agent.errors import AgentError
@@ -156,23 +155,23 @@ def plan(needs: Iterable[Needs]) -> SetupPlan:
 Progress = Callable[[str], None]
 
 
-def prepare_folders(settings: AgentSettings, agent_sid: str | None) -> None:
-    """Create `python` and `browsers` writable only by Administrators and SYSTEM, readable (and
-    runnable) by the agent's account. On Windows that is an ACL with inheritance off."""
-    # A development agent run by a person without elevation would lock its own folders for that
-    # person (the ACL leaves out whoever is not an administrator): there it is skipped. Production
-    # (and any elevated console) always applies it.
-    lock = sys.platform == "win32" and not (
-        settings.environment == "dev" and not policy.is_elevated()
-    )
+def prepare_folders(
+    settings: AgentSettings, agent_sid: str | None, robot_sid: str | None = None
+) -> list[str]:
+    """Create the folders and, on Windows, write the whole permission matrix (`layout.py`): who may
+    do what under the agent's home, the runtime (`python`, `browsers`) writable only by
+    Administrators and SYSTEM and readable by the agent and the robot, and no access for local
+    users. Idempotent: it also makes safe a machine prepared by an older version. Returns what it
+    removed from that older state."""
     for folder in (settings.python_dir, settings.browsers_dir):
         folder.mkdir(parents=True, exist_ok=True)
-        if lock:
-            if agent_sid is None:
-                raise AgentError("Não achei a conta do agente. Cadastre a máquina antes (enroll).")
-            from regista_agent import _windows
-
-            _windows.restrict_directory_read_only(folder, agent_sid)
+    if not layout.lock_applies(settings):
+        return []
+    if agent_sid is None:
+        raise AgentError("Não achei a conta do agente. Cadastre a máquina antes (enroll).")
+    if robot_sid is None:
+        raise AgentError("Não achei a conta do robô. Cadastre a máquina antes (enroll).")
+    return layout.apply(settings, agent_sid, robot_sid)
 
 
 def install_python(settings: AgentSettings, version: str, runner: Runner = default_runner) -> Path:
@@ -255,13 +254,15 @@ def run_setup(
     needs: Iterable[Needs],
     *,
     agent_sid: str | None,
+    robot_sid: str | None = None,
     say: Progress = print,
     runner: Runner = default_runner,
     wheels: Path | None = None,
 ) -> SetupPlan:
     """Prepare the machine for `needs`: the exact Pythons and Chromium revisions, nothing else."""
     chosen = plan(needs)
-    prepare_folders(settings, agent_sid)
+    for removed in prepare_folders(settings, agent_sid, robot_sid):
+        say(f"Removido do que as versões anteriores deixaram: {removed}.")
     pythons: dict[str, Path] = {}
     for version in chosen.pythons:
         existing = python_executable(settings, version)

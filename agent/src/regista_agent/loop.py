@@ -12,7 +12,7 @@ import logging
 import threading
 from typing import Protocol, cast
 
-from regista_agent import modes, policy, sysinfo, trust
+from regista_agent import modes, policy, rundir, sysinfo, trust
 from regista_agent.config import AgentSettings
 from regista_agent.errors import AgentError, MachineRevoked, NotEnrolled, ServerUnavailable
 from regista_agent.jobapi import HttpJobApi, JobApi
@@ -124,6 +124,7 @@ def _run_with_jobs(
     stop: threading.Event,
     interactive: bool,
 ) -> None:
+    rundir.sweep(settings)  # a crash may have left a run folder; nothing is running yet
     state = JobState()
     fatal: list[BaseException] = []
 
