@@ -145,6 +145,9 @@ def robot_work(stop):
         peer = conn.peer()
         res["server"] = {"pid": peer.pid, "sid": peer.sid, "image": peer.image, "expected_sid": agent_sid}
         res["server_sid_ok"] = peer.sid == agent_sid
+        res["scm_pid"] = winpipe.service_process_id("SpikeAgent")
+        res["server_is_service"] = winpipe.server_is_service(conn, "SpikeAgent")
+        res["server_is_other_service"] = winpipe.server_is_service(conn, "SpikeRobot")
         res["got"] = conn.receive(timeout=30).decode()
         conn.send(b'{"type":"hello"}')
         conn.close()

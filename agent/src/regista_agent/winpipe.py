@@ -416,6 +416,58 @@ if sys.platform == "win32":
                 )
             time.sleep(0.2)
 
+    class _ServiceStatusProcess(ctypes.Structure):
+        _fields_ = [
+            ("dwServiceType", wintypes.DWORD),
+            ("dwCurrentState", wintypes.DWORD),
+            ("dwControlsAccepted", wintypes.DWORD),
+            ("dwWin32ExitCode", wintypes.DWORD),
+            ("dwServiceSpecificExitCode", wintypes.DWORD),
+            ("dwCheckPoint", wintypes.DWORD),
+            ("dwWaitHint", wintypes.DWORD),
+            ("dwProcessId", wintypes.DWORD),
+            ("dwServiceFlags", wintypes.DWORD),
+        ]
+
+    _a32.OpenSCManagerW.restype = ctypes.c_void_p
+    _a32.OpenSCManagerW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+    _a32.OpenServiceW.restype = ctypes.c_void_p
+    _a32.OpenServiceW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR, wintypes.DWORD]
+    _a32.QueryServiceStatusEx.argtypes = [
+        ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]  # fmt: skip
+    _a32.CloseServiceHandle.argtypes = [ctypes.c_void_p]
+
+    def service_process_id(service_name: str) -> int | None:
+        """The process id the service manager reports for a service (None if stopped or unknown).
+
+        Any account may ask (query-status is open to authenticated users), which is how the host,
+        who may not open the agent's process, learns whether the pipe server is the real agent."""
+        manager = _a32.OpenSCManagerW(None, None, 0x0001)  # SC_MANAGER_CONNECT
+        if not manager:
+            return None
+        try:
+            service = _a32.OpenServiceW(manager, service_name, 0x0004)  # SERVICE_QUERY_STATUS
+            if not service:
+                return None
+            try:
+                status = _ServiceStatusProcess()
+                needed = wintypes.DWORD()
+                ok = _a32.QueryServiceStatusEx(
+                    service, 0, ctypes.byref(status), ctypes.sizeof(status), ctypes.byref(needed)
+                )
+                return int(status.dwProcessId) or None if ok else None
+            finally:
+                _a32.CloseServiceHandle(service)
+        finally:
+            _a32.CloseServiceHandle(manager)
+
+    def server_is_service(connection: "PipeConnection", service_name: str) -> bool:
+        """True when the process at the server end of `connection` is the one the service manager
+        reports for `service_name` (client side)."""
+        return connection.peer().pid == service_process_id(service_name)
+
     def sid_of_service(service_name: str) -> str:
         """The SID of a service's virtual account (`NT SERVICE\\<name>`)."""
         return _windows.service_sid(service_name)
