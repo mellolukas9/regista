@@ -95,8 +95,46 @@ Ver `agent.md`: chave de registro de uso único → par Ed25519 local → desafi
 - O agente embute **uma lista** de chaves públicas (ativa e reserva), identificadas por `key_id`, e recusa qualquer pacote sem assinatura válida de uma delas. Ela não pode ser sobrescrita por configuração em produção; o override de dev faz o agente recusar iniciar em `prod`.
 - A assinatura cobre o `sha256` do pacote inteiro e o manifesto (`tenant_id`, `package_name`, versão, runtime). O agente recusa pacote de outro cliente mesmo que o servidor o envie.
 - Hash e assinatura são conferidos no servidor ao publicar (ele recalcula o `sha256` do objeto no S3) e no agente antes de abrir o zip; a extração recusa caminhos maliciosos.
-- O runtime (Python, Chromium) fica em pastas só de leitura para a conta do agente; a execução nunca baixa nada.
+- O runtime (Python, Chromium) fica em pastas só de leitura para o agente e para o robô; a execução nunca baixa nada.
 - A API do agente não tem nenhuma forma de enviar comando de shell ou código fora de pacote assinado.
+
+## Agente e robô na máquina do cliente (ADR 0022)
+
+O robô roda código que não é nosso e navega em sites de terceiros: ele não pode ter a identidade do agente. São três identidades: o **agente** (`NT SERVICE\RegistaAgent`), que guarda a chave da máquina e fala com o servidor; o **robô** (a identidade do hospedeiro: `NT SERVICE\RegistaRobot` no modo Serviço, o usuário dedicado no modo Sessão); e SYSTEM e Administradores, que podem tudo. **Usuários locais comuns não acessam nada** de `%ProgramData%\Regista`. O `regista-agent setup` (elevado, idempotente) grava a matriz, inclusive em máquinas preparadas por versões anteriores; o `diagnose` e os testes do Windows leem as ACLs de volta e comparam com a mesma tabela (`agent/src/regista_agent/layout.py`).
+
+Legenda: `F` controle total, `M` modificar, `R` ler e executar, `T` só atravessar (alcançar um caminho, sem listar nem ler), `—` nada. Herança desligada em toda pasta da tabela. O robô atravessa pastas pelo privilégio padrão "ignorar verificação de percurso" e recebe `T` na raiz e em `runs\` para que runtimes que resolvem o próprio caminho funcionem.
+
+| Caminho | Agente | Robô | SYSTEM, Admin | Usuários locais |
+|---|---|---|---|---|
+| Raiz `Regista\` | R | T | F | — |
+| `keys\` (`machine.key`, `identity.json`) | R | — | F | — |
+| `agent.toml` | R | — | F | — |
+| `PAUSED` (kill switch) | R | — | F | — |
+| `logs\` | M | — | F | — |
+| `packages\` (zips em cache; hash e assinatura conferidos a cada execução) | M | — | F | — |
+| `uv-cache\` | M | — | F | — |
+| `python\` e `browsers\` (escrita só do `setup`) | R | R | F | — |
+| `runs\` | F | T | F | — |
+| `runs\<id>\build\` (pacote extraído; dele sai o ambiente) | F | — | F | — |
+| `runs\<id>\package\` (código da versão) | F | R | F | — |
+| `runs\<id>\venv\` (ambiente novo desta execução) | F | R | F | — |
+| `runs\<id>\tmp\` (TEMP, perfil falso do robô) | F | M | F | — |
+| `runs\<id>\artifacts\` (capturas) | F | M | F | — |
+| `runs\<id>\cancel` | F | R | F | — |
+
+- `agent.toml` e `PAUSED` ficam **sem escrita para o agente**: só um administrador muda a lista de robôs e o kill switch, então um agente ou robô comprometido não os altera.
+- A pasta da execução nasce com as permissões gravadas **antes** de popular (nada de varrer ACLs depois). Em `tmp\` e `artifacts\` o direito implícito do dono de mudar a ACL é cortado (Owner Rights), então o robô não consegue trancar o agente para fora do que criou.
+- Nada que o robô escreve é reaproveitado: o ambiente é novo por execução, a pasta é apagada pelo agente ao fim (sempre) e a varredura ao iniciar o agente apaga o que uma queda deixou. O `uv` instala sem cache (ele não reconfere o hash do que sai do cache; medido) e com cópia, não link (um hardlink herdaria a ACL do cache).
+- **O que o robô deixa na pasta é dado não confiável.** Um robô pode criar uma junction em `artifacts\` apontando para `keys\`: o agente só lê arquivos regulares, abertos como eles mesmos e conferidos pelo handle (sem janela entre conferir e usar), e apaga a pasta sem seguir links.
+- O ambiente do processo do robô é montado pelo agente com lista de permissão; `PYTHONNOUSERSITE=1` e `PYTHONDONTWRITEBYTECODE=1`; no modo Serviço o perfil (`HOME`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`) fica dentro de `tmp\`. O Python do ambiente ignora `PythonPath` do registro do usuário (HKCU) e o ambiente do robô não herda `HKCU\Environment` (medido no spike e repetido pelo `isolation_probe`). No modo Sessão o perfil do usuário dedicado é o do robô, por decisão de produto.
+
+### O canal entre o agente e o hospedeiro
+
+- Named pipe `\\.\pipe\regista-robot-host`, criado **pelo agente**: instância única (`FILE_FLAG_FIRST_PIPE_INSTANCE`, máximo 1), clientes remotos recusados, DACL só para SYSTEM e o SID do hospedeiro. Quem quiser abrir o pipe sem ser o hospedeiro recebe "acesso negado"; um segundo cliente com a identidade do robô encontra a instância ocupada.
+- O agente confere quem conectou **pelo kernel**: o SID do token do cliente (identificação por `ImpersonateNamedPipeClient`), o PID contra o que o gerenciador de serviços informa para `RegistaRobot` (modo Serviço) ou a sessão interativa (modo Sessão) e, quando consegue olhar o processo, o executável. O hospedeiro confere o servidor: o PID do servidor do pipe tem de ser o do serviço `RegistaAgent`.
+- Protocolo de mão única: o agente manda `run`, `cancel`, `ping`; o hospedeiro devolve `hello`, `started`, `output`, `exited`, `start_failed`, `pong`. **O hospedeiro não pede nada** (nem token, nem chave, nem dado do servidor). Tudo que vem dele é entrada não confiável; mensagem malformada, grande demais, de outra execução, de tipo desconhecido ou fora de ordem derruba a conexão e a execução falha com `robot_host_unavailable`.
+- Sem fallback: sem hospedeiro, a execução falha; o robô nunca roda com a conta do agente. O hospedeiro roda cada robô num Job Object com `KILL_ON_JOB_CLOSE`: se o hospedeiro cai, os robôs morrem.
+- **Risco residual aceito (ADR 0022):** robô e hospedeiro têm a mesma identidade, então um robô comprometido consegue abrir ou injetar código no processo do hospedeiro. Isso **não** dá acesso à chave nem ao agente; o pior caso é falsificar a saída e o resultado da **própria** execução (há teste). O perfil e o `HKCU` da identidade do robô persistem entre execuções. Um administrador da máquina continua podendo tudo.
 
 ## Modelo de ameaças
 
@@ -109,7 +147,7 @@ Ver `agent.md`: chave de registro de uso único → par Ed25519 local → desafi
 | Chave de assinatura vazada | Reserva já confiável nos agentes; roteiro no runbook; remover a chave exige atualizar o agente |
 | Pacote adulterado no S3 ou no caminho | sha256 e assinatura conferidos antes de abrir o zip |
 | Rede do cliente exposta | Somente conexão de saída; sem portas abertas; domínio fixo; TLS verificado |
-| Robô explorado | Usuário Windows dedicado sem admin |
+| Robô explorado | Conta própria sem admin e sem acesso à chave, ao `agent.toml`, ao kill switch, aos pacotes e ao cache; código e ambiente novos por execução; canal com o agente de mão única (seção acima) |
 | Conteúdo malicioso em logs | Tratado como não confiável: limite de tamanho, exibição escapada |
 | Uso indevido de conta | MFA, bloqueio, sessões revogáveis, auditoria |
 
