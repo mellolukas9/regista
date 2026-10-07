@@ -237,7 +237,9 @@ async def seed_dev(factory: Factory, state: AppState) -> SeedResult:
             )
         internal = await _internal_tenant(db)
         example = await _create_tenant(db, "Escritório Exemplo", "escritorio-exemplo", 2026, 8)
-        await _create_tenant(db, "Artemisys (demonstração)", "artemisys-demonstracao", 2026, 7)
+        demo = await _create_tenant(
+            db, "Artemisys (demonstração)", "artemisys-demonstracao", 2026, 7
+        )
 
         await _enter_tenant(db, internal)
         result.users.append(
@@ -286,6 +288,28 @@ async def seed_dev(factory: Factory, state: AppState) -> SeedResult:
             db, tenant_id=example, user_id=pending_id, created_by=None, settings=settings
         )
         result.users.append(SeedUser(pending, "viewer", "Escritório Exemplo", invitation_sent=True))
+
+        # The demonstration robot (bots/demo_busca_wikipedia) and the pool it runs in. The machine
+        # is registered in the panel, so the dev sees the whole flow (docs/STATUS.md, M3).
+        await _enter_tenant(db, demo)
+        demo_pool: uuid.UUID = (
+            await db.execute(
+                text(
+                    "INSERT INTO pools (tenant_id, name) VALUES (:t, 'Artemisys – Demonstração')"  # noqa: RUF001  (the design-system sample name)
+                    " RETURNING id"
+                ),
+                {"t": demo},
+            )
+        ).scalar_one()
+        await db.execute(
+            text(
+                "INSERT INTO bots (tenant_id, pool_id, name, package_name, description)"
+                " VALUES (:t, :p, 'Busca na Wikipédia', 'demo_busca_wikipedia',"
+                " 'Pesquisa um termo na Wikipédia e tira uma captura de tela.')"
+            ),
+            {"t": demo, "p": demo_pool},
+        )
+        await _enter_tenant(db, example)
         await audit.record(
             db,
             tenant_id=example,

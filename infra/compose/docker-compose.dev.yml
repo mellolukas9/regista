@@ -24,5 +24,18 @@ services:
       timeout: 3s
       retries: 10
 
+  # S3 local de desenvolvimento (ADR 0019). Só dev: as credenciais estão em seaweedfs/s3.json.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48
+    container_name: regista-s3
+    restart: unless-stopped
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+    ports:
+      - "8333:8333"
+    volumes:
+      - s3data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+
 volumes:
   pgdata:
+  s3data:

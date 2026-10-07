@@ -24,7 +24,8 @@ from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.rls import tenant_rls_statements
 from regista_api.main import create_app
 
-from .helpers import Env, FakeClock
+from .helpers import Env, FakeClock, Panel, new_client, onboard, unique_email
+from .jobs_helpers import Rig, enrolled_agent, make_bot
 
 # The Ryuk reaper container races with Docker Desktop port publishing on Windows. The
 # container below is stopped by its context manager instead.
@@ -224,6 +225,62 @@ async def env(db_urls: DbUrls, seed: Seed) -> AsyncIterator[Env]:
         yield e
 
 
+@pytest_asyncio.fixture
+async def panel(
+    request: pytest.FixtureRequest, db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID
+) -> AsyncIterator[Panel]:
+    """Browsers of client A (admin, operator, viewer), of client B (admin) and of the staff.
+
+    A test (or module) marked `s3` also gets a running SeaweedFS and an app configured for it."""
+    overrides: dict[str, object] = {}
+    if request.node.get_closest_marker("s3") is not None:
+        s3: S3Env = request.getfixturevalue("s3_env")
+        overrides = {
+            "s3_endpoint_url": s3.endpoint_url,
+            "s3_access_key_id": s3.access_key_id,
+            "s3_secret_access_key": s3.secret_access_key,
+            "s3_region": s3.region,
+            "s3_bucket": f"test-{uuid.uuid4().hex[:12]}",
+        }
+    async with open_env(db_urls, **overrides) as env:
+        plan = (
+            ("admin_a", seed.tenant_a, "tenant_admin", False),
+            ("operator_a", seed.tenant_a, "operator", False),
+            ("viewer_a", seed.tenant_a, "viewer", False),
+            ("admin_b", seed.tenant_b, "tenant_admin", False),
+            ("staff", internal_tenant, "tenant_admin", True),
+        )
+        clients: dict[str, httpx.AsyncClient] = {}
+        for name, tenant, role, platform in plan:
+            clients[name] = new_client(env.app)
+            await onboard(
+                env.app,
+                clients[name],
+                tenant,
+                env.clock,
+                role=role,
+                email=unique_email(name.replace("_", "-")),
+                platform_admin=platform,
+            )
+        try:
+            yield Panel(env=env, tenant_a=seed.tenant_a, tenant_b=seed.tenant_b, **clients)
+        finally:
+            for client in clients.values():
+                await client.aclose()
+
+
+@pytest_asyncio.fixture
+async def rig(panel: Panel) -> AsyncIterator[Rig]:
+    """Client A with a pool, a bot and an online machine that has a simulated agent."""
+    agent_client = new_client(panel.env.app)  # an agent never has a session cookie
+    bot = await make_bot(panel, panel.tenant_a, panel.admin_a)
+    agent = await enrolled_agent(panel, panel.tenant_a, panel.admin_a, bot["pool_id"], agent_client)
+    try:
+        yield Rig(panel, bot, agent, agent_client)
+    finally:
+        await agent_client.aclose()
+
+
 @pytest_asyncio.fixture(scope="session")
 async def internal_tenant(app_factory: async_sessionmaker[AsyncSession], seed: Seed) -> uuid.UUID:
     """The single hidden Artemisys tenant (created as platform admin)."""
@@ -235,3 +292,53 @@ async def internal_tenant(app_factory: async_sessionmaker[AsyncSession], seed: S
             )
         )
         return result.scalar_one()
+
+
+# --- S3 (SeaweedFS, ADR 0019) ------------------------------------------------------------------
+
+S3_CONFIG = REPO_ROOT / "infra" / "compose" / "seaweedfs" / "s3.json"
+S3_IMAGE = "chrislusf/seaweedfs:4.48"
+S3_ACCESS_KEY = "regista-dev-access"
+S3_SECRET_KEY = "regista-dev-secret-not-for-production"
+
+
+@dataclass(frozen=True)
+class S3Env:
+    endpoint_url: str
+    access_key_id: str = S3_ACCESS_KEY
+    secret_access_key: str = S3_SECRET_KEY
+    region: str = "us-east-1"
+
+
+@pytest.fixture(scope="session")
+def s3_env() -> Iterator[S3Env]:
+    """A throwaway SeaweedFS with the same identity file as the dev compose."""
+    import time
+
+    import httpx as _httpx
+    from testcontainers.core.container import DockerContainer
+
+    container = (
+        DockerContainer(S3_IMAGE)
+        .with_command("server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json")
+        .with_volume_mapping(str(S3_CONFIG), "/etc/seaweedfs/s3.json", "ro")
+        .with_exposed_ports(8333)
+    )
+    with container:
+        deadline = time.monotonic() + 60
+        endpoint = ""
+        while True:
+            try:
+                # Docker Desktop publishes the port a moment after the container starts.
+                if not endpoint:
+                    host = container.get_container_host_ip()
+                    endpoint = f"http://{host}:{container.get_exposed_port(8333)}"
+                # Without credentials the S3 port answers 403 once it is up.
+                if _httpx.get(endpoint, timeout=2).status_code in (200, 403):
+                    break
+            except (_httpx.HTTPError, ConnectionError):
+                pass
+            if time.monotonic() > deadline:
+                raise RuntimeError("SeaweedFS did not start in 60 s")
+            time.sleep(0.5)
+        yield S3Env(endpoint_url=endpoint)

@@ -56,3 +56,30 @@ export function listQuery(state: ListState, extra: Record<string, string> = {}):
   if (state.q) params.set("q", state.q);
   return params.toString();
 }
+
+/**
+ * Filtros próprios de uma tela (bot, status, período...) na URL, ao lado de `useListState`.
+ * Mudar um filtro volta para a primeira página.
+ */
+export function useFilters(names: readonly string[]) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const search = useSearchParams();
+
+  const values: Record<string, string> = {};
+  for (const name of names) values[name] = search.get(name) ?? "";
+
+  const setFilter = useCallback(
+    (name: string, value: string) => {
+      const next = new URLSearchParams(search.toString());
+      if (value) next.set(name, value);
+      else next.delete(name);
+      next.delete("page");
+      const query = next.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    },
+    [pathname, router, search],
+  );
+
+  return { values, setFilter };
+}

@@ -10,7 +10,9 @@ export function PageHeader({
         <h1 className="text-display max-[899px]:text-[24px]">{title}</h1>
         <p className="mt-1 max-w-[680px] text-body text-text-label">{description}</p>
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-3 max-[899px]:w-full">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-3 max-[899px]:w-full [&>*]:max-[899px]:h-12 [&>*]:max-[899px]:w-full">
+          {actions}
+        </div>}
     </header>
   );
 }

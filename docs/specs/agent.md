@@ -24,7 +24,7 @@ Todas as chamadas são HTTPS iniciadas pelo agente. Corpo JSON. Limites de taman
 | `POST /agent/enroll` | Cadastro: chave de registro + chave pública + informações da máquina |
 | `POST /agent/challenge` | Obter nonce |
 | `POST /agent/token` | Nonce assinado → token de acesso curto |
-| `POST /agent/heartbeat` | Status, versão, recursos livres; resposta inclui cancelamentos pendentes |
+| `POST /agent/heartbeat` | Status, versão, recursos livres e `current_job_id`; resposta inclui `cancellations` (execuções desta máquina que devem parar) |
 | `GET /agent/jobs/next?wait=30` | Long-polling por job do pool da máquina |
 | `POST /agent/jobs/{id}/start` | Robô iniciou |
 | `POST /agent/jobs/{id}/complete` | Sucesso |
@@ -33,6 +33,7 @@ Todas as chamadas são HTTPS iniciadas pelo agente. Corpo JSON. Limites de taman
 | `GET /agent/jobs/{id}/secrets` | Segredos do job, uma única vez, somente durante a execução |
 | `POST /agent/logs` | Logs em lote (com `item_id` quando houver) |
 | `POST /agent/artifacts/presign` | URL pré-assinada para upload direto ao S3 |
+| `POST /agent/artifacts/{id}/uploaded` | Confirma o upload; o servidor confere o objeto no S3 |
 
 O robô (via SDK) usa um **token de job**, derivado pelo agente para aquele job, com escopo restrito às filas e ao lote do job:
 
@@ -60,7 +61,7 @@ Configuração por arquivo (`%ProgramData%\Regista\agent.toml` no Windows) com s
 6. Executa o robô como processo filho com token de job, prioridade configurável (padrão abaixo do normal em estações de trabalho) e timeout.
 7. Encaminha logs e artefatos; reporta resultado; apaga temporários.
 
-No M3, antes da assinatura existir, o runner aceita uma pasta local apenas com `REGISTA_DEV_UNSIGNED=1`; essa opção é proibida em configuração de produção a partir do M4.
+No M3, antes da assinatura existir, o runner aceita uma pasta local (`<REGISTA_DEV_BOTS_DIR>/<package_name>/main.py`) apenas com `REGISTA_DEV_UNSIGNED=1` **e** `REGISTA_ENVIRONMENT=dev`. O agente assume `prod` quando a variável falta, e em `prod` com a flag ligada se recusa a iniciar (e o servidor recusa criar execução em `prod` enquanto não houver versão assinada). O robô roda como `python -u main.py` sem shell, com ambiente por lista de permissão (nenhum token nem variável `REGISTA_*` do agente), pasta temporária por execução, prioridade abaixo do normal e prazo máximo; em dev usa o Python do workspace (`uv sync --group bots` e `uv run playwright install chromium`). Os ambientes por versão com `uv` chegam no M4.
 
 ## Operação
 

@@ -75,16 +75,16 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 
 ## M3 — Disparo manual de ponta a ponta
 
-- [ ] ADR curta escolhendo o S3 local de desenvolvimento (a edição community do MinIO deixou de publicar imagens)
-- [ ] Tabelas `bots`, `jobs`, `job_logs` (particionada por mês), `artifacts`; cadastro de bot só pela equipe Artemisys
-- [ ] Distribuição: uma execução por máquina; sem máquina livre, o job fica `pending`
-- [ ] `POST /jobs` pelo painel; `GET /agent/jobs/next?wait=30` com long-polling acordado por `LISTEN/NOTIFY`
-- [ ] Runner do agente executa robô a partir de pasta local **somente com flag de desenvolvimento** (assinatura vem no M4)
-- [ ] Envio de logs em lote; screenshots via URL pré-assinada (S3 local escolhido na ADR em dev, S3 em prod)
-- [ ] Cancelamento de job pelo painel
-- [ ] Robô de demonstração `bots/demo_busca_google` (Playwright async, pesquisa um termo e tira screenshot)
-- [ ] Painel atualiza por polling a cada 15 s, com indicador de sincronização
-- [ ] Frontend: Bots (7.5), Detalhe do bot (7.6, sem versões), Execuções (7.3), Detalhe da execução (7.4), Dashboard inicial (7.2)
+- [x] ADR curta escolhendo o S3 local de desenvolvimento (a edição community do MinIO deixou de publicar imagens)
+- [x] Tabelas `bots`, `jobs`, `job_logs` (particionada por mês), `artifacts`; cadastro de bot só pela equipe Artemisys
+- [x] Distribuição: uma execução por máquina; sem máquina livre, o job fica `pending`
+- [x] `POST /jobs` pelo painel; `GET /agent/jobs/next?wait=30` com long-polling acordado por `LISTEN/NOTIFY`
+- [x] Runner do agente executa robô a partir de pasta local **somente com flag de desenvolvimento** (assinatura vem no M4)
+- [x] Envio de logs em lote; screenshots via URL pré-assinada (S3 local escolhido na ADR em dev, S3 em prod)
+- [x] Cancelamento de job pelo painel
+- [x] Robô de demonstração `bots/demo_busca_wikipedia` (Playwright async, pesquisa um termo e tira screenshot)
+- [x] Painel atualiza por polling a cada 15 s, com indicador de sincronização ("Sincronizado · há Ns", clicar força a atualização)
+- [x] Frontend: Bots (7.5), Detalhe do bot (7.6, sem versões), Execuções (7.3), Detalhe da execução (7.4), Dashboard inicial (7.2)
 
 **Pronto quando:** clicar em "Executar agora" roda o robô de demonstração pelo agente e o painel mostra estados, logs e captura de tela, atualizando sozinho.
 
@@ -99,7 +99,7 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 - [ ] Agente verifica assinatura com a chave pública embutida antes de executar; recusa pacote inválido
 - [ ] Ambiente isolado por versão com `uv` (cache local)
 - [ ] Lista local de robôs permitidos por máquina e kill switch local
-- [ ] Flag de desenvolvimento do M3 desabilitada em configuração de produção
+- [ ] Remover a flag de desenvolvimento do M3 (`REGISTA_DEV_UNSIGNED`); desde o M3 o agente já se recusa a iniciar com ela em produção e o servidor recusa criar execução em produção sem versão assinada
 
 **Pronto quando:** pacote adulterado é recusado pelo agente e o painel mostra o motivo; robô fora da lista local não executa.
 
@@ -116,7 +116,7 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 - [ ] Logs por item via `contextvars`; concorrência configurável por robô
 - [ ] Mascaramento de CPF, CNPJ e e-mail em erros e logs no SDK
 - [ ] Modos de dados `reference` (padrão) e `central` (payload criptografado via `KeyProvider`)
-- [ ] Frontend: Filas (7.8), Detalhe da fila (7.9), Detalhe do item (7.10)
+- [ ] Frontend: Filas (7.8), Detalhe da fila (7.9), Detalhe do item (7.10); no Dashboard do cliente, os KPIs e o gráfico de itens; no Detalhe da execução, a aba Itens e o prazo de retenção da fila na legenda da captura (sem falha)
 
 **Pronto quando:** o robô de demonstração processa uma fila com concorrência 3; matar o agente no meio deixa a execução como Falhou e os itens em andamento como Abandonado; "Reprocessar falhas" os conclui numa nova execução, mantendo o histórico de tentativas.
 

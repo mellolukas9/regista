@@ -24,6 +24,16 @@ export function formatDateTime(iso: string): string {
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
 }
 
+/** `dd/MM/yyyy HH:mm:ss`, para o cabeçalho de uma execução. */
+export function formatDateTimeSeconds(iso: string): string {
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: TIME_ZONE,
+    second: "2-digit",
+  });
+  const seconds = formatter.formatToParts(new Date(iso)).find((p) => p.type === "second")?.value ?? "00";
+  return `${formatDateTime(iso)}:${seconds.padStart(2, "0")}`;
+}
+
 /** Para listas: `dd/MM HH:mm`. */
 export function formatListDate(iso: string): string {
   const p = parts(iso);

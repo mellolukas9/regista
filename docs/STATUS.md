@@ -4,10 +4,10 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 
 ## Agora
 
-- **Marco atual:** M3 — Disparo manual de ponta a ponta (o M2 está pronto; PR #3 aguardando revisão e merge pelo responsável do projeto)
-- **Situação:** M2 concluído: pools e máquinas, chave de registro de uso único, agente com par Ed25519 gerado na máquina, desafio assinado e token de 15 min, heartbeat, "Sem sinal" após 2 min (primeira tarefa Procrastinate, em `regista-worker`), revogação imediata, modos serviço e sessão, `regista-agent enroll/run/diagnose`, chave protegida por DPAPI + ACL, e as telas Máquinas e pools (7.13) e Detalhe da máquina (7.14).
-- **Próximo passo:** depois do merge do PR #3, abrir a branch `m3-jobs` a partir da `main` e planejar o M3 (começa pela ADR do S3 local de desenvolvimento; ler `docs/specs/orchestration.md` e `agent.md` antes do plano, que deve ser aprovado antes de implementar).
-- **Pendências para decisão (M2):** ver "Pendências do fim do M2" abaixo (`npm audit` e ESLint).
+- **Marco atual:** M4 — Pacotes de robô assinados (o M3 está pronto; PR #4 aguardando revisão e merge pelo responsável do projeto)
+- **Situação:** M3 concluído: bots, execuções ("jobs"), logs em lote e capturas de tela por URL pré-assinada (SeaweedFS em dev), "Executar agora" até o robô rodar pelo agente real, long-polling acordado por `LISTEN/NOTIFY`, cancelamento pelo heartbeat, revogar cancela a execução em andamento, `machine_lost` pelo worker, partições mensais de `job_logs`, robô de demonstração `bots/demo_busca_wikipedia`, e as telas Bots, Detalhe do bot, Execuções, Detalhe da execução, Dashboard e os itens do M3 em Máquinas, com polling de 15 s e o indicador de sincronização.
+- **Próximo passo:** depois do merge do PR #4, abrir a branch `m4-signed-packages` a partir da `main` e planejar o M4 (`regista-pack`, `bot_versions`, verificação de assinatura no agente, ambiente por versão com `uv`, lista local de robôs permitidos e kill switch; a flag `REGISTA_DEV_UNSIGNED` deixa de ser necessária). Ler `docs/specs/agent.md` e a ADR 0008 antes do plano, que deve ser aprovado antes de implementar.
+- **Pendências para decisão:** ESLint 10 (depois do M3, abaixo) e o teste do `enroll` real em console elevado antes do primeiro cliente (abaixo).
 
 ## Decisões já aprovadas para o M0 (não perguntar de novo)
 
@@ -61,6 +61,25 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 
 **Risco aceito no MVP (ADR 0018):** com DPAPI `LocalMachine`, um administrador da máquina consegue extrair a chave privada e usá-la. Mitigação: revogar a máquina no painel invalida a identidade na hora. Evolução: guardar a chave no TPM (provedor de chaves da plataforma); o resto do agente não muda.
 
+## Decisões aprovadas para o M3 (não perguntar de novo)
+
+| Tema | Decisão |
+|---|---|
+| S3 local | SeaweedFS (ADR 0019); o teste de fumaça (`test_s3_smoke.py`) é o critério de aceite. Em produção, S3 da AWS por role IAM: API e worker se recusam a subir com chave estática ou endpoint local |
+| Distribuição | Canal único `regista_jobs`, uma conexão asyncpg de escuta por processo, esperas em memória, retirada com `SKIP LOCKED` filtrada por cliente e pool, uma execução por máquina garantida por índice único (ADR 0020) |
+| Partições de `job_logs` | Sem `DEFAULT`; função `app.ensure_job_log_partitions` (migration e tarefa diária do worker); partição faltando = 503 + log ERROR e `/health` `degraded` quando falta a do mês seguinte |
+| Limites | Captura até 5 MB e 20 por execução; log de 4 KB por linha, 20 000 linhas e 5 MB por execução; tempo máximo de 2 h; tudo em `Settings` |
+| Runner em dev | `REGISTA_DEV_UNSIGNED=1` só com `REGISTA_ENVIRONMENT=dev` (o agente assume `prod`); em produção o agente se recusa a iniciar e o servidor recusa criar execução enquanto não houver versão assinada |
+| Escopo das telas | Dashboard do cliente sem gráfico e Detalhe da execução sem a aba "Itens" (voltam no M5); "Executar agora" em Execuções leva a Bots; sem "Agendar", "Próxima" e versões até M7 e M4 |
+| Robô de demonstração | `bots/demo_busca_wikipedia` (a Wikipédia é estável e não pede verificação anti-robô; o Google pedia) |
+| Textos | `design-system.md` §14, aprovados na revisão do M3 |
+
+## Pendências para o início do M4
+
+- **Testes dependentes de tempo real.** `test_worker.py::test_two_workers_run_each_tick_once` e o e2e `test_jobs_e2e.py::test_a_machine_that_goes_away_in_the_middle_makes_the_run_machine_lost` falharam numa rodada local completa (a suíte estava sob carga: 10 min seguidos de contêineres e processos) e passaram isolados e na CI. **Investigar a causa e torná-los determinísticos (relógio e tarefas controlados pelo teste, sem esperar tempo real), não só aumentar timeouts.** Antes, reproduzir sob carga para achar o que de fato atrasa (a rodada do worker, a varredura de "Sem sinal" ou a espera do heartbeat).
+
+- **Onde o Chromium do Playwright fica em produção.** Em dev o robô acha o navegador em `%LOCALAPPDATA%\ms-playwright` do usuário que roda o agente. Em produção o agente roda como `NT SERVICE\RegistaAgent` (modo `service`) ou como o usuário dedicado (modo `session`), e essa conta não enxerga o `%LOCALAPPDATA%` de outro usuário: o robô não acharia o navegador. O Chromium precisa ficar num local legível pela conta do agente, por exemplo `PLAYWRIGHT_BROWSERS_PATH=%ProgramData%\Regista\browsers`, com a mesma regra de permissões da pasta do agente (leitura só para a conta do agente, `SYSTEM` e `Administradores`), instalado pelo agente ou pelo instalador. **Considerar no desenho dos ambientes por versão com `uv` do M4** (de onde o navegador vem, quem o instala, como é versionado junto com o `playwright` do robô e como o `diagnose` confere). O `PLAYWRIGHT_BROWSERS_PATH` já é repassado ao robô pelo runner (`robot.py`, lista de permissão do ambiente).
+
 ## Pendências do fim do M2
 
 - **`npm audit`: 5 vulnerabilidades "high", todas em ferramentas de desenvolvimento.** `npm audit --omit=dev` dá 0: nada disso vai para o app em produção. A cadeia é `braces` → `micromatch` → `fast-glob` → `@next/eslint-plugin-next` → `eslint-config-next`, usada só pelo linter, que processa os padrões de arquivo do próprio repositório (o ataque pede padrões de glob aninhados fundo, que não vêm de fora). O `braces 3.0.3` é a última versão publicada e não há versão corrigida, então **não existe correção sem `--force`**; e o `npm audit fix --force` sugerido **rebaixaria** o `eslint-config-next` para a 14, o que quebra o projeto (Next 16). **Decidido: aceitar o risco**, registrado aqui, e rodar `npm audit` de novo a cada atualização do Next ou do ESLint.
@@ -76,9 +95,8 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 
 | Tema | Quando decidir | Observação |
 |---|---|---|
-| Limites operacionais | Antes dos marcos que os usam | "Sem sinal" após 2 min e alerta após 15 min (M2/M7); uma execução por máquina (M3); retenção de 7 a 365 dias (M5); notificações por 30 dias (M7) |
+| Limites operacionais | Antes dos marcos que os usam | "Sem sinal" após 2 min e alerta após 15 min (M2/M7); uma execução por máquina (decidido no M3); retenção de 7 a 365 dias (M5); notificações por 30 dias (M7) |
 | "Enviar planilha" em fila no modo Referência | Antes do M6 | Proposta: o navegador lê o arquivo e envia só referência, linha, nomes das colunas e hash |
-| S3 local de desenvolvimento | Início do M3 | MinIO community sem imagens publicadas; escolher alternativa por ADR |
 | Região de hospedagem (São Paulo x EUA) | Antes do M8 | Custo x preferência de clientes por dados no Brasil |
 | Certificado de assinatura de código do executável Windows | Antes do M8 | Necessário para o MSI não ser bloqueado |
 | Provedor de identidade externo (SSO) | Fora do MVP | Autenticação própria agora, preparada para SSO depois |
@@ -99,6 +117,7 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 | 2026-10-02 | M1 | Frontend do M1 (passos 10 a 13): shadcn/ui com os tokens do §2, telas de Login e MFA, convite, Clientes, Usuários e Minhas sessões, shell com seletor de cliente, rodapé do usuário e favicon. Conferido no navegador de ponta a ponta contra o stack de dev (convite do `estagio@` até o painel, login com TOTP, Leitor sem acesso a Usuários, equipe Artemisys entrando em um cliente), o que revelou e corrigiu a perda do token do convite no modo estrito do React. Nenhuma senha, segredo TOTP ou token apareceu no log da API. |
 | 2026-10-03 | M2 | Pasta local perdida de novo e refeita a partir do GitHub (passos 1 a 8 estavam enviados). Ajustes pós-plano conferidos e completados (`agent/README.md`, procedimento do Procrastinate); nova regra de commit e push por passo. |
 | 2026-10-03 | M2 | Telas 7.13 e 7.14, sidebar com contador de "sem sinal", seletor de cliente com "N sem sinal" e coluna Máquinas em Clientes. Conferido no navegador contra o stack de dev: cadastrar pool e máquina, KeyReveal (sem Esc, "Concluir" só após o checkbox), máquina online, "Sem sinal" com banner e contador, revogação com nome digitado, 390 px. Docs fechados (ADR 0018 aceita, specs, runbook, ROADMAP). |
+| 2026-10-03 | M3 | Plano aprovado e M3 implementado em 14 passos (PR #4): ADRs 0019 e 0020; migration `0004`; bots, execuções, distribuição por long-polling, cancelamento, `machine_lost`, logs, capturas por URL pré-assinada; runner do agente em modo de desenvolvimento; robô de demonstração; telas Bots, Execuções, Detalhe da execução e Dashboard. Conferido no navegador com o agente real (Executar agora, cancelar no meio, agente derrubado, revogar com execução em andamento); a conferência achou um traceback no thread de logs ao revogar, corrigido com teste. O robô de demonstração passou do Google (verificação anti-robô) para a Wikipédia. |
 
 ## Desvios e escolhas do M1 para a revisão
 
@@ -118,3 +137,13 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 - **Aba Execuções, coluna "Agora" e linha "Roda: …"** ficam para o M3 (dependem de `bots` e `jobs`); a aba na URL (`?tab=`) também, pois por ora só existe o Histórico.
 - **`enroll` sem elevação** passou a explicar o que fazer (antes mostrava um traceback).
 - **Erro no processo:** a pasta `.playwright-mcp/` (capturas da conferência) foi commitada por engano e removida no commit seguinte. **Decidido manter no histórico, sem force-push.** Conferido: as capturas só têm dados de uma conta temporária de dev (segredo TOTP, códigos de recuperação e uma chave de registro), e todos estão mortos: o usuário está `disabled` e sem sessão, a chave foi usada e a máquina está revogada. Nenhum cookie de sessão, CSRF, token `rga1` ou link de convite aparece nelas.
+
+## Desvios e escolhas do M3 para a revisão
+
+- **Conferência no navegador sem console elevado.** O `enroll` grava a chave numa pasta que só um console elevado escreve. A conferência rodou o agente real com só o passo da ACL substituído (como o teste ponta a ponta). **Falta rodar o `enroll` real em console elevado antes do primeiro cliente** (já era pendência do M2).
+- **Leitor não conferido no navegador** (o cliente do seed não tem bot); vale a matriz de permissões do servidor (`test_permissions.py`).
+- **Robô morto à força.** Se o agente for morto sem aviso (corte de energia), o robô que ele iniciou pode continuar rodando; a execução vira "falhou" por `machine_lost` e o robô fica por conta de quem religar a máquina. Na conferência manual o robô não ficou órfão, mas isso não está garantido; no serviço do Windows depende do empacotamento do M8.
+- **Rota nova fora da spec:** `POST /agent/artifacts/{id}/uploaded` (o servidor confere o objeto no S3 antes de marcar a captura). Também novos: `current_job_id` no heartbeat e o limite de corpo de 256 KB só para `/agent/logs`.
+- **Dependências novas:** `boto3` (API), `psutil` (agente), `recharts` (web) e o grupo `bots` com o `playwright` (não entra no CI).
+- **`/health` agora pode responder `degraded`** (HTTP 200) quando falta a partição do mês seguinte de `job_logs`.
+- **Dev:** o `seed-dev` cria o pool "Artemisys – Demonstração" e o bot de demonstração só em banco vazio; num banco antigo, o bot se cadastra pelo painel (ver `CLAUDE.md`).

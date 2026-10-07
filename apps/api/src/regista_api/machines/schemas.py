@@ -52,6 +52,8 @@ class PoolItem(BaseModel):
     machines_total: int
     machines_online: int
     created_at: datetime
+    # Active bots that run in this pool (the "Roda: ..." line).
+    bot_names: list[str] = []
 
 
 class PoolList(BaseModel):
@@ -87,6 +89,14 @@ class RevokeMachineRequest(_Request):
     confirm_name: Annotated[str, Field(min_length=1, max_length=64)]
 
 
+class CurrentJob(BaseModel):
+    """The run a machine is busy with (assigned or running): the Agora column."""
+
+    id: uuid.UUID
+    short_code: str
+    status: str
+
+
 class MachineItem(BaseModel):
     id: uuid.UUID
     name: str
@@ -103,6 +113,7 @@ class MachineItem(BaseModel):
     key_expires_at: datetime | None
     key_created_at: datetime | None
     created_at: datetime
+    current_job: CurrentJob | None = None
 
 
 class MachineList(Page):

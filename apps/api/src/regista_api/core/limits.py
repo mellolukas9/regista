@@ -15,18 +15,28 @@ def _too_large() -> HTTPException:
 
 
 class BodyLimitMiddleware:
-    def __init__(self, app: ASGIApp, *, prefix: str, max_bytes: int) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        prefix: str,
+        max_bytes: int,
+        overrides: dict[str, int] | None = None,
+    ) -> None:
         self.app = app
         self.prefix = prefix
         self.max_bytes = max_bytes
+        # Exact paths that may take a bigger body than the rest (the agent's log batches).
+        self.overrides = overrides or {}
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or not scope["path"].startswith(self.prefix):
             await self.app(scope, receive, send)
             return
 
+        limit = self.overrides.get(scope["path"], self.max_bytes)
         declared = dict(scope["headers"]).get(b"content-length", b"")
-        if declared.isdigit() and int(declared) > self.max_bytes:
+        if declared.isdigit() and int(declared) > limit:
             await self._refuse(send)
             return
 
@@ -37,7 +47,7 @@ class BodyLimitMiddleware:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self.max_bytes:
+                if received > limit:
                     # An HTTPException, not a bare error: FastAPI turns any other exception
                     # raised while it reads the body into a 400.
                     raise _too_large()

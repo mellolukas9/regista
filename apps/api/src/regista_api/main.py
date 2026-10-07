@@ -13,14 +13,21 @@ from sqlalchemy import text
 from regista_api.auth.account import router as account_router
 from regista_api.auth.deps import PublicRoute
 from regista_api.auth.router import router as auth_router
+from regista_api.bots.router import router as bots_router
 from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
 from regista_api.core.email import EmailSender, create_email_sender
 from regista_api.core.keys import LocalKeyProvider
 from regista_api.core.limits import BodyLimitMiddleware
 from regista_api.core.logging import configure_logging
+from regista_api.dashboard.router import router as dashboard_router
+from regista_api.jobs import artifacts
+from regista_api.jobs.agent import router as job_agent_router
+from regista_api.jobs.router import router as jobs_router
+from regista_api.jobs.waiters import JobListener, JobWaiters, asyncpg_dsn
 from regista_api.machines.agent import router as agent_router
 from regista_api.machines.router import router as machines_router
+from regista_api.storage.s3 import S3Storage
 from regista_api.tenants.clients import router as clients_router
 from regista_api.tenants.users import router as users_router
 
@@ -31,10 +38,15 @@ log = structlog.get_logger()
 _NO_STORE_PREFIXES = ("/auth", "/account", "/agent")
 # What the agent may send is a handful of short fields; anything bigger is refused unread.
 _AGENT_BODY_LIMIT = 16 * 1024
+# A batch of up to 200 log lines is the one thing that legitimately takes more.
+_AGENT_LOG_BODY_LIMIT = 256 * 1024
 
 
 class HealthResponse(BaseModel):
-    status: Literal["ok", "unavailable"]
+    # `degraded`: the API works but something needs attention before it breaks (HTTP 200, so a
+    # load balancer does not take a working API out of rotation).
+    status: Literal["ok", "degraded", "unavailable"]
+    reason: str | None = None
 
 
 def _is_no_store(path: str) -> bool:
@@ -57,9 +69,19 @@ def create_app(
         app.state.session_factory = create_session_factory(engine)
         app.state.key_provider = key_provider
         app.state.email_sender = sender
+        # Agents waiting for work (long-polling) share one listening connection (ADR 0020).
+        waiters = JobWaiters(settings.agent_max_waiters)
+        listener = JobListener(asyncpg_dsn(settings.database_url), waiters)
+        app.state.job_waiters = waiters
+        app.state.job_listener = listener
+        await listener.start()
+        storage = S3Storage(settings)
+        app.state.storage = storage
+        await storage.ensure_bucket()
         try:
             yield
         finally:
+            await listener.stop()
             await engine.dispose()
 
     app = FastAPI(title="Regista API", lifespan=lifespan)
@@ -67,7 +89,12 @@ def create_app(
     # Registered before the `http` middleware below, so it sits inside it (the last one added is
     # the outermost). That matters: BaseHTTPMiddleware reads the body inside an anyio task group,
     # which would wrap the 413 in an ExceptionGroup that FastAPI turns into a generic 400.
-    app.add_middleware(BodyLimitMiddleware, prefix="/agent/", max_bytes=_AGENT_BODY_LIMIT)
+    app.add_middleware(
+        BodyLimitMiddleware,
+        prefix="/agent/",
+        max_bytes=_AGENT_BODY_LIMIT,
+        overrides={"/agent/logs": _AGENT_LOG_BODY_LIMIT},
+    )
 
     @app.middleware("http")
     async def http_middleware(
@@ -94,7 +121,13 @@ def create_app(
     app.include_router(clients_router)
     app.include_router(users_router)
     app.include_router(machines_router)
+    app.include_router(bots_router)
+    app.include_router(jobs_router)
+    app.include_router(dashboard_router)
     app.include_router(agent_router)
+    app.include_router(job_agent_router)
+    app.include_router(artifacts.agent_router)
+    app.include_router(artifacts.router)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -103,17 +136,33 @@ def create_app(
         errors = [{"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": errors})
 
-    @app.get("/health", response_model=HealthResponse, dependencies=[Depends(PublicRoute())])
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        response_model_exclude_none=True,
+        dependencies=[Depends(PublicRoute())],
+    )
     async def health(response: Response) -> HealthResponse:
         # Uses the runtime role (regista_app) with no tenant: only checks connectivity.
         try:
             async with app.state.session_factory() as session:
                 await session.execute(text("SELECT 1"))
+                partitions = (
+                    await session.execute(text("SELECT * FROM app.job_logs_partition_status()"))
+                ).one()
         except Exception:
             # Details go to the log, never to the response.
             log.exception("health_check_failed")
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
             return HealthResponse(status="unavailable")
+        if not (partitions.current_month and partitions.next_month):
+            # Without the partition of a month, run logs of that month cannot be stored.
+            log.error(
+                "job_logs_partition_missing",
+                current_month=partitions.current_month,
+                next_month=partitions.next_month,
+            )
+            return HealthResponse(status="degraded", reason="job_logs_partition_missing")
         return HealthResponse(status="ok")
 
     return app

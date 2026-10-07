@@ -14,6 +14,7 @@ The token lives in memory only, never on disk.
 
 import random
 import ssl
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -103,14 +104,17 @@ class HttpSession:
         json: Any = None,
         headers: dict[str, str] | None = None,
         attempts: int | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
         """One request, retried on network errors and on 429/5xx. Any other answer, including
         a 4xx, is returned for the caller to interpret."""
         attempts = attempts or self.attempts
         last: str = "sem resposta"
+        # Only passed when asked for, so the long wait of the job poll does not need the default.
+        extra: dict[str, Any] = {} if timeout is None else {"timeout": timeout}
         for attempt in range(attempts):
             try:
-                response = self.client.request(method, path, json=json, headers=headers)
+                response = self.client.request(method, path, json=json, headers=headers, **extra)
             except httpx.TransportError as exc:
                 last = f"{type(exc).__name__}"
             else:
@@ -146,6 +150,9 @@ class AgentSession:
         self._audience = protocol.audience(server_url)
         self._token: str | None = None
         self._token_at: float | None = None  # monotonic time at which the token was obtained
+        # The heartbeat and the run of a job talk at the same time. Asking for a new challenge
+        # invalidates the previous one, so two logins at once would break each other.
+        self._lock = threading.Lock()
 
     # --- token --------------------------------------------------------------------------------
 
@@ -189,16 +196,46 @@ class AgentSession:
 
     # --- calls --------------------------------------------------------------------------------
 
-    def request(self, method: str, path: str, *, json: Any = None) -> httpx.Response:
+    def _ensure_token(self) -> tuple[str, bool]:
+        """The current token, logging in first when it is missing or old. The flag says whether
+        this call did the login."""
+        with self._lock:
+            if self._needs_token():
+                self.login()
+                logged_in = True
+            else:
+                logged_in = False
+            if self._token is None:
+                raise ServerUnavailable("O servidor não entregou um token.")
+            return self._token, logged_in
+
+    def _forget(self, token: str) -> None:
+        with self._lock:
+            if self._token == token:  # another thread may have renewed it already
+                self._token = None
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: Any = None,
+        timeout: float | None = None,
+        attempts: int | None = None,
+    ) -> httpx.Response:
         """An authenticated call. Renews the token when it is old, or when the server says it
         expired, and stops for good when the server says the machine was revoked."""
         renewed = False
         while True:
-            if self._needs_token():
-                self.login()
-                renewed = True
+            token, logged_in = self._ensure_token()
+            renewed = renewed or logged_in
             response = self.http.send(
-                method, path, json=json, headers={"Authorization": f"Bearer {self._token}"}
+                method,
+                path,
+                json=json,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=timeout,
+                attempts=attempts,
             )
             if response.status_code != 401:
                 return response
@@ -208,22 +245,26 @@ class AgentSession:
             if code in ("token_expired", "not_authenticated") and not renewed:
                 # One fresh token, then try again. `not_authenticated` is what a token whose
                 # credential was replaced gets; the login that follows settles which it is.
-                self._token = None
+                self._forget(token)
                 continue
             return response
 
     def heartbeat(
-        self, *, agent_version: str, os_info: dict[str, str], interactive_session: bool
+        self,
+        *,
+        agent_version: str,
+        os_info: dict[str, str],
+        interactive_session: bool,
+        current_job_id: str | None = None,
     ) -> HeartbeatInfo:
-        response = self.request(
-            "POST",
-            "/agent/heartbeat",
-            json={
-                "agent_version": agent_version,
-                "os_info": os_info,
-                "interactive_session": interactive_session,
-            },
-        )
+        body: dict[str, Any] = {
+            "agent_version": agent_version,
+            "os_info": os_info,
+            "interactive_session": interactive_session,
+        }
+        if current_job_id is not None:
+            body["current_job_id"] = current_job_id
+        response = self.request("POST", "/agent/heartbeat", json=body)
         if response.status_code != 200:
             raise ServerUnavailable(f"O servidor recusou o sinal (HTTP {response.status_code}).")
         body = response.json()

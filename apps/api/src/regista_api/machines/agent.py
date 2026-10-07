@@ -34,6 +34,7 @@ from regista_api.auth.rate_limit import client_ip
 from regista_api.core.db import tenant_session
 from regista_api.core.errors import api_error
 from regista_api.core.security import hash_token
+from regista_api.jobs import service as job_service
 from regista_api.machines import service
 from regista_api.machines.ed25519 import is_weak_public_key
 
@@ -184,13 +185,16 @@ class HeartbeatRequest(_Request):
     # Accepted for the session mode, where the machine needs a logged-in Windows user; it is
     # not stored in M2.
     interactive_session: bool = False
+    # The run the agent is busy with, if any. The server answers `cancellations` with it when the
+    # panel asked to cancel it or when it already ended on the server side (machine lost).
+    current_job_id: uuid.UUID | None = None
 
 
 class HeartbeatResponse(BaseModel):
     server_time: datetime
     heartbeat_seconds: int
     mode: str
-    # Cancellations of running jobs arrive with the job queue (M3).
+    # Runs of this machine that must stop now (stop the robot, then report cancelled).
     cancellations: list[str]
 
 
@@ -413,11 +417,12 @@ async def heartbeat(
 ) -> HeartbeatResponse:
     async with machine.session() as db:
         await _record_signal(db, machine, body)
+        cancellations = await job_service.cancellations(db, machine.machine_id, body.current_job_id)
     return HeartbeatResponse(
         server_time=datetime.now(UTC),
         heartbeat_seconds=machine.state.settings.heartbeat_seconds,
         mode=machine.mode,
-        cancellations=[],
+        cancellations=[str(j) for j in cancellations],
     )
 
 

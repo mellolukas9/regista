@@ -19,6 +19,7 @@ dependencies = [
     # runs the library's SQL migrations between the old and new version (see ADR 0018).
     "procrastinate==3.10.0",
     "psycopg[binary,pool]>=3.3.6",
+    "boto3>=1.43.108",
 ]
 
 [project.scripts]

@@ -3,22 +3,39 @@
 See docs/specs/agent.md.
 
 One loop for every mode; what differs between modes is only what `modes.preflight` checks first.
-The server decides the interval and the agent follows it. Running jobs arrives with M3.
+The server decides the interval and the agent follows it. With `REGISTA_DEV_UNSIGNED=1` (M3,
+development only) the agent also takes runs and executes robots from a local folder: the heartbeat
+then runs in its own thread and the main thread works on the runs (`jobs.py`).
 """
 
 import logging
 import threading
-from typing import Protocol
+from typing import Protocol, cast
 
 from regista_agent import modes, sysinfo
 from regista_agent.config import AgentSettings
-from regista_agent.errors import AgentError, NotEnrolled, ServerUnavailable
+from regista_agent.errors import AgentError, MachineRevoked, NotEnrolled, ServerUnavailable
+from regista_agent.jobapi import HttpJobApi, JobApi
+from regista_agent.jobs import JobExecutor, JobState
 from regista_agent.keystore import KeyStore
 from regista_agent.transport import AgentSession, HeartbeatInfo, HttpSession, make_client
 
 log = logging.getLogger("regista_agent")
 
 DEFAULT_INTERVAL_SECONDS = 30
+
+
+class JobsHeartbeater(Protocol):
+    """The same, for the mode that also runs jobs: it says which run it is busy with."""
+
+    def heartbeat(
+        self,
+        *,
+        agent_version: str,
+        os_info: dict[str, str],
+        interactive_session: bool,
+        current_job_id: str | None = None,
+    ) -> HeartbeatInfo: ...
 
 
 class Heartbeater(Protocol):
@@ -46,6 +63,7 @@ def run(
     expected_mode: str | None = None,
     stop: threading.Event | None = None,
     session: Heartbeater | None = None,
+    jobs: JobApi | None = None,
 ) -> None:
     """Heartbeat until `stop` is set. Raises `MachineRevoked` when the server says the machine is
     gone; anything else that goes wrong with the network is logged and retried next beat."""
@@ -58,6 +76,7 @@ def run(
             f"Esta máquina está cadastrada no modo {mode}, não {expected_mode}. O modo é "
             "escolhido no cadastro da máquina, no painel."
         )
+    settings.check_dev_unsigned()
     modes.preflight(mode)
 
     store = KeyStore(settings.keys_dir, agent_account=settings.agent_account)
@@ -65,6 +84,19 @@ def run(
     interval = DEFAULT_INTERVAL_SECONDS
     interactive = modes.is_interactive_session()
     log.info("agent started: machine=%s mode=%s", settings.machine_id, mode)
+
+    if settings.dev_unsigned:
+        log.warning(
+            "DEV: robots run from %s without a signature (REGISTA_DEV_UNSIGNED)",
+            settings.dev_bots_dir,
+        )
+        if jobs is None:
+            if not isinstance(session, AgentSession):
+                raise AgentError("O modo de desenvolvimento precisa de uma sessão real.")
+            jobs = HttpJobApi(session)
+        _run_with_jobs(settings, cast(JobsHeartbeater, session), jobs, stop, interactive)
+        log.info("agent stopped")
+        return
 
     while not stop.is_set():
         try:
@@ -80,3 +112,47 @@ def run(
             log.debug("signal sent; next in %ss", interval)
         stop.wait(interval)
     log.info("agent stopped")
+
+
+def _run_with_jobs(
+    settings: AgentSettings,
+    session: JobsHeartbeater,
+    jobs: JobApi,
+    stop: threading.Event,
+    interactive: bool,
+) -> None:
+    state = JobState()
+    fatal: list[BaseException] = []
+
+    def beats() -> None:
+        interval = DEFAULT_INTERVAL_SECONDS
+        while not stop.is_set():
+            try:
+                info = session.heartbeat(
+                    agent_version=sysinfo.agent_version(),
+                    os_info=sysinfo.collect(),
+                    interactive_session=interactive,
+                    current_job_id=state.current,
+                )
+            except ServerUnavailable as exc:
+                log.warning("no signal sent: %s", exc)
+            except MachineRevoked as exc:
+                fatal.append(exc)
+                stop.set()
+                return
+            else:
+                interval = max(1, info.heartbeat_seconds)
+                state.cancellations(info.cancellations)
+            stop.wait(interval)
+
+    thread = threading.Thread(target=beats, name="heartbeat", daemon=True)
+    thread.start()
+    try:
+        JobExecutor(settings, jobs, state, stop).loop()
+    except MachineRevoked as exc:
+        fatal.append(exc)
+    finally:
+        stop.set()
+        thread.join(timeout=10)
+    if fatal:
+        raise fatal[0]

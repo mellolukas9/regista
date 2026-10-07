@@ -21,7 +21,7 @@ from .isolation import RouteSpec, discover
 
 ACTORS = ("artemisys", "tenant_admin", "operator", "viewer")
 # Path parameters of the routes; a random id of each is enough to reach the permission check.
-UNKNOWN_IDS = ("user_id", "session_id", "machine_id", "pool_id")
+UNKNOWN_IDS = ("user_id", "session_id", "machine_id", "pool_id", "bot_id", "job_id", "artifact_id")
 
 # Rows of the permission table (design-system.md section 4) that M1 implements.
 #   "Ver todos os clientes, seletor de cliente, tela Clientes"
@@ -29,6 +29,7 @@ UNKNOWN_IDS = ("user_id", "session_id", "machine_id", "pool_id")
 #   "Usuários: Convidar, Mudar papel, Encerrar sessões, Remover acesso (e Reenviar convite)"
 #   "Consultar tudo do próprio cliente" (here: pools, machines and their history)
 #   "Máquinas: Cadastrar máquina, Novo pool, Gerar nova chave, Revogar"
+#   "Cadastrar bot" and "Executar agora, Reexecutar, Cancelar execução" (M3)
 MATRIX: dict[Permission, dict[str, bool]] = {
     Permission.CLIENTS_VIEW_ALL: {
         "artemisys": True,
@@ -58,6 +59,30 @@ MATRIX: dict[Permission, dict[str, bool]] = {
         "artemisys": True,
         "tenant_admin": True,
         "operator": False,
+        "viewer": False,
+    },
+    Permission.BOTS_VIEW: {
+        "artemisys": True,
+        "tenant_admin": True,
+        "operator": True,
+        "viewer": True,
+    },
+    Permission.BOTS_MANAGE: {
+        "artemisys": True,
+        "tenant_admin": False,
+        "operator": False,
+        "viewer": False,
+    },
+    Permission.JOBS_VIEW: {
+        "artemisys": True,
+        "tenant_admin": True,
+        "operator": True,
+        "viewer": True,
+    },
+    Permission.JOBS_RUN: {
+        "artemisys": True,
+        "tenant_admin": True,
+        "operator": True,
         "viewer": False,
     },
 }

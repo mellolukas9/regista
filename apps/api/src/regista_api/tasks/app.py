@@ -17,12 +17,14 @@ from procrastinate.job_context import JobContext
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from regista_api.core.config import Settings
+from regista_api.jobs import lost
 from regista_api.machines import presence
 
 log = structlog.get_logger()
 
 SWEEP_TASK = "regista.mark_stale_machines_offline"
 PURGE_TASK = "regista.purge_auth_rate_limits"
+PARTITIONS_TASK = "regista.ensure_job_log_partitions"
 REMOVE_OLD_JOBS_TASK = "regista.remove_old_jobs"
 
 # Finished jobs are kept for a week (enough to investigate), then removed every night.
@@ -47,6 +49,11 @@ def build_app(settings: Settings, factory: async_sessionmaker[AsyncSession]) -> 
         )
         if changed:
             log.info("machines_marked_offline", count=changed)
+        # Right after: a run whose machine has no signal ends as machine_lost. Done in the same
+        # task so the order is always "machine offline, then its run".
+        ended = await lost.end_runs_of_lost_machines(factory)
+        if ended:
+            log.info("runs_ended_machine_lost", count=ended)
 
     @app.periodic(cron="0 * * * * 0")  # every hour, on the hour
     @app.task(name=PURGE_TASK, queueing_lock=PURGE_TASK, lock=PURGE_TASK)
@@ -56,6 +63,13 @@ def build_app(settings: Settings, factory: async_sessionmaker[AsyncSession]) -> 
         )
         if removed:
             log.info("rate_limit_windows_purged", count=removed)
+
+    @app.periodic(cron="30 2 * * * 0")  # every night at 02:30
+    @app.task(name=PARTITIONS_TASK, queueing_lock=PARTITIONS_TASK, lock=PARTITIONS_TASK)
+    async def ensure_job_log_partitions(timestamp: int) -> None:
+        created = await lost.ensure_log_partitions(factory)
+        if created:
+            log.info("job_log_partitions_created", count=created)
 
     @app.periodic(cron="0 3 * * * 0")  # every night at 03:00
     @app.task(

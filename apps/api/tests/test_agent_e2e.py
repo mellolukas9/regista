@@ -17,7 +17,8 @@ import sys
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO
 
@@ -130,9 +131,13 @@ class Stack:
     tenant_id: uuid.UUID
     master_key: str
     processes: list[Proc]
+    # Extra settings of the agent (the job tests turn on the development mode through these).
+    agent_extra: dict[str, str] = field(default_factory=dict)
 
     def agent_env(self) -> dict[str, str]:
-        return _clean_env({"REGISTA_HOME": str(self.home), "REGISTA_LOG_LEVEL": "DEBUG"})
+        return _clean_env(
+            {"REGISTA_HOME": str(self.home), "REGISTA_LOG_LEVEL": "DEBUG", **self.agent_extra}
+        )
 
     def agent(self, *args: str, log: str) -> Proc:
         return _spawn(AGENT_COMMAND + list(args), self.agent_env(), self.tmp / log, self.tmp)
@@ -193,6 +198,22 @@ async def _admin_login(
 async def stack(
     db_urls: DbUrls, seed: Seed, app_factory: Factory, tmp_path: Path
 ) -> AsyncIterator[Stack]:
+    async with running_stack(db_urls, seed, app_factory, tmp_path) as running:
+        yield running
+
+
+@asynccontextmanager
+async def running_stack(
+    db_urls: DbUrls,
+    seed: Seed,
+    app_factory: Factory,
+    tmp_path: Path,
+    *,
+    api_env: dict[str, str] | None = None,
+    agent_extra: dict[str, str] | None = None,
+) -> AsyncIterator[Stack]:
+    """The real API and worker as processes, and a client already logged in. `api_env` adds
+    settings of the API and the worker; `agent_extra` settings of the agents started from it."""
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
     master_key = LocalKeyProvider.generate_key()
@@ -208,6 +229,7 @@ async def stack(
             "REGISTA_HEARTBEAT_SECONDS": str(HEARTBEAT_SECONDS),
             "REGISTA_MACHINE_OFFLINE_AFTER_SECONDS": str(OFFLINE_AFTER_SECONDS),
             "REGISTA_MACHINE_SWEEP_CRON": "* * * * * *",
+            **(api_env or {}),
         }
     )
     api = _spawn(
@@ -256,6 +278,7 @@ async def stack(
             tenant_id=seed.tenant_a,
             master_key=master_key,
             processes=processes,
+            agent_extra=agent_extra or {},
         )
     finally:
         if admin is not None:

@@ -14,6 +14,9 @@ regista-sdk = { workspace = true }
 regista-agent = { workspace = true }
 
 [dependency-groups]
+bots = [
+    "playwright>=1.63.0",
+]
 dev = [
     "regista-api",
     "regista-sdk",
@@ -42,6 +45,8 @@ known-first-party = ["regista_api", "regista", "regista_agent"]
 "**/tests/**" = ["S101", "S105", "S106"]
 # Migration SQL is static (constants only); S608 flags the f-string composition.
 "**/migrations/**" = ["S608"]
+# The dashboard queries are fixed text joined with constant SQL fragments (the period start).
+"**/dashboard/router.py" = ["S608"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -50,7 +55,12 @@ plugins = ["pydantic.mypy"]
 mypy_path = ["apps/api/src", "sdk/src", "agent/src"]
 explicit_package_bases = true
 files = ["apps/api", "sdk", "agent"]
-exclude = ["migrations/versions/"]
+exclude = ["migrations/versions/", "agent/tests/fixtures/", "bots/"]
+
+[[tool.mypy.overrides]]
+# boto3 ships no types; the S3 calls are wrapped in `regista_api.storage`.
+module = ["boto3", "boto3.*", "botocore", "botocore.*", "asyncpg", "asyncpg.*", "psutil", "psutil.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "sdk/tests", "agent/tests"]
@@ -60,6 +70,7 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 markers = [
     "e2e: starts the real API, worker and agent as separate processes (slower)",
+    "s3: needs a running SeaweedFS (Testcontainers); the panel fixture configures the app for it",
 ]
 filterwarnings = [
     # The suite overrides `event_loop_policy` (psycopg needs the selector loop on Windows). The

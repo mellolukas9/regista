@@ -129,4 +129,5 @@ Vazamentos laterais tratados:
 - O SDK mascara CPF, CNPJ e e-mail em mensagens de erro e logs antes de enviar.
 - Campos visíveis (`visible_fields`) são escolhidos por fila.
 - Retenção: o conteúdo é apagado após `retention_days` da conclusão; o controle permanece.
+- Capturas de tela vão ao S3 por URL pré-assinada (ADR 0019): o bucket é privado, a chave do objeto é montada pelo servidor, o PUT assina tipo e tamanho, e o painel só vê por um redirecionamento de 60 s depois de conferir sessão e cliente. Em `prod`, API e worker se recusam a subir com chave de acesso estática ou endpoint local: só role IAM.
 - Screenshots de filas sensíveis podem ficar no armazenamento do cliente (evolução futura; no MVP vão para o S3 do Regista com acesso por URL pré-assinada de curta duração).

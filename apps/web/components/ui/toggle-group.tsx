@@ -44,7 +44,7 @@ function SegmentedItem({
     <ToggleGroupPrimitive.Item
       data-slot="segmented-item"
       className={cn(
-        "inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-sm px-3 text-body font-medium text-text-secondary transition-colors hover:text-text disabled:cursor-not-allowed disabled:opacity-45 data-[state=on]:bg-border-control data-[state=on]:text-text data-[state=on]:shadow-[inset_0_0_0_1px_var(--color-border-hover)]",
+        "inline-flex h-9 flex-1 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm px-3 text-body font-medium text-text-secondary transition-colors hover:text-text disabled:cursor-not-allowed disabled:opacity-45 data-[state=on]:bg-border-control data-[state=on]:text-text data-[state=on]:shadow-[inset_0_0_0_1px_var(--color-border-hover)]",
         className,
       )}
       {...props}

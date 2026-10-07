@@ -21,6 +21,8 @@ export type Machine = {
   key_expires_at: string | null;
   key_created_at: string | null;
   created_at: string;
+  /** A execução em andamento nesta máquina (coluna "Agora"). */
+  current_job: { id: string; short_code: string; status: string } | null;
 };
 
 export type MachineDetail = Machine & {
@@ -40,6 +42,8 @@ export type Pool = {
   machines_total: number;
   machines_online: number;
   created_at: string;
+  /** Bots ativos que rodam neste pool ("Roda: ..."). */
+  bot_names: string[];
 };
 
 export type IssuedKey = {
@@ -140,6 +144,19 @@ export function lastSignal(machine: Machine, now: number = Date.now()): string {
   if (!machine.last_seen_at) return "—";
   if (machine.status === "online") return ago(machine.last_seen_at, now);
   return `${dayAndTime(machine.last_seen_at, now)} · ${ago(machine.last_seen_at, now)}`;
+}
+
+/**
+ * Texto do banner de máquina sem sinal (design-system.md §13). O mesmo caso tem o mesmo texto em
+ * todas as telas: o que acontece com as execuções do pool, o que conferir e, no modo Sessão, o
+ * usuário do Windows.
+ */
+export function silenceText(mode: MachineMode, otherOnline: string | null | undefined): string {
+  const effect = otherOnline
+    ? `Até o agente voltar, as execuções do pool vão para a máquina ${otherOnline}. `
+    : "Até o agente voltar, as execuções do pool ficam pendentes. ";
+  const session = mode === "session" ? " Confira também se o usuário do Windows continua logado." : "";
+  return `${effect}Confira se o computador está ligado e com internet.${session}`;
 }
 
 /** Frase do cabeçalho do detalhe: "Último sinal hoje às 08:20, há 2 h". */

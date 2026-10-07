@@ -36,7 +36,15 @@ from .test_machine_token import _rebuild
 Factory = async_sessionmaker[AsyncSession]
 
 # Path parameters that name a resource owned by a client, and where to find an A example.
-RESOURCE_PARAMS = {"user_id", "session_id", "machine_id", "pool_id"}
+RESOURCE_PARAMS = {
+    "user_id",
+    "session_id",
+    "machine_id",
+    "pool_id",
+    "bot_id",
+    "job_id",
+    "artifact_id",
+}
 
 
 @dataclass
@@ -100,6 +108,48 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     {"u": a_admin.user_id},
                 )
             ).scalar_one()
+            bot_name = f"bot-secreto-{uuid.uuid4().hex[:8]}"
+            bot_id: uuid.UUID = (
+                await db.execute(
+                    text(
+                        "INSERT INTO bots (tenant_id, pool_id, name, package_name)"
+                        " VALUES (:t, :p, :n, :k) RETURNING id"
+                    ),
+                    {
+                        "t": seed.tenant_a,
+                        "p": a_machines.pool_id,
+                        "n": bot_name,
+                        "k": f"pacote_secreto_{uuid.uuid4().hex[:8]}",
+                    },
+                )
+            ).scalar_one()
+            job_code = f"exec-{uuid.uuid4().hex[:6]}"
+            job_id: uuid.UUID = (
+                await db.execute(
+                    text(
+                        "INSERT INTO jobs (tenant_id, bot_id, pool_id, short_code, params)"
+                        " VALUES (:t, :b, :p, :c, CAST(:x AS jsonb)) RETURNING id"
+                    ),
+                    {
+                        "t": seed.tenant_a,
+                        "b": bot_id,
+                        "p": a_machines.pool_id,
+                        "c": job_code,
+                        "x": '{"segredo": "param-secreto-de-a"}',
+                    },
+                )
+            ).scalar_one()
+            artifact_key = f"tenants/{seed.tenant_a}/jobs/{job_id}/{uuid.uuid4()}.png"
+            artifact_id: uuid.UUID = (
+                await db.execute(
+                    text(
+                        "INSERT INTO artifacts (tenant_id, job_id, storage_key, content_type,"
+                        " size_bytes, uploaded_at) VALUES (:t, :j, :k, 'image/png', 10, now())"
+                        " RETURNING id"
+                    ),
+                    {"t": seed.tenant_a, "j": job_id, "k": artifact_key},
+                )
+            ).scalar_one()
         try:
             yield World(
                 env=env,
@@ -112,6 +162,9 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     "session_id": str(session_id),
                     "machine_id": a_machines.pending_id,
                     "pool_id": a_machines.pool_id,
+                    "bot_id": str(bot_id),
+                    "job_id": str(job_id),
+                    "artifact_id": str(artifact_id),
                 },
                 a_markers=[
                     str(seed.tenant_a),
@@ -120,6 +173,13 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     a_target.email,
                     str(target_id),
                     str(session_id),
+                    str(bot_id),
+                    bot_name,
+                    str(job_id),
+                    job_code,
+                    str(artifact_id),
+                    artifact_key,
+                    "param-secreto-de-a",
                     *a_machines.markers,
                 ],
                 a_used_key=a_machines.used_key,
@@ -263,16 +323,18 @@ async def _snapshot(owner_factory: Factory, tenant_id: uuid.UUID) -> dict[str, l
             r[0]
             for r in await db.execute(
                 text(
-                    "SELECT table_name FROM information_schema.columns"
-                    " WHERE table_schema = 'public' AND column_name = 'tenant_id'"
-                    " ORDER BY table_name"
+                    "SELECT c.table_name FROM information_schema.columns c"
+                    " JOIN pg_class k ON k.oid = format('public.%I', c.table_name)::regclass"
+                    " WHERE c.table_schema = 'public' AND c.column_name = 'tenant_id'"
+                    # Partitions are read through their parent: listing both would count twice.
+                    " AND NOT k.relispartition ORDER BY c.table_name"
                 )
             )
         ]
         result: dict[str, list[str]] = {}
         for table in tables:
             rows = await db.execute(
-                text(f"SELECT row_to_json(x)::text FROM {table} x ORDER BY id")  # noqa: S608
+                text(f"SELECT row_to_json(x)::text FROM {table} x ORDER BY 1")  # noqa: S608
             )
             result[table] = [r[0] for r in rows]
         tenant_row = await db.execute(
@@ -320,7 +382,11 @@ async def test_every_route_is_isolated_between_clients(
         label = f"B-admin {spec.label}"
         assert response.status_code < 500, f"{label}: {response.status_code} {response.text}"
         _assert_no_trace_of_a(w, spec, "B-admin", response)
-        if spec.path_params:
+        if spec.marker.kind == "machine":
+            # A person's session is not a machine: 401, whatever the route (the machine side is
+            # covered by `test_a_machine_of_b_reaches_nothing_of_a`).
+            assert response.status_code == 401, f"{label}: {response.status_code} {response.text}"
+        elif spec.path_params:
             assert response.status_code == 404, f"{label}: {response.status_code} {response.text}"
         if getattr(spec.marker, "permission", None) in PLATFORM_ONLY:
             assert response.status_code == 403, f"{label}: {response.status_code}"
@@ -340,7 +406,9 @@ async def test_every_route_is_isolated_between_clients(
         platform_wide = getattr(spec.marker, "permission", None) in PLATFORM_ONLY
         if not platform_wide:  # /clients legitimately lists every client, A included
             _assert_no_trace_of_a(w, spec, "staff-in-B", response)
-        if spec.path_params:
+        if spec.marker.kind == "machine":
+            assert response.status_code == 401, f"{label}: {response.status_code} {response.text}"
+        elif spec.path_params:
             assert response.status_code == 404, f"{label}: {response.status_code} {response.text}"
 
     assert await _snapshot(owner_factory, w.seed.tenant_a) == before
@@ -388,6 +456,9 @@ async def test_a_machine_of_b_reaches_nothing_of_a(world: World, owner_factory: 
         )
         assert r.status_code < 500, f"B-machine {spec.label}: {r.status_code} {r.text}"
         _assert_no_trace_of_a(w, spec, "B-machine", r)
+        if spec.path_params:
+            # A job, an artifact or a machine of A: not found, exactly like one that never existed.
+            assert r.status_code == 404, f"B-machine {spec.label}: {r.status_code} {r.text}"
     assert await _snapshot(owner_factory, w.seed.tenant_a) == before
 
 

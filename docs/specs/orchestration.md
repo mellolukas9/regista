@@ -18,8 +18,10 @@ pending ──(agente assume)──► assigned ──(robô inicia)──► ru
 - Agente assume o job de forma atômica (`FOR UPDATE SKIP LOCKED`) filtrando por `pool_id` da máquina e `tenant_id`.
 - **Uma execução por máquina por vez.** Máquina com job `assigned`/`running` não recebe outro. Sem máquina `online` livre no pool, o job fica `pending`. Execuções do mesmo bot podem rodar em paralelo em máquinas diferentes.
 - O job termina `failed` se qualquer item terminar com falha, mesmo que o robô encerre normalmente.
-- Máquina que fica sem sinal com job `assigned`/`running`: o job vira `failed` com `error_code = 'machine_lost'`.
-- Cancelamento (`pending`, `assigned`, `running`): o painel grava `cancel_requested_at`; o agente consulta no heartbeat e o robô para **antes do próximo item**. Itens já concluídos ficam como estão.
+- Máquina que fica sem sinal com job `assigned`/`running`: o job vira `failed` com `error_code = 'machine_lost'` (tarefa do worker, na mesma rodada que marca a máquina como "Sem sinal"). Se já havia pedido de cancelamento, vale o cancelamento (`cancelled`). O agente que volta, ainda com o robô rodando, é mandado parar pelo heartbeat.
+- Revogar a máquina cancela a execução em andamento nela (`cancelled`, `error_code = 'machine_revoked'`), na mesma transação da revogação.
+- Cancelamento (`pending`, `assigned`, `running`): `pending` vira `cancelled` na hora. Com máquina envolvida, o painel grava `cancel_requested_at`; o agente recebe o id no heartbeat (`cancellations`) e para o robô: arquivo `REGISTA_CANCEL_FILE` + sinal gentil, e, passados `cancel_grace_seconds` (15), mata o processo e tudo que ele iniciou. Depois reporta `cancelled`. Itens já concluídos ficam como estão. A parada "antes do próximo item" depende do SDK e chega no M5.
+- O banco garante uma execução por máquina (índice único parcial em `jobs(machine_id)` para `assigned`/`running`).
 - **Ao terminar um job por qualquer motivo**, o backend move todo item ainda `in_progress` daquele job para `abandoned`.
 
 ## Distribuição de jobs para o agente
@@ -27,10 +29,16 @@ pending ──(agente assume)──► assigned ──(robô inicia)──► ru
 `GET /agent/jobs/next?wait=30` é um long-polling:
 
 1. Tenta assumir um job pendente do pool da máquina.
-2. Se não houver, a requisição aguarda até `wait` segundos ouvindo `LISTEN jobs_<tenant>` (um `NOTIFY` é emitido ao criar job).
+2. Se não houver, a requisição aguarda até `wait` segundos sem segurar conexão do pool: ela se registra em memória e é acordada pelo `NOTIFY` do canal único `regista_jobs` (payload `<tenant_id>:<pool_id>`, emitido por gatilho ao criar job). Ver a ADR 0020.
 3. Responde `204` se nada chegou; o agente repete.
 
-`LISTEN` exige uma conexão asyncpg dedicada e persistente, fora do pool comum (e incompatível com PgBouncer em modo transação).
+`LISTEN` exige uma conexão asyncpg dedicada e persistente (uma por processo da API), fora do pool comum (e incompatível com PgBouncer em modo transação). Se ela cair, reconecta e acorda todos os que esperam; o aviso é só uma dica, a verdade está no banco.
+
+## Logs e capturas de um job
+
+- O agente envia as linhas do robô em lote (`POST /agent/logs`, até 200 linhas), numeradas por `seq` (reenviar não duplica). Limites: 4 KB por linha, 20 000 linhas e 5 MB por execução (acima disso, uma linha `WARN` avisa e o resto é descartado). Segredos e sequências de controle são removidos no agente e de novo no servidor.
+- `job_logs` é particionada por mês, sem partição `DEFAULT`; a função `app.ensure_job_log_partitions` (worker, diária) cria as partições. Sem a partição do mês, a gravação falha com 503 e log ERROR (o agente reenvia) e `/health` indica `degraded` quando falta a do mês seguinte.
+- Capturas de tela: o agente pede uma URL pré-assinada de PUT (120 s, tipo e tamanho assinados, até 5 MB e 20 por execução), envia direto ao S3 e confirma; o servidor confere o objeto antes de marcar `uploaded_at`. O painel exibe pela rota `GET /artifacts/{id}/content`, que confere sessão e cliente e redireciona para um GET de 60 s.
 
 ## Ciclo de vida de um item
 
