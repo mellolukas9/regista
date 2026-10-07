@@ -15,12 +15,18 @@ class Permission(enum.StrEnum):
     MACHINES_MANAGE = "machines.manage"  # register machine, new pool, new key, revoke
     BOTS_VIEW = "bots.view"
     BOTS_MANAGE = "bots.manage"  # register a bot (Artemisys only)
+    VERSIONS_MANAGE = "versions.manage"  # publish a version, put one in use (Artemisys only)
     JOBS_VIEW = "jobs.view"  # runs, logs, screenshots, dashboard
     JOBS_RUN = "jobs.run"  # Executar agora, Reexecutar, Cancelar execução
 
 
 PLATFORM_ONLY: frozenset[Permission] = frozenset(
-    {Permission.CLIENTS_VIEW_ALL, Permission.CLIENTS_CREATE, Permission.BOTS_MANAGE}
+    {
+        Permission.CLIENTS_VIEW_ALL,
+        Permission.CLIENTS_CREATE,
+        Permission.BOTS_MANAGE,
+        Permission.VERSIONS_MANAGE,
+    }
 )
 
 _READ = frozenset({Permission.MACHINES_VIEW, Permission.BOTS_VIEW, Permission.JOBS_VIEW})

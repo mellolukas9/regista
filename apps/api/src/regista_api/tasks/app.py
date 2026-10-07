@@ -16,15 +16,18 @@ from procrastinate import App, PsycopgConnector, builtin_tasks
 from procrastinate.job_context import JobContext
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from regista_api.bots import uploads
 from regista_api.core.config import Settings
 from regista_api.jobs import lost
 from regista_api.machines import presence
+from regista_api.storage.s3 import S3Storage
 
 log = structlog.get_logger()
 
 SWEEP_TASK = "regista.mark_stale_machines_offline"
 PURGE_TASK = "regista.purge_auth_rate_limits"
 PARTITIONS_TASK = "regista.ensure_job_log_partitions"
+UPLOADS_TASK = "regista.expire_package_uploads"
 REMOVE_OLD_JOBS_TASK = "regista.remove_old_jobs"
 
 # Finished jobs are kept for a week (enough to investigate), then removed every night.
@@ -70,6 +73,13 @@ def build_app(settings: Settings, factory: async_sessionmaker[AsyncSession]) -> 
         created = await lost.ensure_log_partitions(factory)
         if created:
             log.info("job_log_partitions_created", count=created)
+
+    @app.periodic(cron="*/10 * * * * 0")  # every 10 minutes
+    @app.task(name=UPLOADS_TASK, queueing_lock=UPLOADS_TASK, lock=UPLOADS_TASK)
+    async def expire_package_uploads(timestamp: int) -> None:
+        expired = await uploads.expire_stale_uploads(factory, S3Storage(settings))
+        if expired:
+            log.info("package_uploads_expired", count=expired)
 
     @app.periodic(cron="0 3 * * * 0")  # every night at 03:00
     @app.task(

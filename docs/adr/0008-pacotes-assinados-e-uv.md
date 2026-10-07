@@ -13,6 +13,9 @@ Robôs são distribuídos como pacotes versionados, assinados com Ed25519 por um
 
 ## Consequências
 
+Os detalhes (formato do pacote, chaves e rotação, amarração ao cliente, runtime) estão na [ADR 0021](0021-pacotes-assinados-formato-chaves-e-runtime.md).
+
+
 O servidor só consegue mandar executar versões assinadas. Publicar versão exige o passo de assinatura (CLI `regista-pack`).
 
 ## Alternativas descartadas

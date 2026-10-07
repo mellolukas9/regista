@@ -6,7 +6,7 @@ from typing import Any
 
 from regista_agent.config import AgentSettings
 from regista_agent.errors import MachineRevoked, ServerUnavailable
-from regista_agent.jobapi import Ack, Assignment, JobGone, LogsResult
+from regista_agent.jobapi import Ack, Assignment, JobGone, LogsResult, PackageOffer, RuntimeNeed
 
 FIXTURE_BOTS = Path(__file__).parent / "fixtures" / "bots"
 
@@ -19,7 +19,14 @@ class FakeApi:
         self.queue: list[Assignment | Exception | None] = []
         self.started: list[str] = []
         self.completed: list[str] = []
+        self.released: list[str] = []
         self.failed: list[tuple[str, str, str]] = []
+        self.failed_reasons: dict[str, str | None] = {}
+        self.offers: dict[str, PackageOffer] = {}
+        self.package_files: dict[str, bytes] = {}
+        self.offer_error: Exception | None = None
+        self.runtime_needs: list[RuntimeNeed] = []
+        self.downloads: list[str] = []
         self.log_batches: list[list[dict[str, Any]]] = []
         self.uploads: list[tuple[str, dict[str, str], bytes]] = []
         self.presigned: list[tuple[str, str, int]] = []
@@ -48,8 +55,29 @@ class FakeApi:
     def complete(self, job_id: str) -> None:
         self.completed.append(job_id)
 
-    def fail(self, job_id: str, error_code: str, message: str) -> None:
+    def release(self, job_id: str) -> None:
+        self.released.append(job_id)
+
+    def fail(self, job_id: str, error_code: str, message: str, reason: str | None = None) -> None:
         self.failed.append((job_id, error_code, message))
+        self.failed_reasons[job_id] = reason
+
+    def package_offer(self, version_id: str) -> PackageOffer:
+        if self.offer_error is not None:
+            raise self.offer_error
+        return self.offers[version_id]
+
+    def download_package(self, url: str, destination: Path, max_bytes: int) -> None:
+        self.downloads.append(url)
+        data = self.package_files[url]
+        if len(data) > max_bytes:
+            from regista_pkg import PackageError
+
+            raise PackageError("too_large")
+        destination.write_bytes(data)
+
+    def runtimes(self) -> list[RuntimeNeed]:
+        return list(self.runtime_needs)
 
     def send_logs(self, job_id: str, lines: list[dict[str, Any]]) -> LogsResult:
         with self.lock:

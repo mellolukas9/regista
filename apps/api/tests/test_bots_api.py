@@ -97,10 +97,11 @@ async def test_lists_and_details_follow_the_client(panel: Panel) -> None:
     staff = await panel.staff_in(panel.tenant_a)
     bot_a = (await _post(staff, "/bots", _body(pool_a, name="Controle de Acordos"))).json()
     staff = await panel.staff_in(panel.tenant_b)
-    bot_b = (await _post(staff, "/bots", _body(pool_b, name="Outro cliente"))).json()
+    bot_b = (await _post(staff, "/bots", _body(pool_b, name="Controle do outro cliente"))).json()
 
     for client in (panel.admin_a, panel.operator_a, panel.viewer_a):
-        listed: dict[str, Any] = (await client.get("/bots")).json()
+        # Filtered by name: the test database is shared, and the first page is not all of it.
+        listed: dict[str, Any] = (await client.get("/bots", params={"q": "Controle"})).json()
         ids = {i["id"] for i in listed["items"]}
         assert bot_a["id"] in ids and bot_b["id"] not in ids
         assert (await client.get(f"/bots/{bot_a['id']}")).status_code == 200

@@ -130,6 +130,9 @@ class EnrollRequest(_Request):
 
 class EnrollResponse(BaseModel):
     machine_id: uuid.UUID
+    # The client of this machine. The agent keeps it in its protected folder and compares it with
+    # the client named in every signed package it is asked to run (ADR 0021).
+    tenant_id: uuid.UUID
     mode: str
     heartbeat_seconds: int
 
@@ -188,6 +191,9 @@ class HeartbeatRequest(_Request):
     # The run the agent is busy with, if any. The server answers `cancellations` with it when the
     # panel asked to cancel it or when it already ended on the server side (machine lost).
     current_job_id: uuid.UUID | None = None
+    # The local kill switch is on: the agent takes no new runs. Only an indication for the panel;
+    # nothing in the panel can pause or resume a machine.
+    paused: bool = False
 
 
 class HeartbeatResponse(BaseModel):
@@ -301,7 +307,10 @@ async def enroll(body: EnrollRequest, request: Request) -> EnrollResponse:
             ip=ip,
         )
     return EnrollResponse(
-        machine_id=found["machine_id"], mode=machine.mode, heartbeat_seconds=s.heartbeat_seconds
+        machine_id=found["machine_id"],
+        tenant_id=found["tenant_id"],
+        mode=machine.mode,
+        heartbeat_seconds=s.heartbeat_seconds,
     )
 
 
@@ -418,6 +427,24 @@ async def heartbeat(
     async with machine.session() as db:
         await _record_signal(db, machine, body)
         cancellations = await job_service.cancellations(db, machine.machine_id, body.current_job_id)
+        for job_id in await job_service.release_orphans(
+            db,
+            tenant_id=machine.tenant_id,
+            machine_id=machine.machine_id,
+            current_job_id=body.current_job_id,
+            older_than_seconds=machine.state.settings.assigned_orphan_seconds,
+        ):
+            await audit.record(
+                db,
+                tenant_id=machine.tenant_id,
+                actor_type="system",
+                actor_id=None,
+                action="job.orphan_released",
+                target_type="job",
+                target_id=job_id,
+                metadata={"machine_id": str(machine.machine_id)},
+                ip=machine.ip,
+            )
     return HeartbeatResponse(
         server_time=datetime.now(UTC),
         heartbeat_seconds=machine.state.settings.heartbeat_seconds,
@@ -442,9 +469,11 @@ async def _record_signal(db: AsyncSession, machine: MachineAuth, body: Heartbeat
     await db.execute(
         text(
             "UPDATE machines SET last_seen_at = now(), status = 'online', agent_version = :v,"
-            " os_info = CAST(:os AS jsonb), updated_at = now() WHERE id = :m"
+            " os_info = CAST(:os AS jsonb), paused_locally = :p, updated_at = now()"
+            " WHERE id = :m"
         ),
         {
+            "p": body.paused,
             "v": body.agent_version,
             "os": body.os_info.model_dump_json(exclude_none=True),
             "m": machine.machine_id,

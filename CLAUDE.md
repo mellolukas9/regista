@@ -85,7 +85,7 @@ O `enroll` grava a chave numa pasta restrita a SYSTEM, Administradores e à cont
 
 **S3 local (capturas de tela).** O `docker compose ... up -d` sobe também o SeaweedFS (porta 8333, credenciais só de dev em `infra/compose/seaweedfs/s3.json`). A API precisa das variáveis `REGISTA_S3_*` do `.env.example`; num `.env` antigo, copie o bloco "S3 local" do `.env.example`. Em produção a API e o worker se recusam a subir com chave de acesso ou endpoint local (só role IAM).
 
-**Atualizar um banco de dev que já existe (sem recriar).** Depois de baixar o M3, aplique as migrations novas (a `0004` cria `bots`, `jobs`, `job_logs`, `artifacts`), com o Postgres ligado:
+**Atualizar um banco de dev que já existe (sem recriar).** Depois de baixar o M3 ou o M4, aplique as migrations novas (a `0004` cria `bots`, `jobs`, `job_logs`, `artifacts`; a `0005` cria `bot_versions`), com o Postgres ligado:
 
 ```powershell
 docker compose -f infra/compose/docker-compose.dev.yml up -d
@@ -106,6 +106,30 @@ uv run regista-agent run
 ```
 
 Em **Bots**, **Executar agora**: o painel mostra estados, logs e a captura de tela, atualizando sozinho. Mais opções do agente em `agent/README.md`.
+
+**Pacotes assinados (M4).** Em produção o agente só roda pacotes assinados. O `regista-pack` roda na máquina de build da Artemisys (precisa do PyPI); a chave de assinatura **nunca** vai para o repositório, o servidor ou a CI (ADR 0021 e `docs/runbooks/chave-de-assinatura.md`):
+
+```powershell
+# uma vez: gera a chave (cifrada com senha, FORA do repositório); a pública vai para regista_pkg/trusted_keys.py
+uv run regista-pack keygen --out $env:USERPROFILE\.regista\signing --name ativa
+# por versão: um pacote assinado por cliente (--client pode repetir); o Python é exato (X.Y.Z)
+uv run regista-pack build bots\demo_busca_wikipedia --version 1.0.0 --client <id-do-cliente> --key $env:USERPROFILE\.regista\signing\ativa.rgkey --python 3.13.1 --out dist
+uv run regista-pack verify dist\<pacote>.rgpkg dist\<pacote>.rgsig --keys <chave-publica>.json   # confere hash, assinatura e conteúdo
+```
+
+O robô declara as dependências em `requirements.txt` (a pasta do robô é o nome do pacote). A equipe Artemisys publica pelo painel: **Bots**, o bot, aba **Versões**, **Publicar versão** (arquivos `.rgpkg` e `.rgsig`). Em dev, a API e o agente só confiam em chaves extras com `REGISTA_DEV_TRUSTED_KEYS` (arquivo JSON com a chave pública, formato do `<chave>.pub.json`); em produção essa variável é recusada.
+
+Na máquina do agente (comandos de `regista-agent`; em produção, console **elevado**):
+
+```powershell
+uv run regista-agent setup --from-server [--wheels <pasta de wheels>]   # Python e Chromium exatos que os bots do pool pedem
+uv run regista-agent allow demo_busca_wikipedia      # lista local de robôs permitidos (vazia = nada roda)
+uv run regista-agent disallow demo_busca_wikipedia
+uv run regista-agent pause                           # kill switch local; `resume` desliga (o painel só mostra "Pausada nesta máquina")
+uv run regista-agent diagnose                        # chaves confiáveis, cliente, lista, kill switch, runtimes
+```
+
+Em dev, `setup`, `allow` e `pause` não exigem console elevado com `REGISTA_ENVIRONMENT=dev`. Para rodar um robô **assinado** de ponta a ponta em dev: gere a chave de teste, faça o `build` para o cliente, publique pelo painel, rode `setup --from-server` (ou aponte `REGISTA_DEV_PYTHON` e `REGISTA_DEV_BROWSERS_PATH` para um Python e uma pasta de navegadores existentes) e `allow` do pacote. A flag `REGISTA_DEV_UNSIGNED` continua existindo, só em dev, para robôs de uma pasta sem versão.
 
 **Roles e init do banco.** Os scripts de `infra/compose/initdb/` (que criam `regista_owner` e `regista_app`) só rodam quando o volume do Postgres está **vazio**. Mudou o script ou quer um banco limpo? Recrie o banco de dev do zero (**apaga todos os dados locais**):
 

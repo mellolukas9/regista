@@ -67,6 +67,7 @@ async def finish_job(
     status: str,
     error_code: str | None = None,
     error_message: str | None = None,
+    error_reason: str | None = None,
     machine_id: uuid.UUID | None = None,
     when: datetime | None = None,
 ) -> bool:
@@ -79,7 +80,7 @@ async def finish_job(
     result = await db.execute(
         text(
             "UPDATE jobs SET status = :s, finished_at = coalesce(CAST(:w AS timestamptz), now()),"
-            " error_code = :c, error_message = :m, updated_at = now()"
+            " error_code = :c, error_message = :m, error_reason = :r, updated_at = now()"
             " WHERE id = :j AND status = ANY(:from)"
             " AND (CAST(:mid AS uuid) IS NULL OR machine_id = :mid) RETURNING id"
         ),
@@ -88,12 +89,49 @@ async def finish_job(
             "w": when,
             "c": error_code,
             "m": (error_message or "")[:1000] or None,
+            "r": error_reason,
             "j": job_id,
             "from": list(from_statuses),
             "mid": machine_id,
         },
     )
     return result.first() is not None
+
+
+async def release_orphans(
+    db: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    machine_id: uuid.UUID,
+    current_job_id: uuid.UUID | None,
+    older_than_seconds: int,
+) -> list[uuid.UUID]:
+    """Runs `assigned` to this machine for a while that it does not say it is working on.
+
+    A long poll can be answered with a run after the agent that asked is gone (it was restarted,
+    killed, lost the connection): the run is assigned to a machine that is online, and nobody
+    would ever start it. The heartbeat says which run the agent holds; any other `assigned` run
+    older than `older_than_seconds` (so one the agent is just starting is never touched) goes back
+    to the queue for any machine of the pool, and the pool is woken up."""
+    rows = (
+        await db.execute(
+            text(
+                "UPDATE jobs SET status = 'pending', machine_id = NULL, assigned_at = NULL,"
+                " bot_version_id = NULL, updated_at = now()"
+                " WHERE machine_id = :m AND status = 'assigned'"
+                " AND cancel_requested_at IS NULL"
+                " AND assigned_at < now() - make_interval(secs => :s)"
+                " AND (CAST(:cur AS uuid) IS NULL OR id <> CAST(:cur AS uuid))"
+                " RETURNING id, pool_id"
+            ),
+            {"m": machine_id, "s": older_than_seconds, "cur": current_job_id},
+        )
+    ).all()
+    for row in rows:
+        await db.execute(
+            text("SELECT pg_notify('regista_jobs', :p)"), {"p": f"{tenant_id}:{row.pool_id}"}
+        )
+    return [r.id for r in rows]
 
 
 async def cancellations(

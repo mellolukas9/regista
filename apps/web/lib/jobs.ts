@@ -29,6 +29,10 @@ export type Job = {
   cancel_requested_at: string | null;
   error_code: string | null;
   error_message: string | null;
+  /** Por que o agente recusou o pacote (lista fechada; só com `package_invalid`). */
+  error_reason: string | null;
+  /** A versão com que a execução rodou (null em desenvolvimento). */
+  bot_version: string | null;
   items_successful: number;
   items_failed: number;
   items_abandoned: number;
@@ -115,9 +119,46 @@ const ERROR_TEXT: Record<string, string> = {
   internal: "O agente teve um problema durante a execução.",
 };
 
-export function errorText(code: string | null): string | null {
+/** Segunda linha do banner de `package_invalid` (design-system.md §15): um texto fixo por motivo. */
+const PACKAGE_REASON_TEXT: Record<string, string> = {
+  hash_mismatch: "O arquivo do pacote não bate com o hash publicado.",
+  signature_invalid: "A assinatura do pacote não confere.",
+  unknown_key: "O pacote foi assinado com uma chave em que esta máquina não confia.",
+  wrong_client: "O pacote é de outro cliente.",
+  wrong_package: "O pacote não é deste robô.",
+  wrong_version: "A versão do pacote não é a desta execução.",
+  unsafe_archive: "O pacote tem um arquivo com caminho inseguro.",
+  too_large: "O pacote tem arquivos demais ou grandes demais.",
+  malformed_package: "O pacote está corrompido ou fora do formato esperado.",
+};
+
+export function packageReasonText(reason: string | null): string | null {
+  return reason ? (PACKAGE_REASON_TEXT[reason] ?? null) : null;
+}
+
+/** O que cada recusa do agente mostra (§15). Nada daqui vem de texto livre do agente. */
+function refusalText(job: Pick<Job, "error_code" | "bot_version"> & { package_name?: string }): string | null {
+  switch (job.error_code) {
+    case "package_invalid":
+      return "A máquina recusou o pacote do robô. Avise a equipe Artemisys.";
+    case "robot_not_allowed":
+      return `Este robô não está na lista de robôs permitidos desta máquina. Para liberar, rode regista-agent allow ${job.package_name ?? "<pacote>"} como administrador na própria máquina.`;
+    case "runtime_missing":
+      return `Esta máquina ainda não está preparada para a versão ${job.bot_version ?? ""} do robô. Peça a quem cuida da máquina para rodar regista-agent setup como administrador.`;
+    case "environment_failed":
+      return "Não foi possível montar o ambiente do robô nesta máquina. Veja os logs da execução e avise a equipe Artemisys.";
+    default:
+      return null;
+  }
+}
+
+export function errorText(
+  code: string | null,
+  job?: Pick<Job, "bot_version"> & { package_name?: string },
+): string | null {
   if (!code) return null;
-  return ERROR_TEXT[code] ?? "A execução terminou com erro.";
+  const refusal = refusalText({ error_code: code, bot_version: job?.bot_version ?? null, package_name: job?.package_name });
+  return refusal ?? ERROR_TEXT[code] ?? "A execução terminou com erro.";
 }
 
 /** Pendentes e ativas do contexto: alimenta o contador "Execuções" da sidebar e o Dashboard. */

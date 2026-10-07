@@ -8,13 +8,30 @@ Agente do Regista: roda no ambiente do cliente e só faz conexões de saída (HT
 uv run regista-agent enroll --url https://regista.exemplo.com --key rgk_... [--agent-account CONTA] [--force]
 uv run regista-agent run [--mode service|session]   # --mode só confirma o modo do cadastro
 uv run regista-agent diagnose
+uv run regista-agent setup --from-server [--wheels PASTA]   # Python e Chromium exatos (console elevado)
+uv run regista-agent allow|disallow PACOTE                   # lista local de robôs permitidos (console elevado)
+uv run regista-agent pause|resume                            # kill switch local (console elevado)
 ```
 
 Em desenvolvimento, `REGISTA_HOME` aponta para uma pasta própria (configuração, chave e logs), para não usar `%ProgramData%\Regista`.
 
+## Robôs: pacotes assinados (M4)
+
+Em produção o agente só roda **pacotes assinados** pela Artemisys (ADR 0021). Para cada execução, nesta ordem:
+
+1. kill switch local (arquivo `PAUSED`): ligado, o agente não pede execução; a lista local `allowed_bots` (em `agent.toml`): vazia ou sem o robô, a execução falha com `robot_not_allowed`;
+2. baixa o pacote por uma URL pré-assinada (cache em `packages\<pacote>\<sha256>.rgpkg`), confere o **hash e a assinatura antes de abrir o zip**, e confere que o `tenant_id` do manifesto é o do cadastro (`keys\identity.json`), o nome do pacote e a versão. Pacote de outro cliente é recusado mesmo que o servidor o envie. Recusa: `package_invalid`, com um motivo de lista fechada (`hash_mismatch`, `signature_invalid`, `unknown_key`, `wrong_client`, `wrong_package`, `wrong_version`, `unsafe_archive`, `too_large`, `malformed_package`) e o detalhe só nos logs da execução;
+3. extrai entrada por entrada (zip slip, links, nomes do Windows, bombas) numa pasta da execução;
+4. confere o runtime (Python exato e Chromium que o manifesto declara, em `python\` e `browsers\`): faltando, `runtime_missing`; **o agente nunca baixa nada ao executar**;
+5. cria ou reaproveita o ambiente da versão (`envs\`) com `uv`, **offline**, a partir das wheels do pacote (`--no-index --require-hashes`); falha: `environment_failed`.
+
+`regista-agent setup` (console elevado) prepara a máquina: instala as versões exatas pedidas (`--python X.Y.Z --playwright X.Y.Z`, ou `--from-server` para ler o que os bots do pool pedem), com escrita só para Administradores e SYSTEM em `python\` e `browsers\`. `--wheels PASTA` instala o Playwright das wheels de um pacote, sem acessar o PyPI. O hash do Python é conferido pelo `uv`; o Chromium vem do CDN do Playwright só por HTTPS (risco aceito; saída: MSI offline do M8). O `diagnose` mostra as chaves em que o agente confia, o cliente, a lista local, o kill switch e os runtimes (inclusive os que faltam para as versões em uso do pool).
+
+**Limite conhecido, pré-requisito do primeiro cliente em produção (ADR 0022):** o robô roda com a mesma conta do agente. Ele consegue alterar `packages\`, `envs\` e `uv-cache\` e ler `keys\` (a chave da máquina). Ver `docs/STATUS.md`.
+
 ## Rodar robôs em desenvolvimento (M3)
 
-Antes dos pacotes assinados (M4), o agente só executa robôs de uma pasta local, e **só em desenvolvimento**:
+Para robôs de uma pasta local sem versão, **só em desenvolvimento** (em produção o agente recusa iniciar com a flag e não roda nada sem versão):
 
 ```powershell
 $env:REGISTA_HOME = "$env:TEMP\regista-agent-dev"

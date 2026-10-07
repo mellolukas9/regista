@@ -98,6 +98,11 @@ export function canManageBots(me: Pick<Me, "is_platform_admin">): boolean {
   return me.is_platform_admin;
 }
 
+/** Publicar versão e Colocar em uso: só a equipe Artemisys (design-system.md §4). */
+export function canManageVersions(me: Pick<Me, "is_platform_admin">): boolean {
+  return me.is_platform_admin;
+}
+
 /** Executar agora, Reexecutar e Cancelar execução: todos menos o Leitor (design-system.md §4). */
 export function canRunJobs(me: Pick<Me, "role" | "is_platform_admin">): boolean {
   return me.is_platform_admin || me.role === "tenant_admin" || me.role === "operator";

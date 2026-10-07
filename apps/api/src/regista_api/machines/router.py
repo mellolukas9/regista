@@ -67,7 +67,7 @@ _FROM = (
 _ITEM_COLUMNS = (
     "m.id, m.name, m.status, m.mode, m.pool_id, p.name AS pool_name, m.tenant_id,"
     " t.name AS client_name, m.last_seen_at, m.agent_version, m.created_at,"
-    " live.expires_at AS key_expires_at, live.created_at AS key_created_at,"
+    " live.expires_at AS key_expires_at, live.created_at AS key_created_at, m.paused_locally,"
     " cur.id AS cur_id, cur.short_code AS cur_code, cur.status AS cur_status"
 )
 # Staff (internal tenant) are not visible under a client's RLS, so a machine they registered is
@@ -473,6 +473,7 @@ def _machine_item(r: Row[Any]) -> MachineItem:
         key_expires_at=r.key_expires_at,
         key_created_at=r.key_created_at,
         created_at=r.created_at,
+        paused_locally=bool(r.paused_locally) and r.status == "online",
         current_job=None
         if r.cur_id is None
         else CurrentJob(id=r.cur_id, short_code=r.cur_code, status=r.cur_status),

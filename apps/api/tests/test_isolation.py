@@ -44,6 +44,8 @@ RESOURCE_PARAMS = {
     "bot_id",
     "job_id",
     "artifact_id",
+    "version_id",
+    "bot_version_id",
 }
 
 
@@ -123,6 +125,28 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     },
                 )
             ).scalar_one()
+            version_sha = uuid.uuid4().hex + uuid.uuid4().hex
+            version_key = f"tenants/{seed.tenant_a}/bots/{bot_id}/versions/{uuid.uuid4()}.rgpkg"
+            version_id: uuid.UUID = (
+                await db.execute(
+                    text(
+                        "INSERT INTO bot_versions (tenant_id, bot_id, version, package_sha256,"
+                        " size_bytes, signature, key_id, manifest, storage_key, status,"
+                        " upload_expires_at, published_at, release_note)"
+                        " VALUES (:t, :b, '9.8.7', :sha, 10, :sig, '0123456789abcdef',"
+                        " CAST(:m AS jsonb), :k, 'published', now(), now(), :n) RETURNING id"
+                    ),
+                    {
+                        "t": seed.tenant_a,
+                        "b": bot_id,
+                        "sha": version_sha,
+                        "sig": b"\x01" * 64,
+                        "m": '{"python": "3.13.5", "playwright": null, "chromium_revision": null}',
+                        "k": version_key,
+                        "n": "nota-secreta-de-a",
+                    },
+                )
+            ).scalar_one()
             job_code = f"exec-{uuid.uuid4().hex[:6]}"
             job_id: uuid.UUID = (
                 await db.execute(
@@ -165,6 +189,8 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     "bot_id": str(bot_id),
                     "job_id": str(job_id),
                     "artifact_id": str(artifact_id),
+                    "version_id": str(version_id),
+                    "bot_version_id": str(version_id),
                 },
                 a_markers=[
                     str(seed.tenant_a),
@@ -179,6 +205,10 @@ async def world(db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID) -> Asyn
                     job_code,
                     str(artifact_id),
                     artifact_key,
+                    str(version_id),
+                    version_sha,
+                    version_key,
+                    "nota-secreta-de-a",
                     "param-secreto-de-a",
                     *a_machines.markers,
                 ],
@@ -386,10 +416,11 @@ async def test_every_route_is_isolated_between_clients(
             # A person's session is not a machine: 401, whatever the route (the machine side is
             # covered by `test_a_machine_of_b_reaches_nothing_of_a`).
             assert response.status_code == 401, f"{label}: {response.status_code} {response.text}"
+        elif getattr(spec.marker, "permission", None) in PLATFORM_ONLY:
+            # Not theirs to call at all: refused before the route looks at any id.
+            assert response.status_code == 403, f"{label}: {response.status_code}"
         elif spec.path_params:
             assert response.status_code == 404, f"{label}: {response.status_code} {response.text}"
-        if getattr(spec.marker, "permission", None) in PLATFORM_ONLY:
-            assert response.status_code == 403, f"{label}: {response.status_code}"
 
     # The Artemisys team, working inside client B. They may read every client by design, but a
     # resource of A is still not found from B's context.
@@ -565,6 +596,16 @@ def test_discovery_finds_every_real_route(bare_app: FastAPI) -> None:
         "GET /machines/{machine_id}/events",
         "POST /machines/{machine_id}/enrollment-key",
         "POST /machines/{machine_id}/revoke",
+    } <= labels
+    # The routes of M4 are in every sweep: nothing about them is listed by hand elsewhere.
+    assert {
+        "GET /bots/{bot_id}/versions",
+        "POST /bots/{bot_id}/versions/uploads",
+        "POST /bots/{bot_id}/versions/{version_id}/complete",
+        "PUT /bots/{bot_id}/current-version",
+        "GET /agent/packages/{bot_version_id}",
+        "GET /agent/runtimes",
+        "POST /agent/jobs/{job_id}/release",
     } <= labels
     assert {s.marker.kind for s in specs} == {
         "public",

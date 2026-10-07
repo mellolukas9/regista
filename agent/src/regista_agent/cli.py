@@ -8,10 +8,11 @@ import logging
 import sys
 import threading
 from collections.abc import Sequence
+from pathlib import Path
 
 from regista_agent import diagnose as diagnose_module
 from regista_agent import enroll as enroll_module
-from regista_agent import logs, loop, sysinfo
+from regista_agent import logs, loop, policy, runtime, sysinfo
 from regista_agent.config import AgentSettings
 from regista_agent.errors import EXIT_ERROR, AgentError, MachineRevoked
 
@@ -44,6 +45,38 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     commands.add_parser("diagnose", help="Verifica por que a máquina fala (ou não) com o servidor.")
+
+    setup = commands.add_parser(
+        "setup",
+        help="Prepara a máquina para os robôs: Python e Chromium exatos (console elevado).",
+    )
+    setup.add_argument(
+        "--python", action="append", default=[], help="Python exato (X.Y.Z); repetível."
+    )
+    setup.add_argument("--playwright", help="Versão do Playwright, para instalar o Chromium dela.")
+    setup.add_argument(
+        "--chromium-revision", help="Revisão do Chromium que ela traz (conferência)."
+    )
+    setup.add_argument(
+        "--wheels",
+        help="Pasta com wheels (as de um pacote) para instalar o Playwright sem acessar o PyPI.",
+    )
+    setup.add_argument(
+        "--from-server",
+        action="store_true",
+        help="Lê do servidor o que as versões em uso dos robôs deste pool pedem.",
+    )
+
+    for name, text in (
+        ("allow", "Libera um robô nesta máquina (console elevado)."),
+        ("disallow", "Tira um robô da lista desta máquina (console elevado)."),
+    ):
+        entry = commands.add_parser(name, help=text)
+        entry.add_argument("package", help="Nome do pacote do robô.")
+    commands.add_parser(
+        "pause", help="Kill switch: para de pegar novas execuções (console elevado)."
+    )
+    commands.add_parser("resume", help="Desliga o kill switch (console elevado).")
     return parser
 
 
@@ -78,6 +111,53 @@ def _diagnose(settings: AgentSettings) -> int:
     return code
 
 
+def _setup(settings: AgentSettings, args: argparse.Namespace) -> int:
+    policy.require_elevation(settings, "O setup")
+    needs: list[runtime.Needs] = []
+    agent_sid: str | None = None
+    if sys.platform == "win32" and settings.agent_account:
+        from regista_agent import _windows
+
+        agent_sid = _windows.resolve_sid(settings.agent_account)
+    if args.from_server:
+        from regista_agent.jobapi import HttpJobApi
+        from regista_agent.keystore import KeyStore
+
+        store = KeyStore(settings.keys_dir, agent_account=settings.agent_account)
+        needs.extend(HttpJobApi(loop.build_session(settings, store)).runtimes())
+    for version in args.python:
+        needs.append(runtime.SimpleNeed(version, args.playwright, args.chromium_revision))
+    if not needs:
+        raise AgentError(
+            "Diga o que preparar: --from-server, ou --python X.Y.Z (e --playwright X.Y.Z para o "
+            "Chromium)."
+        )
+    wheels = Path(args.wheels) if args.wheels else None
+    chosen = runtime.run_setup(settings, needs, agent_sid=agent_sid, wheels=wheels)
+    print("Máquina preparada: Python " + ", ".join(chosen.pythons or ("nenhum",)) + ".")
+    print(
+        "Libere os robôs com `regista-agent allow <pacote>` e confira com `regista-agent diagnose`."
+    )
+    return 0
+
+
+def _policy(settings: AgentSettings, args: argparse.Namespace) -> int:
+    policy.require_elevation(settings, f"O comando {args.command}")
+    if args.command == "allow":
+        allowed = policy.allow(settings, args.package)
+        print(f"Robô {args.package} liberado. Permitidos: {', '.join(allowed)}.")
+    elif args.command == "disallow":
+        allowed = policy.disallow(settings, args.package)
+        print(f"Robô {args.package} removido. Permitidos: {', '.join(allowed) or 'nenhum'}.")
+    elif args.command == "pause":
+        policy.pause(settings)
+        print("Kill switch ligado: o agente não pega novas execuções (a atual termina).")
+    else:
+        policy.resume(settings)
+        print("Kill switch desligado.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     # The console may not speak UTF-8 (Windows): never die on an accent.
     for stream in (sys.stdout, sys.stderr):
@@ -91,6 +171,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             code = _enroll(settings, args)
         elif args.command == "run":
             code = _run(settings, args)
+        elif args.command == "setup":
+            code = _setup(settings, args)
+        elif args.command in ("allow", "disallow", "pause", "resume"):
+            code = _policy(settings, args)
         else:
             code = _diagnose(settings)
     except MachineRevoked as exc:

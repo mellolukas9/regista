@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from regista_agent import diagnose as diag
+from regista_agent import policy
 from regista_agent.config import AgentSettings, save_identity
 from regista_agent.diagnose import CertInfo, Check, Probes, run_checks
 from regista_agent.keystore import AclReport, KeyStore
@@ -77,11 +78,24 @@ def _by_name(checks: list[Check]) -> dict[str, Check]:
     return {c.name: c for c in checks}
 
 
+LOCAL_CHECKS = {
+    "Chaves de assinatura",
+    "Cliente da máquina",
+    "Robôs permitidos",
+    "Kill switch",
+    "Runtimes instalados",
+    "Permissões do runtime",
+    "Runtimes do pool",
+}
+
+
 def test_a_healthy_machine_has_nothing_to_report(enrolled: AgentSettings) -> None:
     checks = run_checks(enrolled, _probes())
-    assert [c.status for c in checks if c.status != "ok"] == []
-    assert diag.exit_code(checks) == 0
-    names = [c.name for c in checks]
+    # The checks of what this machine allows locally (M4) have their own tests below: a machine
+    # nobody prepared for robots yet rightly warns about them.
+    network = [c for c in checks if c.name not in LOCAL_CHECKS]
+    assert [c.status for c in network if c.status != "ok"] == []
+    names = [c.name for c in network]
     assert names == [
         "Python",
         "uv",
@@ -95,6 +109,7 @@ def test_a_healthy_machine_has_nothing_to_report(enrolled: AgentSettings) -> Non
         "Chave da máquina",
         "Login",
     ]
+    assert diag.exit_code(network) == 0
     text = diag.format_checks(checks)
     assert "[OK   ] Login: O servidor aceitou a identidade desta máquina." in text
 
@@ -235,3 +250,32 @@ def test_the_report_has_one_line_per_check_and_a_verdict_by_exit_code() -> None:
     ]
     assert diag.exit_code(checks) == 1
     assert diag.exit_code(checks[:2]) == 0
+
+
+def test_the_local_checks_say_what_a_machine_will_and_will_not_run(
+    enrolled: AgentSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    by_name = {c.name: c for c in run_checks(enrolled, _probes())}
+    # The compiled-in key list is empty until the production keys exist: nothing is trusted.
+    assert by_name["Chaves de assinatura"].status == "erro"
+    assert by_name["Cliente da máquina"].status == "aviso"  # enrolled before identity.json
+    assert by_name["Robôs permitidos"].status == "aviso"
+    assert by_name["Kill switch"].status == "ok"
+    assert by_name["Runtimes instalados"].status == "aviso"
+
+    policy.pause(enrolled)
+    policy.allow(enrolled, "meu_robo")
+    again = {c.name: c for c in run_checks(AgentSettings(), _probes())}
+    assert again["Kill switch"].status == "aviso" and "resume" in again["Kill switch"].detail
+    assert (
+        again["Robôs permitidos"].status == "ok" and "meu_robo" in again["Robôs permitidos"].detail
+    )
+
+
+def test_the_dev_override_in_production_is_an_error_in_diagnose(
+    enrolled: AgentSettings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("REGISTA_DEV_TRUSTED_KEYS", str(tmp_path / "keys.json"))
+    by_name = {c.name: c for c in run_checks(AgentSettings(), _probes())}
+    assert by_name["Chaves de assinatura"].status == "erro"
+    assert "REGISTA_ENVIRONMENT=dev" in by_name["Chaves de assinatura"].detail

@@ -6,6 +6,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from regista_api.bots.version_schemas import CurrentVersion
 from regista_api.tenants.schemas import Page
 
 # The robot's folder in development and its package from M4 on. Never changes after creation.
@@ -59,6 +60,8 @@ class BotItem(BaseModel):
     recent_ids: list[uuid.UUID]
     # True while a run of this bot is pending, assigned or running ("Executar agora" tooltip).
     has_active_run: bool
+    # The version in use (null until one is put in use): "v1.2.0 em uso".
+    current_version: CurrentVersion | None
 
 
 class BotList(Page):

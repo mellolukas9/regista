@@ -23,6 +23,7 @@ import {
   errorText,
   isActive,
   jobsKey,
+  packageReasonText,
   triggerLabel,
   waitingSince,
   type Artifact,
@@ -141,7 +142,8 @@ function RunDetail() {
   const active = isActive(data.status);
   const screenshots = artifacts.data ?? [];
   const tab: Tab = TABS.find((t) => t === search.get("tab") && (t !== "screenshot" || screenshots.length > 0)) ?? "logs";
-  const reason = errorText(data.error_code);
+  const reason = errorText(data.error_code, data);
+  const reasonDetail = data.error_code === "package_invalid" ? packageReasonText(data.error_reason) : null;
   const started = formatDateTimeSeconds(data.started_at ?? data.created_at);
   const note = [started, duration(data), data.machine_name].filter((part) => part && part !== "—").join(" · ");
 
@@ -181,7 +183,10 @@ function RunDetail() {
           { label: "Pool", value: data.pool_name },
           { label: "Fila", value: "—" },
           { label: "Lote", value: "—" },
-          { label: "Versão do bot", value: "—" },
+          {
+            label: "Versão do bot",
+            value: data.bot_version ? <span className="font-mono">v{data.bot_version}</span> : "—",
+          },
         ]}
       />
 
@@ -192,6 +197,7 @@ function RunDetail() {
       {data.status === "failed" && (
         <Banner tone="danger" title="A execução falhou">
           {reason}
+          {reasonDetail && <span className="mt-1 block">{reasonDetail}</span>}
           {data.error_message && (
             <span className="mt-1 block break-words font-mono text-caption text-text-label">
               {data.error_message}

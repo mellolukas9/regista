@@ -15,6 +15,7 @@ from regista_agent.transport import HttpSession
 SERVER = "https://regista.exemplo.com.br"
 KEY = "rgk_chave-de-teste-123"
 MACHINE_ID = uuid.uuid4()
+TENANT_ID = uuid.uuid4()
 
 
 def _public(private_key: object) -> bytes:
@@ -54,7 +55,12 @@ class EnrollServer:
             return httpx.Response(401, json={"detail": {"code": "invalid_enrollment_key"}})
         return httpx.Response(
             200,
-            json={"machine_id": str(MACHINE_ID), "mode": self.mode, "heartbeat_seconds": 30},
+            json={
+                "machine_id": str(MACHINE_ID),
+                "tenant_id": str(TENANT_ID),
+                "mode": self.mode,
+                "heartbeat_seconds": 30,
+            },
         )
 
     def session(self) -> HttpSession:

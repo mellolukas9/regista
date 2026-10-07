@@ -1,9 +1,13 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from regista_pkg import load_trusted_keys, parse_key_file
 
 
 class ConfigurationError(RuntimeError):
@@ -57,6 +61,9 @@ class Settings(BaseSettings):
     # "audience"), so a signature made for another environment is worthless here.
     api_public_url: str = "http://127.0.0.1:8000"
     heartbeat_seconds: int = 30
+    # A run `assigned` to a machine for this long that its heartbeat does not recognise (the
+    # response was lost: the agent restarted while a long poll was open) goes back to the queue.
+    assigned_orphan_seconds: int = 60
     # "Sem sinal" (docs/STATUS.md): an online machine silent for this long becomes offline. The
     # sweep that does it runs on this cron (6 fields, the last one is the second).
     machine_offline_after_seconds: int = 120
@@ -90,6 +97,15 @@ class Settings(BaseSettings):
     s3_region: str = "us-east-1"
     s3_access_key_id: str = Field(default="", repr=False)
     s3_secret_access_key: str = Field(default="", repr=False)
+
+    # Signed robot packages (ADR 0021). The size is a hard ceiling for one package; the URLs are
+    # pre-signed for this many seconds (upload from the panel, download by the agent).
+    package_max_bytes: int = 200 * 1024 * 1024
+    package_upload_seconds: int = 300
+    package_download_seconds: int = 120
+    # Development and tests only: a file of extra trusted public keys (so tests can sign with a key
+    # made on the spot). Refused in production, like the agent's `REGISTA_DEV_TRUSTED_KEYS`.
+    dev_trusted_keys: str = ""
 
     # Peers allowed to set X-Forwarded-For (comma separated). Dev: the Next.js proxy.
     trusted_proxies: str = "127.0.0.1,::1"
@@ -125,8 +141,28 @@ class Settings(BaseSettings):
                     "empty (AWS S3) or use an https address that is not local."
                 )
 
+    def validate_signing(self) -> None:
+        if self.environment == "prod" and self.dev_trusted_keys:
+            raise ConfigurationError(
+                "REGISTA_DEV_TRUSTED_KEYS is for development and tests only. In production the "
+                "API trusts only the keys compiled into regista_pkg."
+            )
+
+    def package_trusted_keys(self) -> dict[str, Ed25519PublicKey]:
+        """The keys a package signature is checked against: the compiled-in ones, plus the
+        development file outside production."""
+        self.validate_signing()
+        extra: dict[str, Ed25519PublicKey] = {}
+        if self.dev_trusted_keys:
+            try:
+                extra = parse_key_file(Path(self.dev_trusted_keys).read_text("utf-8"))
+            except (OSError, ValueError) as exc:
+                raise ConfigurationError(f"REGISTA_DEV_TRUSTED_KEYS: {exc}") from exc
+        return load_trusted_keys(extra)
+
     def validate_for_runtime(self) -> None:
         self.validate_storage()
+        self.validate_signing()
         if not self.master_key:
             raise ConfigurationError(
                 "REGISTA_MASTER_KEY is not set. Generate one with: "

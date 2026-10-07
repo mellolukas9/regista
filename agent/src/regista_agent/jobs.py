@@ -18,11 +18,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from regista_agent import robot
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+from regista_agent import environment, packages, policy, robot, runtime, trust
 from regista_agent.config import AgentSettings
 from regista_agent.errors import MachineRevoked, ServerUnavailable
 from regista_agent.jobapi import Assignment, JobApi, JobGone
+from regista_agent.keystore import KeyStore
 from regista_agent.shipper import MAX_LINE_BYTES, LogShipper, clean
+from regista_pkg import PackageError
 
 log = logging.getLogger("regista_agent")
 
@@ -67,6 +71,18 @@ class Outcome:
     kind: str  # "completed" | "failed" | "cancelled"
     code: str = ""
     message: str = ""
+    # Why a package was refused (closed list); only with the code `package_invalid`.
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
+class Prepared:
+    """What `_prepare` hands to the supervisor: the file to run, with which Python, and where the
+    robot finds its browsers (None: whatever the environment says, development only)."""
+
+    entry: Path
+    python: str
+    browsers: Path | None
 
 
 class JobExecutor:
@@ -78,7 +94,9 @@ class JobExecutor:
         stop: threading.Event,
         *,
         base_env: Mapping[str, str] | None = None,
+        keys: Mapping[str, Ed25519PublicKey] | None = None,
     ) -> None:
+        self._keys = keys
         self._settings = settings
         self._api = api
         self._state = state
@@ -89,6 +107,10 @@ class JobExecutor:
 
     def loop(self) -> None:
         while not self._stop.is_set():
+            if policy.is_paused(self._settings):
+                # The local kill switch: no new run is asked for, the heartbeat goes on.
+                self._stop.wait(_POLL_PAUSE_SECONDS)
+                continue
             try:
                 assignment = self._api.next_job(self._settings.poll_wait_seconds)
             except ServerUnavailable as exc:
@@ -96,6 +118,14 @@ class JobExecutor:
                 self._stop.wait(_POLL_PAUSE_SECONDS)
                 continue
             if assignment is None:
+                continue
+            if policy.is_paused(self._settings):
+                # The switch went on while the request waited: hand the run back untouched.
+                log.info("run %s given back: the kill switch is on", assignment.short_code)
+                try:
+                    self._api.release(assignment.job_id)
+                except (JobGone, ServerUnavailable) as exc:
+                    log.warning("run %s could not be given back: %s", assignment.short_code, exc)
                 continue
             self.execute(assignment)
 
@@ -126,7 +156,7 @@ class JobExecutor:
                 self._api.complete(job.job_id)
             else:
                 code = "cancelled" if outcome.kind == "cancelled" else outcome.code
-                self._api.fail(job.job_id, code, outcome.message)
+                self._api.fail(job.job_id, code, outcome.message, outcome.reason)
         except JobGone as exc:
             log.warning(
                 "run %s ended but the server no longer wants the report: %s", job.short_code, exc
@@ -147,9 +177,6 @@ class JobExecutor:
         ack = self._api.start(job.job_id)
         if ack.cancel_requested or self._state.cancel.is_set():
             return Outcome("cancelled")
-        entry = robot.resolve_dev_robot(self._settings.dev_bots_dir, job.package_name)
-        if entry is None:
-            return Outcome("failed", "robot_not_found", "O robô não foi encontrado nesta máquina.")
 
         with tempfile.TemporaryDirectory(prefix="regista-job-") as folder:
             work = Path(folder)
@@ -163,16 +190,117 @@ class JobExecutor:
             )
             shipper.start()
             try:
-                outcome = self._supervise(job, entry, shipper, artifacts, temp, cancel_file)
+                prepared = self._prepare(job, work, shipper)
+                if isinstance(prepared, Outcome):
+                    return prepared
+                outcome = self._supervise(job, prepared, shipper, artifacts, temp, cancel_file)
             finally:
                 shipper.close()
             self._upload_screenshots(job, artifacts)
             return outcome
 
+    # --- what to run --------------------------------------------------------------------------
+
+    def _prepare(self, job: Assignment, work: Path, shipper: LogShipper) -> Prepared | Outcome:
+        """Get the robot ready, or say why it cannot run. In order: no version means a folder
+        robot (development only); then the local list; then the package (hash, signature, client,
+        name, version, unpacking); then the runtime; then the environment."""
+        if job.bot_version_id is None:
+            return self._prepare_unsigned(job)
+
+        if not policy.is_allowed(self._settings, job.package_name):
+            shipper.note(
+                "ERROR",
+                f"O robô {job.package_name} não está na lista de robôs permitidos desta máquina.",
+            )
+            return Outcome("failed", "robot_not_allowed")
+
+        store = KeyStore(self._settings.keys_dir, agent_account=self._settings.agent_account)
+        tenant_id = store.read_tenant_id()
+        if tenant_id is None:
+            shipper.note(
+                "ERROR", "Esta máquina não conhece o próprio cliente. Cadastre-a de novo (enroll)."
+            )
+            return Outcome("failed", "internal", "Identidade do cliente ausente nesta máquina.")
+
+        keys = (
+            self._keys if self._keys is not None else trust.trusted_keys(self._settings.environment)
+        )
+        cache = packages.PackageCache(self._settings.packages_dir)
+        try:
+            offer = self._api.package_offer(job.bot_version_id)
+            verified = cache.fetch(
+                self._api,
+                offer,
+                packages.Expected(tenant_id, job.package_name, job.version or ""),
+                keys,
+            )
+            packages.extract(verified, work / "package")
+        except PackageError as exc:
+            shipper.note("ERROR", f"Pacote recusado ({exc.reason}): {exc.detail or '-'}")
+            return Outcome("failed", "package_invalid", reason=exc.reason)
+
+        manifest = verified.signed.manifest
+        try:
+            base_python = runtime.require(self._settings, manifest)
+        except runtime.RuntimeMissing as exc:
+            shipper.note(
+                "ERROR",
+                f"Falta preparar esta máquina ({exc.what}). Rode regista-agent setup como "
+                "administrador.",
+            )
+            return Outcome("failed", "runtime_missing")
+        try:
+            python = environment.ensure(
+                self._settings,
+                sha256=verified.signed.sha256,
+                base_python=base_python,
+                wheels=work / "package" / "wheels",
+                lock=work / "package" / "requirements.lock",
+            )
+        except (environment.EnvironmentFailed, OSError) as exc:
+            shipper.note("ERROR", f"Não foi possível montar o ambiente: {exc}")
+            return Outcome("failed", "environment_failed")
+
+        self._housekeeping(cache, job.package_name, verified.signed.sha256)
+        return Prepared(
+            entry=work / "package" / "bot" / "main.py",
+            python=str(python),
+            browsers=runtime.browsers_path(self._settings),
+        )
+
+    def _prepare_unsigned(self, job: Assignment) -> Prepared | Outcome:
+        """No version: only a development agent, with the flag, runs a robot from a folder. Any
+        other agent refuses, whatever the server says."""
+        if not self._settings.dev_unsigned or self._settings.environment != "dev":
+            return Outcome("failed", "robot_not_found", "O robô não foi encontrado nesta máquina.")
+        entry = robot.resolve_dev_robot(self._settings.dev_bots_dir, job.package_name)
+        if entry is None:
+            return Outcome("failed", "robot_not_found", "O robô não foi encontrado nesta máquina.")
+        return Prepared(
+            entry=entry,
+            python=str(self._settings.dev_python or _current_python()),
+            browsers=None,
+        )
+
+    def _housekeeping(self, cache: packages.PackageCache, package_name: str, running: str) -> None:
+        """Old versions go; the one running now stays. Failing to clean never fails a run."""
+        try:
+            cache.prune(package_name, protect={running})
+            live = {
+                p.stem
+                for folder in cache.root.glob("*")
+                if folder.is_dir()
+                for p in folder.glob("*.rgpkg")
+            }
+            environment.prune(self._settings, live=live)
+        except OSError as exc:
+            log.warning("cleanup skipped: %s", exc)
+
     def _supervise(
         self,
         job: Assignment,
-        entry: Path,
+        prepared: Prepared,
         shipper: LogShipper,
         artifacts: Path,
         temp: Path,
@@ -185,11 +313,11 @@ class JobExecutor:
             artifacts_dir=artifacts,
             cancel_file=cancel_file,
             temp_dir=temp,
+            browsers_path=prepared.browsers,
         )
-        python = str(self._settings.dev_python or _current_python())
         process = robot.start(
-            python=python,
-            entry=entry,
+            python=prepared.python,
+            entry=prepared.entry,
             env=env,
             cancel_file=cancel_file,
             priority=self._settings.job_priority,

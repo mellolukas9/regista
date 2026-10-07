@@ -38,6 +38,21 @@ const MESSAGES: Record<string, string> = {
   bot_not_found: "Esse bot não foi encontrado. Atualize a lista e tente de novo.",
   bot_inactive: "Este bot está desativado e não pode ser executado.",
   bot_has_no_version: "Este bot ainda não tem uma versão publicada para rodar.",
+  bot_has_no_version_in_use:
+    "Nenhuma versão deste bot está em uso. A equipe Artemisys precisa colocar uma versão em uso.",
+  signature_invalid:
+    "A assinatura não confere com nenhuma chave confiável. Gere o pacote de novo com o regista-pack.",
+  signature_malformed: "Esse arquivo não é uma assinatura do regista-pack.",
+  package_wrong_client: "Este pacote é de outro cliente. Gere o pacote para o cliente deste bot.",
+  package_too_large: "O pacote passa de 200 MB.",
+  package_hash_mismatch:
+    "O arquivo enviado não é o que foi assinado. Gere o pacote de novo e publique outra vez.",
+  package_invalid:
+    "O arquivo enviado não é o que foi assinado. Gere o pacote de novo e publique outra vez.",
+  upload_failed: "Não foi possível enviar o pacote. Tente de novo.",
+  upload_missing: "Não foi possível enviar o pacote. Tente de novo.",
+  upload_expired: "Não foi possível enviar o pacote. Tente de novo.",
+  version_not_found: "Essa versão não é deste bot. Atualize a lista e tente de novo.",
   job_not_found: "Essa execução não foi encontrada. Atualize a lista e tente de novo.",
   job_not_active: "Essa execução já terminou. Atualize a tela para ver como ficou.",
   job_still_active: "Essa execução ainda está em andamento. Espere terminar para reexecutar.",
@@ -50,8 +65,21 @@ const MESSAGES: Record<string, string> = {
 
 export const FALLBACK_MESSAGE = "Algo deu errado. Tente de novo; se continuar, avise a Artemisys.";
 
+/** Campo extra que a API põe junto do código (`detail.<campo>`), como o nome do pacote do bot. */
+function extra(error: ApiError, field: string): string {
+  const detail = (error.detail as { detail?: Record<string, unknown> } | null)?.detail;
+  const value = detail?.[field];
+  return typeof value === "string" ? value : "";
+}
+
 export function messageFor(error: unknown): string {
-  if (error instanceof ApiError) return MESSAGES[error.code] ?? FALLBACK_MESSAGE;
+  if (error instanceof ApiError) {
+    if (error.code === "package_wrong_bot")
+      return `Este pacote não é deste bot. O nome do pacote do bot é ${extra(error, "package_name")}.`;
+    if (error.code === "version_exists")
+      return `A versão ${extra(error, "version")} já foi publicada para este bot.`;
+    return MESSAGES[error.code] ?? FALLBACK_MESSAGE;
+  }
   return FALLBACK_MESSAGE;
 }
 

@@ -45,6 +45,7 @@ class ScriptedSession:
         os_info: dict[str, str],
         interactive_session: bool,
         current_job_id: str | None = None,
+        paused: bool = False,
     ) -> HeartbeatInfo:
         self.sent.append(current_job_id)
         if self.revoke_after is not None and len(self.sent) > self.revoke_after:
@@ -123,31 +124,35 @@ def test_the_unsigned_mode_needs_a_real_bots_folder(
         AgentSettings().check_dev_unsigned()
 
 
-def test_dev_mode_off_means_no_runs_are_ever_asked_for(
+def test_without_the_dev_flag_a_run_with_no_version_never_runs_a_folder_robot(
     identity: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Since M4 the agent always takes runs, but only a version runs. A run that names none (a
+    server that sends one in production, or a dev agent without the flag) is refused as not found,
+    and no robot is started, whatever folder of robots sits on the machine."""
     monkeypatch.setenv("REGISTA_ENVIRONMENT", "dev")  # dev alone is not enough
     monkeypatch.setenv("REGISTA_DEV_BOTS_DIR", str(FIXTURE_BOTS))
     settings = AgentSettings()
     assert settings.dev_unsigned is False
     stop = threading.Event()
-    api = FakeApi()
+
+    class StoppingApi(FakeApi):
+        def fail(
+            self, job_id: str, error_code: str, message: str, reason: str | None = None
+        ) -> None:
+            super().fail(job_id, error_code, message, reason)
+            stop.set()
+
+    api = StoppingApi()
     api.queue = [job("ok")]
 
     class Beats:
-        def __init__(self) -> None:
-            self.n = 0
-
-        def heartbeat(
-            self, *, agent_version: str, os_info: dict[str, str], interactive_session: bool
-        ) -> HeartbeatInfo:
-            self.n += 1
-            if self.n >= 2:
-                stop.set()
+        def heartbeat(self, **_: Any) -> HeartbeatInfo:
             return HeartbeatInfo(heartbeat_seconds=1, mode="service", cancellations=[])
 
     loop.run(settings, stop=stop, session=Beats(), jobs=api)
-    assert api.started == [] and api.queue, "the queued run was never asked for"
+    assert [f[1] for f in api.failed] == ["robot_not_found"]
+    assert api.completed == [] and not api.lines, "no robot was started"
 
 
 def test_the_defaults_are_the_safe_ones(identity: Path) -> None:

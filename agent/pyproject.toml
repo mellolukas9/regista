@@ -10,6 +10,8 @@ dependencies = [
     "pydantic-settings>=2.15.0",
     "tomli-w>=1.2.0",
     "truststore>=0.10.4",
+    "regista-pkg",
+    "uv>=0.9",
 ]
 
 [project.scripts]

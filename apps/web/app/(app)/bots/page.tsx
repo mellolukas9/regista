@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, ApiError } from "@/lib/api";
-import { botsKey, PACKAGE_NAME, type Bot, type BotPage } from "@/lib/bots";
+import { botsKey, PACKAGE_NAME, packageLine, type Bot, type BotPage } from "@/lib/bots";
 import { formatListDate } from "@/lib/format";
 import { POLL_MS, usePools } from "@/lib/machines";
 import { canManageBots, canRunJobs } from "@/lib/me";
@@ -85,7 +85,7 @@ function Bots() {
             <span className="min-w-0">
               <span className="block truncate text-body font-medium">{row.original.name}</span>
               <span className="block truncate font-mono text-caption text-text-label">
-                pacote {row.original.package_name}
+                {packageLine(row.original)}
               </span>
             </span>
           </Link>
@@ -228,7 +228,7 @@ function Bots() {
           <div className="grid gap-3">
             <Link href={`/bots/${bot.id}`} className="grid gap-1 text-text">
               <span className="text-title">{bot.name}</span>
-              <span className="font-mono text-caption text-text-label">pacote {bot.package_name}</span>
+              <span className="font-mono text-caption text-text-label">{packageLine(bot)}</span>
             </Link>
             <div className="flex flex-wrap items-center justify-between gap-2">
               {bot.last_run ? (

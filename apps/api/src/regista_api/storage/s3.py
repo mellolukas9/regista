@@ -8,7 +8,9 @@ no static key is ever configured (`Settings.validate_storage`).
 """
 
 import asyncio
+import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -85,6 +87,44 @@ class S3Storage:
         )
         return url
 
+    def presign_get_download(self, key: str, *, expires: int) -> str:
+        """A short-lived GET of a package, always handed over as a download."""
+        url: str = self._signer.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": self._bucket,
+                "Key": key,
+                "ResponseContentType": "application/octet-stream",
+                "ResponseContentDisposition": "attachment",
+            },
+            ExpiresIn=expires,
+        )
+        return url
+
+    async def download(self, key: str, destination: Path, *, max_bytes: int) -> tuple[str, int]:
+        """Copy an object to `destination`, hashing it on the way. Returns (sha256, size).
+
+        Reads at most `max_bytes + 1` bytes: an object that is bigger than that is refused
+        (ValueError) without being read to the end, whatever its header says.
+        """
+
+        def call() -> tuple[str, int]:
+            body = self._client.get_object(Bucket=self._bucket, Key=key)["Body"]
+            digest, size = hashlib.sha256(), 0
+            try:
+                with destination.open("wb") as out:
+                    for chunk in body.iter_chunks(1024 * 1024):
+                        size += len(chunk)
+                        if size > max_bytes:
+                            raise ValueError("object is bigger than the limit")
+                        digest.update(chunk)
+                        out.write(chunk)
+            finally:
+                body.close()
+            return digest.hexdigest(), size
+
+        return await asyncio.to_thread(call)
+
     async def head(self, key: str) -> StoredObject | None:
         def call() -> StoredObject | None:
             try:
@@ -100,6 +140,34 @@ class S3Storage:
 
     async def delete(self, key: str) -> None:
         await asyncio.to_thread(self._client.delete_object, Bucket=self._bucket, Key=key)
+
+    async def ensure_cors(self, origins: list[str]) -> None:
+        """Development and tests only: let the panel's origin PUT a package straight to the
+        bucket from the browser. In production the bucket's CORS rule is part of the
+        infrastructure (docs/runbooks), never set by the application."""
+        if self._settings.environment == "prod" or not self._settings.s3_endpoint_url:
+            return
+
+        def call() -> None:
+            self._client.put_bucket_cors(
+                Bucket=self._bucket,
+                CORSConfiguration={
+                    "CORSRules": [
+                        {
+                            "AllowedOrigins": origins,
+                            "AllowedMethods": ["PUT"],
+                            "AllowedHeaders": ["*"],
+                            "ExposeHeaders": ["ETag"],
+                            "MaxAgeSeconds": 600,
+                        }
+                    ]
+                },
+            )
+
+        try:
+            await asyncio.wait_for(asyncio.to_thread(call), timeout=10)
+        except (BotoCoreError, ClientError, TimeoutError) as exc:
+            log.warning("s3_cors_not_set", bucket=self._bucket, error=type(exc).__name__)
 
     async def ensure_bucket(self) -> None:
         """Development and tests only: create the bucket if it is not there. Production buckets

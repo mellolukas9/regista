@@ -173,11 +173,10 @@ async def test_enrollment_then_login_then_heartbeat(ctx: Ctx) -> None:
 
     enrolled = await agent.enroll(machine.key)
     assert enrolled.status_code == 200, enrolled.text
-    assert enrolled.json() == {
-        "machine_id": machine.id,
-        "mode": "session",
-        "heartbeat_seconds": 30,
-    }
+    body = enrolled.json()
+    # The client comes back so the agent can keep it and tell whose every package is (ADR 0021).
+    assert body.pop("tenant_id") == str(ctx.seed.tenant_a)
+    assert body == {"machine_id": machine.id, "mode": "session", "heartbeat_seconds": 30}
     assert enrolled.headers["cache-control"] == "no-store"
 
     row = (

@@ -253,6 +253,11 @@ def resolve_sid(account: str) -> str:
 # --- ACLs -------------------------------------------------------------------------------------
 
 
+# FILE_WRITE_DATA, FILE_APPEND_DATA, GENERIC_WRITE, GENERIC_ALL.
+_WRITE_MASK = 0x2 | 0x4 | 0x40000000 | 0x10000000
+_WRITE_RIGHTS = frozenset({"FA", "FW", "GA", "GW", "WD", "AD"})
+
+
 @dataclass(frozen=True)
 class Ace:
     kind: str  # "A" (allow) or "D" (deny)
@@ -267,6 +272,14 @@ class Ace:
             return bool(mask & _FILE_READ_DATA) and bool(mask & _READ_CONTROL)
         tokens = [self.rights[i : i + 2] for i in range(0, len(self.rights), 2)]
         return any(token in _READ_RIGHTS for token in tokens)
+
+    @property
+    def can_write(self) -> bool:
+        """Can this entry change what is inside (write data, append, or generic write/all)?"""
+        if self.rights.lower().startswith("0x"):
+            return bool(int(self.rights, 16) & _WRITE_MASK)
+        tokens = [self.rights[i : i + 2] for i in range(0, len(self.rights), 2)]
+        return any(token in _WRITE_RIGHTS for token in tokens)
 
 
 @dataclass(frozen=True)
@@ -386,6 +399,18 @@ def restrict_directory(directory: Path, agent_sid: str) -> None:
     apply_dacl(
         directory,
         f"D:P(A;OICI;FA;;;{SYSTEM_SID})(A;OICI;FA;;;{ADMINISTRATORS_SID})(A;OICI;FR;;;{agent_sid})",
+    )
+    _hand_ownership_to_administrators(directory)
+
+
+def restrict_directory_read_only(directory: Path, agent_sid: str) -> None:
+    """Like `restrict_directory`, but the agent's account may only read and run what is inside:
+    full control stays with SYSTEM and Administrators. Used for the runtime folders, so a robot
+    (which runs as the agent's account) cannot change the Python or the browser of the next one."""
+    apply_dacl(
+        directory,
+        f"D:P(A;OICI;FA;;;{SYSTEM_SID})(A;OICI;FA;;;{ADMINISTRATORS_SID})"
+        f"(A;OICI;FRFX;;;{agent_sid})",
     )
     _hand_ownership_to_administrators(directory)
 

@@ -2,9 +2,14 @@
 
 import asyncio
 import os
+import time
 import uuid
 from datetime import timedelta
 
+import pytest
+from procrastinate import App
+from procrastinate.periodic import PeriodicDeferrer
+from procrastinate.worker import Worker
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -221,86 +226,122 @@ async def test_the_purge_removes_only_old_windows(
 # --- several workers --------------------------------------------------------------------------
 
 
-async def _wait_for(check: object, seconds: float) -> bool:
-    deadline = asyncio.get_running_loop().time() + seconds
-    while asyncio.get_running_loop().time() < deadline:
-        if await check():  # type: ignore[operator]
-            return True
-        await asyncio.sleep(0.25)
-    return False
+TICKS = 5
+
+
+async def _drain(*apps: App) -> None:
+    """Run the workers until the queue is empty, then stop them (`wait=False`): no sleeping, no
+    cron, no polling interval. Several apps drain at the same time, like several processes."""
+    await asyncio.gather(
+        *(
+            app.run_worker_async(
+                name=f"worker-{n}", wait=False, install_signal_handlers=False, concurrency=2
+            )
+            for n, app in enumerate(apps, start=1)
+        )
+    )
+
+
+async def _sweep_jobs(owner: Factory, since: int) -> list[tuple[str, str]]:
+    """(tick, status) of the sweep jobs created after `since`. A periodic job's `timestamp`
+    argument is the tick it belongs to (the periodic table keeps only the latest tick of a task,
+    so it cannot be used to count them)."""
+    async with tenant_session(owner) as db:
+        rows = await db.execute(
+            text(
+                "SELECT args->>'timestamp' AS tick, status FROM procrastinate_jobs"
+                " WHERE task_name = :t AND id > :b ORDER BY id"
+            ),
+            {"t": SWEEP_TASK, "b": since},
+        )
+        return [(r.tick, r.status) for r in rows]
 
 
 async def test_two_workers_run_each_tick_once(
-    db_urls: DbUrls, app_factory: Factory, owner_factory: Factory, seed: Seed
+    db_urls: DbUrls,
+    app_factory: Factory,
+    owner_factory: Factory,
+    seed: Seed,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Two workers (two apps, two connections, like two processes) share one queue. Every tick of
     the periodic sweep becomes one job, whichever worker takes it, and a machine that went silent
-    gets exactly one `went_offline`."""
+    gets exactly one `went_offline`.
+
+    The clock is the test's: each tick is handed to both periodic deferrers at a time the test
+    chooses (the workers' own deferrer does exactly this with `time.time()`), and the queue is
+    drained to the end before the next tick. Nothing waits for real time to pass. For the same
+    reason the workers' own deferrer, the one that reads the real clock, is switched off here."""
+
+    async def no_clock(self: Worker) -> None:
+        return None
+
+    monkeypatch.setattr(Worker, "_periodic_deferrer", no_clock)
     settings = make_settings(
         db_urls, machine_offline_after_seconds=THRESHOLD, machine_sweep_cron="* * * * * *"
     )
     first, second = build_app(settings, app_factory), build_app(settings, app_factory)
-    silent_early = await _machine(app_factory, seed.tenant_a)
-    async with tenant_session(owner_factory) as db:
-        jobs_before: int = (
-            await db.execute(text("SELECT coalesce(max(id), 0) FROM procrastinate_jobs"))
-        ).scalar_one()
-
     silent_late: uuid.UUID | None = None
     async with first.open_async(), second.open_async():
-        workers = [
-            asyncio.create_task(app.run_worker_async(name=name, install_signal_handlers=False))
-            for app, name in ((first, "worker-1"), (second, "worker-2"))
-        ]
+        # The test database is shared by the whole session, and an earlier test (a real worker
+        # that was stopped) may have left a sweep job waiting, which would hold the queueing lock
+        # and swallow our first tick. Run what is there first, so the queue starts empty.
+        await _drain(first, second)
+        silent_early = await _machine(app_factory, seed.tenant_a)
+        async with tenant_session(owner_factory) as db:
+            jobs_before: int = (
+                await db.execute(text("SELECT coalesce(max(id), 0) FROM procrastinate_jobs"))
+            ).scalar_one()
+            # A tick counts only if it is newer than the latest one recorded for the task, so ours
+            # start right after it (or after "now", whichever is later).
+            latest: int = (
+                await db.execute(
+                    text(
+                        "SELECT coalesce(max(defer_timestamp), 0)"
+                        " FROM procrastinate_periodic_defers WHERE task_name = :t"
+                    ),
+                    {"t": SWEEP_TASK},
+                )
+            ).scalar_one()
+        base = max(int(time.time()), latest)
+        ticks = [base + n for n in range(1, TICKS + 1)]
+
+        deferrers = [PeriodicDeferrer(app.periodic_registry) for app in (first, second)]
         try:
+            for n, tick in enumerate(ticks):
+                # Both workers see the same tick at once; the database lets only one defer it.
+                await asyncio.gather(
+                    *(d.defer_jobs(d.get_previous_tasks(at=tick + 0.5)) for d in deferrers)
+                )
+                await _drain(first, second)
+                seen = await _sweep_jobs(owner_factory, jobs_before)
+                assert [t for t, _ in seen] == [str(x) for x in ticks[: n + 1]], seen
 
-            async def early_done() -> bool:
-                return (await _state(owner_factory, seed.tenant_a, silent_early))[0] == "offline"
-
-            assert await _wait_for(early_done, 10), "the first sweep never ran"
-
-            # A machine that goes silent while the workers are already running is picked up too.
-            silent_late = await _machine(app_factory, seed.tenant_b)
-
-            async def late_done() -> bool:
-                assert silent_late is not None
-                return (await _state(owner_factory, seed.tenant_b, silent_late))[0] == "offline"
-
-            assert await _wait_for(late_done, 10), "a later tick never ran"
-            await asyncio.sleep(2)  # a few more ticks, to give a duplicate the chance to appear
+                if n == 0:
+                    # The first sweep ran; a machine that goes silent afterwards is for the next.
+                    state = await _state(owner_factory, seed.tenant_a, silent_early)
+                    assert state[0] == "offline"
+                    silent_late = await _machine(app_factory, seed.tenant_b)
+                    state = await _state(owner_factory, seed.tenant_b, silent_late)
+                    assert state[0] == "online"
+                elif n == 1:
+                    assert silent_late is not None
+                    state = await _state(owner_factory, seed.tenant_b, silent_late)
+                    assert state[0] == "offline"
         finally:
-            for worker in workers:
-                worker.cancel()
-            await asyncio.gather(*workers, return_exceptions=True)
+            # Our ticks are made up and may be ahead of the clock: forget them, so the next real
+            # worker (another test) is not told that its own, older, ticks are stale.
+            async with tenant_session(owner_factory) as db:
+                await db.execute(
+                    text("DELETE FROM procrastinate_periodic_defers WHERE task_name = :t"),
+                    {"t": SWEEP_TASK},
+                )
 
     assert silent_late is not None
     assert await _state(owner_factory, seed.tenant_a, silent_early) == ("offline", ["went_offline"])
     assert await _state(owner_factory, seed.tenant_b, silent_late) == ("offline", ["went_offline"])
 
-    async with tenant_session(owner_factory) as db:
-        # A periodic job's `timestamp` argument is the tick it belongs to. (The periodic table
-        # keeps only the latest tick per task, so it cannot be used to count them.)
-        jobs = (
-            await db.execute(
-                text(
-                    "SELECT count(*) AS jobs, count(DISTINCT args->>'timestamp') AS ticks"
-                    " FROM procrastinate_jobs WHERE task_name = :t AND id > :b"
-                ),
-                {"t": SWEEP_TASK, "b": jobs_before},
-            )
-        ).one()
-    assert jobs.jobs >= 3, "the sweep should have ticked several times"
-    assert jobs.ticks == jobs.jobs, "two jobs for the same tick: a tick ran twice"
-
-    # Jobs of the sweep finished without failing.
-    async with tenant_session(owner_factory) as db:
-        failed: int = (
-            await db.execute(
-                text(
-                    "SELECT count(*) FROM procrastinate_jobs"
-                    " WHERE task_name = :t AND id > :b AND status = 'failed'"
-                ),
-                {"t": SWEEP_TASK, "b": jobs_before},
-            )
-        ).scalar_one()
-    assert failed == 0
+    seen = await _sweep_jobs(owner_factory, jobs_before)
+    assert len(seen) == TICKS, "one job per tick"
+    assert len({t for t, _ in seen}) == TICKS, "two jobs for the same tick: a tick ran twice"
+    assert all(status == "succeeded" for _, status in seen), seen

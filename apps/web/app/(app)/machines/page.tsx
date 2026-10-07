@@ -248,7 +248,10 @@ function PoolCard({
                   <TableRow key={machine.id}>
                     <TableCell className="font-mono text-body-sm">{machine.name}</TableCell>
                     <TableCell>
-                      <StatusPill kind="machine" status={machine.status} />
+                      <span className="flex flex-wrap items-center gap-2">
+                        <StatusPill kind="machine" status={machine.status} />
+                        {machine.paused_locally && <Badge variant="warning-text">Pausada nesta máquina</Badge>}
+                      </span>
                     </TableCell>
                     <TableCell className="tabular text-text-secondary">{lastSignal(machine)}</TableCell>
                     <TableCell className="font-mono text-body-sm text-text-secondary">
@@ -284,6 +287,7 @@ function PoolCard({
                 >
                   <span className="font-mono text-title break-all">{machine.name}</span>
                   <StatusPill kind="machine" status={machine.status} />
+                  {machine.paused_locally && <Badge variant="warning-text">Pausada nesta máquina</Badge>}
                   <span className="text-body-sm text-text-secondary">{lastSignal(machine)}</span>
                   <span className="text-caption text-text-label">
                     {MODE_LABEL[machine.mode]}

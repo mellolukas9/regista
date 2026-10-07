@@ -92,16 +92,22 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 
 ## M4 — Pacotes de robô assinados
 
-- [ ] Tabela `bot_versions`
-- [ ] CLI `regista-pack`: empacota o robô, calcula sha256 e assina com Ed25519 (chave privada fora do repositório e do servidor)
-- [ ] Publicação de versão (só equipe Artemisys) com nota do que mudou; o servidor guarda pacote, hash e assinatura
-- [ ] Frontend: aba de versões do Detalhe do bot (7.6)
-- [ ] Agente verifica assinatura com a chave pública embutida antes de executar; recusa pacote inválido
-- [ ] Ambiente isolado por versão com `uv` (cache local)
-- [ ] Lista local de robôs permitidos por máquina e kill switch local
-- [ ] Remover a flag de desenvolvimento do M3 (`REGISTA_DEV_UNSIGNED`); desde o M3 o agente já se recusa a iniciar com ela em produção e o servidor recusa criar execução em produção sem versão assinada
+- [x] Tabela `bot_versions`
+- [x] CLI `regista-pack`: empacota o robô, calcula sha256 e assina com Ed25519 (chave privada fora do repositório e do servidor)
+- [x] Publicação de versão (só equipe Artemisys) com nota do que mudou; o servidor guarda pacote, hash e assinatura
+- [x] Frontend: aba de versões do Detalhe do bot (7.6)
+- [x] Agente verifica assinatura com a chave pública embutida antes de executar; recusa pacote inválido
+- [x] Ambiente isolado por versão com `uv` (cache local)
+- [x] Lista local de robôs permitidos por máquina e kill switch local
+- [x] A flag de desenvolvimento do M3 (`REGISTA_DEV_UNSIGNED`) **continua, só em dev**: o agente se recusa a iniciar com ela em produção e o servidor recusa criar execução em produção de bot sem versão em uso (com teste das duas travas)
+- [x] `regista-agent setup` (Python e Chromium exatos em `%ProgramData%\Regista`) e `diagnose` com runtimes, chaves confiáveis e estado local
+- [x] ADR 0021 e runbook `chave-de-assinatura.md`
+- [x] Lib compartilhada `regista_pkg` (formato, assinatura, extração segura) usada pela API, pelo agente e pelo `regista-pack`
+- [x] `POST /agent/jobs/{id}/release` (devolve à fila uma execução que o agente não vai iniciar) e devolução automática de execução "atribuída" que o heartbeat não reconhece
+- [x] Tarefa do worker que expira uploads de versão abandonados
+- [ ] **Fora do M4, pré-requisito do primeiro cliente:** conta separada para o robô (ADR 0022, proposta) e chaves de produção (`docs/STATUS.md`)
 
-**Pronto quando:** pacote adulterado é recusado pelo agente e o painel mostra o motivo; robô fora da lista local não executa.
+**Pronto quando:** pacote adulterado é recusado pelo agente e o painel mostra o motivo; pacote de outro cliente é recusado mesmo que o servidor o envie; robô fora da lista local não executa; trocar a versão em uso faz a próxima execução usar a nova.
 
 ---
 
@@ -144,6 +150,7 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 - [ ] Prévia em linguagem natural e próximas 3 execuções
 - [ ] Tabelas `alerts` e `notifications`; envio por e-mail (SMTP), uma vez por ocorrência, com link para o alvo
 - [ ] Eventos de `design-system.md` §11.6: execução falhou, execução pendente há mais de 30 min, máquina sem sinal há mais de 15 min, itens com falha ou abandonados (um e-mail por execução), item abandonado
+- [ ] Alerta para a equipe Artemisys quando uma execução termina com `package_invalid` (pode indicar adulteração; ver STATUS)
 - [ ] Notificações do sino (lida/não lida, "Marcar todas como lidas", contagem na topbar), guardadas por 30 dias
 - [ ] API devolve as próximas 3 datas de cada agendamento e os disparos das próximas 48 h
 - [ ] Frontend: Agendamentos (7.7 e aba do bot), Alertas (7.15), sino de notificações, Dashboard completo (7.2)

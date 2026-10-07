@@ -15,10 +15,12 @@ console. `check_acl` is what `diagnose` uses to prove the folder is as strict as
 """
 
 import getpass
+import json
 import os
 import shutil
 import stat
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,6 +32,8 @@ from regista_agent.errors import AgentError, NotEnrolled
 KEY_ENTROPY = b"regista-agent/machine-key/v1"
 KEY_NAME = "machine.key"
 STAGED_NAME = "machine.key.new"
+IDENTITY_NAME = "identity.json"
+STAGED_IDENTITY_NAME = "identity.json.new"
 _RAW_KEY_SIZE = 32
 
 
@@ -70,6 +74,8 @@ class KeyStore:
         self.agent_account = agent_account
         self.path = keys_dir / KEY_NAME
         self.staged_path = keys_dir / STAGED_NAME
+        self.identity_path = keys_dir / IDENTITY_NAME
+        self.staged_identity_path = keys_dir / STAGED_IDENTITY_NAME
 
     def exists(self) -> bool:
         try:
@@ -132,8 +138,52 @@ class KeyStore:
     def commit(self, staged: Path) -> None:
         os.replace(staged, self.path)
 
-    def discard(self, staged: Path) -> None:
-        staged.unlink(missing_ok=True)
+    # --- the client this machine belongs to (ADR 0021) -------------------------------------
+
+    def stage_identity(self, tenant_id: uuid.UUID) -> Path:
+        """Write the client's id beside its final place, with the same protection as the key.
+
+        The id comes from the server's answer to the enrollment, the one moment this machine
+        is told whose it is. Every signed package must name this client, and nothing the
+        server says later about a run can change what is compared with."""
+        self.staged_identity_path.unlink(missing_ok=True)
+        data = json.dumps({"tenant_id": str(tenant_id)}).encode("utf-8")
+        if sys.platform == "win32":
+            from regista_agent import _windows
+
+            try:
+                _windows.make_private_file(self.staged_identity_path, data)
+            except PermissionError as exc:
+                raise AgentError("Sem permissão para gravar a identidade desta máquina.") from exc
+        else:
+            descriptor = os.open(
+                self.staged_identity_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+            )
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(data)
+            self._give_to_agent(self.staged_identity_path)
+        return self.staged_identity_path
+
+    def commit_identity(self, staged: Path) -> None:
+        os.replace(staged, self.identity_path)
+
+    def read_tenant_id(self) -> uuid.UUID | None:
+        """The client this machine belongs to, or None for a machine enrolled before M4 (it
+        must be enrolled again: `diagnose` says so). A damaged file is an error, not None."""
+        try:
+            raw = self.identity_path.read_bytes()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            raise AgentError(f"Não foi possível ler a identidade desta máquina: {exc}") from exc
+        try:
+            return uuid.UUID(str(json.loads(raw)["tenant_id"]))
+        except (ValueError, KeyError, TypeError):
+            raise AgentError("O arquivo de identidade desta máquina está corrompido.") from None
+
+    def discard(self, *staged: Path) -> None:
+        for path in staged:
+            path.unlink(missing_ok=True)
 
     def _give_to_agent(self, path: Path) -> None:
         if not self.agent_account or self.agent_account == getpass.getuser():

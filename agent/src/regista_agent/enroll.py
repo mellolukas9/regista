@@ -100,6 +100,7 @@ def enroll(
     # Locks the folder down and writes the key beside its final place. If that cannot be done
     # (not an administrator, unknown account) we find out now, before the key is used up.
     staged = store.stage(private)
+    staged_identity: Path | None = None
     try:
         session = http or HttpSession(
             make_client(settings.model_copy(update={"server_url": server_url}))
@@ -122,13 +123,16 @@ def enroll(
             raise AgentError(f"O servidor não aceitou o cadastro (HTTP {response.status_code}).")
         answer = response.json()
         mode = str(answer["mode"])
+        tenant_id = uuid.UUID(str(answer["tenant_id"]))
+        staged_identity = store.stage_identity(tenant_id)
         if mode == "session" and agent_account is None and sys.platform == "win32":
             raise AgentError(SESSION_NEEDS_ACCOUNT)
     except BaseException:
-        store.discard(staged)
+        store.discard(*(p for p in (staged, staged_identity) if p is not None))
         raise
 
     store.commit(staged)
+    store.commit_identity(staged_identity)
     machine_id = uuid.UUID(str(answer["machine_id"]))
     config_path = save_identity(
         settings.home,

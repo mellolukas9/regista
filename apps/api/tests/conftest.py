@@ -13,6 +13,7 @@ import pytest_asyncio
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from testcontainers.community.postgres import PostgresContainer
@@ -26,6 +27,7 @@ from regista_api.main import create_app
 
 from .helpers import Env, FakeClock, Panel, new_client, onboard, unique_email
 from .jobs_helpers import Rig, enrolled_agent, make_bot
+from .package_helpers import SigningKey, new_signing_key
 
 # The Ryuk reaper container races with Docker Desktop port publishing on Windows. The
 # container below is stopped by its context manager instead.
@@ -58,6 +60,13 @@ def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
     return asyncio.DefaultEventLoopPolicy()
 
 
+class _TestSettings(Settings):
+    """No `.env`: a developer's own file (S3 keys, a master key...) must never change what a test
+    says about the settings."""
+
+    model_config = SettingsConfigDict(env_file=None)
+
+
 def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
     """Settings for tests: real test database, in-memory e-mail, throwaway master key."""
     values: dict[str, object] = {
@@ -75,7 +84,7 @@ def make_settings(db_urls: DbUrls, **overrides: object) -> Settings:
         "rate_agent_auth_machine_per_minute": 100_000,
         **overrides,
     }
-    return Settings.model_validate(values)
+    return _TestSettings.model_validate(values)
 
 
 @dataclass(frozen=True)
@@ -225,17 +234,28 @@ async def env(db_urls: DbUrls, seed: Seed) -> AsyncIterator[Env]:
         yield e
 
 
+@pytest.fixture(scope="session")
+def signing(tmp_path_factory: pytest.TempPathFactory) -> SigningKey:
+    """A throwaway key that signs the packages of the tests. The apps trust it through the
+    development-only override; the production key never exists in a test."""
+    return new_signing_key(tmp_path_factory.mktemp("signing"))
+
+
 @pytest_asyncio.fixture
 async def panel(
-    request: pytest.FixtureRequest, db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID
+    request: pytest.FixtureRequest,
+    db_urls: DbUrls,
+    seed: Seed,
+    internal_tenant: uuid.UUID,
+    signing: SigningKey,
 ) -> AsyncIterator[Panel]:
     """Browsers of client A (admin, operator, viewer), of client B (admin) and of the staff.
 
     A test (or module) marked `s3` also gets a running SeaweedFS and an app configured for it."""
-    overrides: dict[str, object] = {}
+    overrides: dict[str, object] = {"dev_trusted_keys": str(signing.keys_file)}
     if request.node.get_closest_marker("s3") is not None:
         s3: S3Env = request.getfixturevalue("s3_env")
-        overrides = {
+        overrides |= {
             "s3_endpoint_url": s3.endpoint_url,
             "s3_access_key_id": s3.access_key_id,
             "s3_secret_access_key": s3.secret_access_key,
@@ -320,7 +340,12 @@ def s3_env() -> Iterator[S3Env]:
 
     container = (
         DockerContainer(S3_IMAGE)
-        .with_command("server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json")
+        # Every bucket is a collection with volumes of its own, and the tests make one each: on a
+        # small disk the default limit of volumes runs out and PutObject answers InternalError.
+        .with_command(
+            "server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json"
+            " -volume.max=2000 -master.volumeSizeLimitMB=64"
+        )
         .with_volume_mapping(str(S3_CONFIG), "/etc/seaweedfs/s3.json", "ro")
         .with_exposed_ports(8333)
     )
