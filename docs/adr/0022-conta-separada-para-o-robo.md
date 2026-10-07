@@ -1,6 +1,6 @@
-# ADR 0022: Conta separada e de menor privilégio para o robô
+# ADR 0022: Separação de privilégios entre agente e robô (hospedeiro do robô)
 
-- **Status:** proposta (a decisão fica para quando o trabalho for planejado)
+- **Status:** proposta (vira aceita ao fim do M4b, depois da conferência manual)
 - **Data:** 2026-10
 
 ## Contexto
@@ -21,25 +21,40 @@ O modelo de ameaças do `security.md` (robô explorado: "usuário Windows dedica
 
 ## Decisão
 
-**Ainda não decidida.** Fica registrado que é **pré-requisito obrigatório antes do primeiro cliente em produção**: o robô deve rodar com uma conta separada, de menor privilégio, que só lê o cache e o ambiente da própria versão e **não enxerga `keys\`**. Esta ADR compara as opções para a decisão.
+**Hospedeiro do robô com identidade própria (opção E) e ambiente novo por execução (opção D).** Nenhuma credencial é guardada.
 
-## Opções
+1. **O agente roda sempre como serviço** (`NT SERVICE\RegistaAgent`, sessão 0) e é o **único** que acessa `keys\`, `agent.toml` e `PAUSED` (os dois últimos só leitura: só um administrador os altera).
+2. **Um hospedeiro** (`regista-agent host`) roda como a identidade do robô e é quem inicia o robô: no modo `service`, o serviço `RegistaRobot` (conta virtual `NT SERVICE\RegistaRobot`, sem perfil interativo); no modo `session`, uma tarefa de logon do **usuário dedicado** (sem senha: o gatilho é o logon do próprio usuário), na sessão interativa, para robôs com tela e com o perfil desse usuário. Os modos `service` e `session` passam a dizer **onde o hospedeiro roda** (emenda à ADR 0010).
+3. **Canal por named pipe**, com comando de mão única: o agente manda "execute esta versão, já verificada, com estes parâmetros, nestas pastas"; o hospedeiro só inicia o robô e devolve saída, código de saída e eventos. O hospedeiro **não pede nada** ao agente (nem token, nem chave, nem dado do servidor).
+   - O pipe é criado pelo agente (`FILE_FLAG_FIRST_PIPE_INSTANCE`, **uma única instância**, clientes remotos recusados), com DACL só para o SID esperado do hospedeiro. O hospedeiro confere que o servidor do pipe é o agente.
+   - Ao aceitar, o agente confere a identidade de quem conectou: PID do cliente do pipe, SID do token do processo e caminho do executável. Tudo que vem do hospedeiro é **dado não confiável** (formato estrito, tamanhos, taxa, só o `run_id` da execução corrente).
+   - Como robô e hospedeiro têm a mesma identidade, um robô não pode se passar pelo hospedeiro porque a instância única já está ocupada, o hospedeiro segura o robô num Job Object com `KILL_ON_JOB_CLOSE` (cai o hospedeiro, morrem os robôs e o pipe libera) e o executável do cliente é conferido.
+4. **Sem fallback.** Hospedeiro ausente, sem resposta, com identidade ou protocolo divergentes: a execução falha com o código `robot_host_unavailable`, com texto fixo no painel. No Windows, produção nunca roda o robô como a conta do agente.
+5. **Ambiente novo por execução.** O agente (não o robô) extrai o código da versão **do zip já verificado** e cria o venv numa **pasta da execução** (`runs\<id>\`), com a ACL gravada **antes** de popular: o robô lê e executa o código e o venv da própria execução, sem escrita; escreve só em `tmp\` e `artifacts\`. O `uv-cache` fica fora do alcance do robô (sem leitura nem escrita); a instalação é sempre `--offline --no-index --require-hashes` contra o `requirements.lock` do pacote verificado, com `--link-mode=copy` (hardlink do cache herdaria a ACL do cache), e **sem cache** se o `uv` não reconferir hashes de itens vindos dele. A pasta da execução é apagada pelo agente ao fim, inclusive em falha, cancelamento e queda. `envs\` deixa de existir.
+6. **Matriz de permissões** de `%ProgramData%\Regista` (herança desligada na raiz, usuários locais sem acesso): ver `docs/specs/security.md`. O robô só lê o pacote e o ambiente da própria execução e não alcança `keys\`, `agent.toml` nem `PAUSED`.
+7. **Arquivos do robô são dados não confiáveis.** O agente só abre capturas que sejam arquivos regulares **sem ponto de reanálise** (junction e link simbólico recusados; o robô pode criar uma junction em `artifacts\` apontando para `keys\`, e um agente que seguisse o link enviaria a chave como "captura"), e a limpeza da pasta da execução não segue links.
+8. **Persistência entre execuções.** O robô recebe um ambiente de processo montado só pelo agente: `PYTHONNOUSERSITE=1`, `PYTHONDONTWRITEBYTECODE=1`, `TEMP`, `TMP`, `HOME`, `USERPROFILE`, `APPDATA` e `LOCALAPPDATA` dentro de `tmp\`. Teste de registro (HKCU): ver "Resultado do spike".
 
-| Opção | Como funciona | Fecha | Custo e riscos |
+## Opções consideradas
+
+| Opção | O que fecha | Custo real no Windows | Veredito |
 |---|---|---|---|
-| **A. Conta local separada para o robô, com ACLs** | O instalador cria `RegistaRobot` (sem login interativo, sem admin). O agente lança o robô com essa conta (`CreateProcessWithLogonW`/`CreateProcessAsUser`, senha ou token gerenciado). ACLs: `keys\`, `agent.toml`, `PAUSED`, `logs\` só para o agente; `packages\`, `envs\`, `uv-cache\` gravam só o agente e leem o robô; `python\` e `browsers\` como hoje; pasta de trabalho da execução só do robô. | (a), (b), (c) e `agent.toml` | O maior: o MSI cria e gerencia a conta e sua credencial (ou usa `LogonUser` com senha aleatória guardada com DPAPI para o agente). No modo `session`, a conta interativa já existe e a separação exige uma segunda conta para o robô, com impacto nos robôs que dependem da tela. O Playwright precisa de acesso de leitura ao perfil/temporário do robô. Exige testes de ACL no CI do Windows e conferência de antivírus. Não precisa mudar o formato do pacote. |
-| **B. Token restrito do Windows (restricted token / AppContainer / job object)** | O agente cria, com a mesma conta, um token com SIDs desabilitados e SIDs restritos (`CreateRestrictedToken`), ou roda o robô num AppContainer/low integrity, com ACLs que concedem acesso só à pasta de trabalho e à versão. | (c) e a escrita em `packages\`/`envs\` (por integridade baixa e SIDs restritos) | Médio: sem conta nova nem senha. Mas o Chromium do Playwright já usa o próprio sandbox, que pode falhar sob token restrito ou AppContainer; automação de janelas (modo `session`) tem limitações; é a opção mais frágil para robôs que acionam aplicativos desktop. Exige experimentação com o Playwright antes de decidir. |
-| **C. Reverificar os arquivos extraídos a cada execução contra uma lista de hashes assinada** | O pacote assinado leva um arquivo com o hash de cada arquivo do ambiente (ou o agente calcula na criação e guarda assinado com a chave da máquina). Antes de cada execução, o agente confere o `envs\<versão>` e o código extraído. | Só a persistência por alteração do ambiente (a) | Baixo a médio, mas **não** fecha (c): o robô continua lendo a chave da máquina. A conferência de um ambiente com milhares de arquivos leva segundos (cada execução). Não impede o robô de alterar o ambiente e agir durante a própria execução. Serve como defesa em profundidade, nunca sozinha. |
-| **D. Ambiente novo a cada execução** | `uv venv` mais `uv pip install` offline a partir das wheels do pacote, num diretório temporário do robô, apagado ao fim. | (a) e (b) (nada persiste entre execuções) | Baixo na implementação; paga 1 a 3 s por execução (mais com muitas wheels grandes) e disco temporário. Também **não** fecha (c). Combina bem com a opção A. |
+| **A. Conta local separada + `CreateProcessWithLogonW`** | leitura de `keys\`, escrita em caches, `agent.toml` | Senha da conta guardada pelo agente (um segredo a rotacionar e perder); o MSI cria e gerencia a conta; matar o robô depende de handles de um processo criado pelo `seclogon`; no modo session o robô passa a ter o perfil de **outra** conta, e os aplicativos desktop ficam configurados no usuário dedicado | Descartada |
+| **B. Token restrito / AppContainer** | leitura de `keys\` e escrita | Sem senha nem conta, mas o Chromium do Playwright tem o próprio sandbox (token restrito dentro de token restrito costuma quebrar), o modo session com aplicativos desktop sofre com integridade baixa, e todo acesso passa por uma segunda checagem (SIDs restritos) em toda pasta que o robô toca | Descartada (a mais frágil) |
+| **C. Reverificar arquivos extraídos contra lista de hashes assinada** | só a persistência em `envs\` | Não impede a leitura de `keys\`; varrer milhares de arquivos de `site-packages` custa segundos por execução; só detecta o que já mudou | Dispensável: nada que o robô escreve é reaproveitado |
+| **D. Ambiente novo por execução** | persistência em `envs\` e `uv-cache\` | +2 a 5 s por execução (cópia das wheels) e disco temporário; não impede a leitura de `keys\` | Adotada, junto com E |
+| **E. Hospedeiro com identidade própria** | tudo: `keys\`, caches, `agent.toml`, `PAUSED`, sem credencial | Dois serviços (mais uma tarefa no modo session), um protocolo local mínimo, identidade do cliente do pipe e um instalador mínimo | **Adotada** |
 
-## Recomendação provisória (sujeita à decisão)
+## Risco residual (aceito)
 
-**A, mais D.** A é a única que fecha a leitura da chave da máquina (c), que é o risco mais grave; D tira a persistência dos ambientes sem depender de ACLs perfeitas. B só se experimentos mostrarem que o Playwright e os robôs com tela convivem com ela; C como reforço opcional.
+Robô e hospedeiro têm a **mesma identidade**. Um robô comprometido consegue, portanto, abrir o processo do hospedeiro ou injetar código nele. Isso **não** dá acesso a `keys\` nem ao agente: o hospedeiro não tem privilégio além do robô, e o agente trata tudo que vem dele como não confiável e recusa o que sair do protocolo. O pior caso é **falsificar a saída e o resultado da própria execução** (um log mentiroso, um código de saída falso). A defesa em profundidade: o hospedeiro não guarda segredo, não pede nada ao agente, e um teste exercita um hospedeiro adulterado (mensagens fora do protocolo, de outro `run_id`, de tipo desconhecido, grandes demais ou fora de ordem são recusadas).
+
+Outros resíduos: o perfil e o `HKCU` da identidade do robô persistem entre execuções (no modo session, o perfil do usuário dedicado é, por decisão de produto, o do robô, para preservar os aplicativos desktop configurados). Um administrador da máquina continua podendo tudo (limite aceito desde a ADR 0018).
+
+## Resultado do spike
+
+_(preenchido no passo 1 do M4b: custo do venv por execução com Playwright, comportamento do cache do `uv`, Chromium sob `NT SERVICE\RegistaRobot`, Job Object, pipe entre serviços e persistência pelo registro.)_
 
 ## Consequências
 
-Enquanto isso não for decidido e feito: um robô comprometido (por exemplo, por um site malicioso que explore o navegador) pode ler a identidade da máquina e persistir código no ambiente. Por isso o `STATUS.md` registra como **pré-requisito do primeiro cliente em produção**. Mudar para a conta separada altera o instalador (M8), o `setup`, o `diagnose` (que passa a conferir as ACLs de cada pasta), o modo `session` e o runbook.
-
-## Alternativas descartadas
-
-Manter como está e documentar (não serve a um produto multi-cliente que roda código em máquinas de terceiros); mover a chave da máquina para o TPM sem separar a conta (o robô continuaria podendo usar a chave enquanto o agente roda, sem extraí-la, o que ajuda mas não basta).
+O M4b entrega o hospedeiro, o instalador mínimo (`service install`) e a matriz de permissões. O M8 troca o invólucro de serviço em ctypes por WinSW/MSI, instala em `Program Files` e cria os dois serviços. Cada execução ganha o custo do ambiente novo. O M5 passará o token de job do agente ao hospedeiro por execução (o robô **vê** esse token, porque é para ele). Linux (fora do MVP) continua sem isolamento (`DirectLauncher`).

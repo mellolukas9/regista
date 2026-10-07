@@ -1340,3 +1340,15 @@ O banner "A execução falhou" (§14) ganha um texto **fixo por código**. O pai
 |---|---|---|
 | Subir uma versão assinada | Publicar versão | Detalhe do bot, aba Versões (já em §4) |
 | Trocar a versão que roda | Colocar em uso | Detalhe do bot, aba Versões |
+
+---
+
+## 16. Textos complementares do M4b
+
+Um único texto novo, **aprovado no plano do M4b**. Vale o mesmo critério das seções anteriores: usar exatamente este texto.
+
+| Tela | Elemento | Texto |
+|---|---|---|
+| Detalhe da execução (7.4) | Banner "A execução falhou" com `error_code = robot_host_unavailable` | "O serviço que roda os robôs nesta máquina não respondeu. Peça a quem cuida da máquina para rodar regista-agent diagnose como administrador." |
+
+O detalhe técnico (serviço `RegistaRobot`, tarefa de logon do modo Sessão, qual verificação falhou) **não** aparece no painel: fica no `diagnose`, no runbook e nos logs da execução.
