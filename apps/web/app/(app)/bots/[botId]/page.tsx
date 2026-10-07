@@ -7,7 +7,9 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { DetailHeader } from "@/components/DetailHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { RunBars } from "@/components/RunBars";
+import { VersionsTab } from "@/components/VersionsTab";
 import { StatusPill } from "@/components/StatusPill";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,11 +19,11 @@ import { api, ApiError } from "@/lib/api";
 import { botsKey, successSentence, type BotDetail } from "@/lib/bots";
 import { duration, jobsKey, startedLabel, triggerLabel, type JobPage } from "@/lib/jobs";
 import { POLL_MS } from "@/lib/machines";
-import { canRunJobs } from "@/lib/me";
+import { canManageVersions, canRunJobs } from "@/lib/me";
 import { useCurrentUser } from "@/lib/me-context";
 import { useRunNow } from "@/lib/run-now";
 
-const TABS = ["overview", "runs"] as const;
+const TABS = ["overview", "runs", "versions"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function BotDetailPage() {
@@ -42,6 +44,7 @@ function BotDetailView() {
   const allClients = me.context?.all_clients ?? false;
   const contextKey = me.context?.client_id ?? "all";
   const canRun = canRunJobs(me) && !allClients;
+  const canManage = canManageVersions(me) && !allClients;
   const tab: Tab = TABS.find((t) => t === search.get("tab")) ?? "overview";
 
   const bot = useQuery({
@@ -106,11 +109,18 @@ function BotDetailView() {
         context={`Bot · ${data.client_name}`}
         title={data.name}
         status={
-          data.last_run ? (
-            <StatusPill kind="job" status={data.last_run.status} />
-          ) : (
-            <span className="text-body-sm text-text-label">Nunca rodou</span>
-          )
+          <>
+            {data.last_run ? (
+              <StatusPill kind="job" status={data.last_run.status} />
+            ) : (
+              <span className="text-body-sm text-text-label">Nunca rodou</span>
+            )}
+            {data.current_version ? (
+              <Badge variant="accent">v{data.current_version.version} em uso</Badge>
+            ) : (
+              <Badge variant="neutral">Sem versão em uso</Badge>
+            )}
+          </>
         }
         note={`pacote ${data.package_name}`}
         actions={
@@ -151,12 +161,16 @@ function BotDetailView() {
         <TabsList aria-label="Seções do bot">
           <TabsTrigger value="overview">Visão geral</TabsTrigger>
           <TabsTrigger value="runs">Execuções</TabsTrigger>
+          <TabsTrigger value="versions">Versões</TabsTrigger>
         </TabsList>
         <TabsContent value="overview">
           <Overview bot={data} />
         </TabsContent>
         <TabsContent value="runs">
           <RecentRuns botId={data.id} contextKey={contextKey} />
+        </TabsContent>
+        <TabsContent value="versions">
+          <VersionsTab bot={data} contextKey={contextKey} canManage={canManage} />
         </TabsContent>
       </Tabs>
     </>

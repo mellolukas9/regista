@@ -9,6 +9,8 @@ export type MachineMode = "service" | "session" | "oneshot";
 
 export type Machine = {
   id: string;
+  /** O kill switch local do agente está ligado: só uma indicação, o painel não pausa nem retoma. */
+  paused_locally: boolean;
   name: string;
   status: MachineStatus;
   mode: MachineMode;

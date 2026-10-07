@@ -13,6 +13,8 @@ export type LastRun = {
   finished_at: string | null;
 };
 
+export type CurrentVersion = { id: string; version: string };
+
 export type Bot = {
   id: string;
   name: string;
@@ -29,6 +31,8 @@ export type Bot = {
   recent_statuses: JobStatus[];
   recent_ids: string[];
   has_active_run: boolean;
+  /** A versão em uso (null até alguma ser colocada em uso). */
+  current_version: CurrentVersion | null;
 };
 
 export type BotDetail = Bot & {
@@ -52,6 +56,11 @@ export function useBotOptions(contextKey: string) {
     refetchInterval: POLL_MS,
     queryFn: () => api.get<BotPage>("/bots?per_page=50&sort=name").then((page) => page.items),
   });
+}
+
+/** Subtítulo do bot na lista (design-system.md §14 e §15): `pacote x · v1.2.0`. */
+export function packageLine(bot: Pick<Bot, "package_name" | "current_version">): string {
+  return `pacote ${bot.package_name} · ${bot.current_version ? `v${bot.current_version.version}` : "sem versão"}`;
 }
 
 export function successSentence(bot: Pick<BotDetail, "runs_30d" | "success_rate_30d">): string {

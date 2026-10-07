@@ -181,6 +181,13 @@ export default function MachineDetailPage() {
         ]}
       />
 
+      {data.paused_locally && !revoked && (
+        <Banner tone="warning" title="Pausada nesta máquina">
+          O agente continua online, mas não pega novas execuções até alguém retomar na própria máquina. O painel não
+          consegue retomar.
+        </Banner>
+      )}
+
       {data.status === "offline" && (
         <Banner tone="danger" title="O agente parou de responder">
           {silenceText(data.mode, otherOnline?.name)}
