@@ -91,8 +91,11 @@ Ver `agent.md`: chave de registro de uso único → par Ed25519 local → desafi
 
 ## Pacotes assinados
 
-- A chave privada de assinatura **não** fica no servidor nem no repositório: fica na máquina de build da Artemisys (ou em CI isolado).
-- O agente embute a chave pública e recusa qualquer pacote sem assinatura válida.
+- A chave privada de assinatura **não** fica no servidor, no repositório, na CI nem nos segredos do GitHub: fica cifrada com senha na máquina de build da Artemisys (ADR 0021, `docs/runbooks/chave-de-assinatura.md`). Na CI só chaves de teste geradas na hora.
+- O agente embute **uma lista** de chaves públicas (ativa e reserva), identificadas por `key_id`, e recusa qualquer pacote sem assinatura válida de uma delas. Ela não pode ser sobrescrita por configuração em produção; o override de dev faz o agente recusar iniciar em `prod`.
+- A assinatura cobre o `sha256` do pacote inteiro e o manifesto (`tenant_id`, `package_name`, versão, runtime). O agente recusa pacote de outro cliente mesmo que o servidor o envie.
+- Hash e assinatura são conferidos no servidor ao publicar (ele recalcula o `sha256` do objeto no S3) e no agente antes de abrir o zip; a extração recusa caminhos maliciosos.
+- O runtime (Python, Chromium) fica em pastas só de leitura para a conta do agente; a execução nunca baixa nada.
 - A API do agente não tem nenhuma forma de enviar comando de shell ou código fora de pacote assinado.
 
 ## Modelo de ameaças
@@ -102,7 +105,9 @@ Ver `agent.md`: chave de registro de uso único → par Ed25519 local → desafi
 | Máquina do cliente invadida | Credencial restrita à máquina e ao tenant; revogável; sem listagem geral |
 | Rota esquece o filtro de tenant | RLS no Postgres + testes de isolamento em todas as rotas |
 | Banco do Regista vaza | Chaves privadas ficam nas máquinas; segredos e payloads criptografados por tenant |
-| Servidor do Regista invadido | Pacotes assinados fora do servidor; sem comando arbitrário; allowlist local no agente |
+| Servidor do Regista invadido | Pacotes assinados fora do servidor; sem comando arbitrário; allowlist local no agente; pacote de outro cliente recusado pelo `tenant_id` assinado |
+| Chave de assinatura vazada | Reserva já confiável nos agentes; roteiro no runbook; remover a chave exige atualizar o agente |
+| Pacote adulterado no S3 ou no caminho | sha256 e assinatura conferidos antes de abrir o zip |
 | Rede do cliente exposta | Somente conexão de saída; sem portas abertas; domínio fixo; TLS verificado |
 | Robô explorado | Usuário Windows dedicado sem admin |
 | Conteúdo malicioso em logs | Tratado como não confiável: limite de tamanho, exibição escapada |

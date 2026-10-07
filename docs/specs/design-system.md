@@ -1255,3 +1255,75 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 | Máquinas e pools | Coluna "Agora" | "Executando exec-7f3a24" (link) ou "—" |
 | Detalhe da máquina | Aba Execuções | Colunas "Execução", "Bot", "Status", "Gatilho", "Início", "Duração"; vazio: "Nenhuma execução nesta máquina ainda" / "As execuções que ela rodar aparecem aqui."; erro: "Não foi possível carregar as execuções" |
 | Detalhe da máquina | Revogar com execução em andamento | acrescenta ao texto: "A execução em andamento será cancelada." |
+
+---
+
+## 15. Textos complementares do M4
+
+**PROPOSTA, aguardando aprovação do responsável.** Telas e estados do M4 (aba Versões, publicação, versão em uso, motivos de recusa do agente e a indicação de máquina pausada) que as seções 7, 9 e 14 não trazem. Depois de aprovada, vale a mesma regra: usar exatamente estes textos.
+
+**Decisões de escopo do M4 (aprovadas no plano)**
+- Publicar versão e colocar uma versão em uso: só a equipe Artemisys.
+- O painel **não** pausa nem retoma máquinas: o kill switch é local. O painel só mostra a indicação "Pausada nesta máquina".
+- A versão de uma execução é a que estiver em uso **quando uma máquina a assume**. Trocar a versão em uso vale para a próxima execução assumida, inclusive as pendentes.
+
+**Detalhe do bot (7.6): aba Versões**
+
+| Elemento | Texto |
+|---|---|
+| Aba | "Versões" (a aba "Visão geral" e "Execuções" continuam) |
+| Nota (já em 7.6) | "Cada versão é assinada. O agente só roda o código cujo hash bate com o publicado." |
+| Colunas (já em 7.6) | "Versão" (+ badge "Em uso"), "Publicada em", "Por", "Hash", "O que mudou" |
+| Ação por linha (só Artemisys, versão que não está em uso) | "Colocar em uso" (secondary) |
+| Vazio (Artemisys) | "Nenhuma versão publicada" / "Publique a primeira versão assinada para este bot poder rodar." / "Publicar versão" |
+| Vazio (demais papéis) | "Nenhuma versão publicada" / "A equipe Artemisys ainda não publicou uma versão deste bot." |
+| Erro ao carregar | "Não foi possível carregar as versões" / "O servidor não respondeu. Tente de novo em alguns segundos." / "Tentar de novo" |
+| Confirmação de "Colocar em uso" (AlertDialog) | "Colocar a versão 1.2.0 em uso?" / "A próxima execução de <bot> vai usar esta versão. Execuções em andamento continuam com a versão atual." / "Voltar" + "Colocar em uso" |
+| Toasts | "Versão 1.2.0 publicada" · "Versão 1.2.0 em uso" |
+
+**Dialog "Publicar versão" (só Artemisys)**
+
+| Elemento | Texto |
+|---|---|
+| Título e texto | "Publicar versão" / "O pacote e a assinatura saem do regista-pack. A versão é lida da assinatura." |
+| Campos | "Pacote (.rgpkg)"; "Assinatura (.rgsig)"; "O que mudou" (ajuda "Aparece na lista de versões. Até 2000 caracteres."); caixa "Colocar em uso assim que for publicada" |
+| Botões | "Voltar" e "Publicar versão" (carregando: "Conferindo…" na assinatura e "Enviando…" no pacote) |
+| Erros de campo | "Escolha o arquivo do pacote (.rgpkg)." · "Escolha o arquivo da assinatura (.rgsig)." · "Esse arquivo não é uma assinatura do regista-pack." · "Escreva até 2000 caracteres." |
+| Erros da API | "A assinatura não confere com nenhuma chave confiável. Gere o pacote de novo com o regista-pack." · "Este pacote é de outro cliente. Gere o pacote para o cliente deste bot." · "Este pacote não é deste bot. O nome do pacote do bot é <pacote>." · "A versão 1.2.0 já foi publicada para este bot." · "O arquivo enviado não é o que foi assinado. Gere o pacote de novo e publique outra vez." · "O pacote passa de 200 MB." · "Não foi possível enviar o pacote. Tente de novo." |
+| Erro ao colocar em uso | "Essa versão não é deste bot. Atualize a lista e tente de novo." |
+
+**Badges e subtítulos de versão**
+
+| Tela | Elemento | Texto |
+|---|---|---|
+| Detalhe do bot | Badge accent no cabeçalho | "v1.2.0 em uso" |
+| Detalhe do bot | Sem versão em uso (badge neutro) | "Sem versão em uso" |
+| Bots | Subtítulo do bot na lista (acrescenta a versão ao da §14) | `pacote demo_busca_wikipedia · v1.2.0`; sem versão em uso: `pacote demo_busca_wikipedia · sem versão` |
+| Detalhe da execução | "Versão do bot" na faixa meta | "v1.2.0" (com Tooltip do hash curto); execução em dev, sem versão: "—" |
+| Erro da API ao executar | Já existe na §14 | "Este bot ainda não tem uma versão publicada para rodar." (vale também quando há versões, mas nenhuma está em uso) |
+
+**Detalhe da execução (7.4): motivos de recusa do agente**
+
+O banner "A execução falhou" (§14) ganha estes motivos por código. Nos casos `package_invalid`, a segunda linha é a mensagem curta enviada pelo agente, exibida escapada (é dado não confiável).
+
+| Código | Motivo |
+|---|---|
+| `package_invalid` | "A máquina recusou o pacote do robô." e, abaixo, o motivo do agente. Motivos que o agente envia: "O arquivo do pacote não bate com o hash publicado." · "A assinatura do pacote não é de uma chave confiável." · "O pacote é de outro cliente." · "O pacote não é deste robô." · "A versão do pacote não é a desta execução." · "O pacote tem um arquivo com caminho inseguro." · "O pacote tem arquivos demais ou grandes demais." |
+| `robot_not_allowed` | "Este robô não está na lista de robôs permitidos desta máquina." |
+| `runtime_missing` | "Falta preparar esta máquina para a versão 1.2.0 do robô: rode regista-agent setup como administrador." |
+| `environment_failed` | "Não foi possível montar o ambiente do robô nesta máquina." |
+
+**Máquinas (7.13 e 7.14): indicação de máquina pausada localmente**
+
+| Tela | Elemento | Texto |
+|---|---|---|
+| Máquinas e pools | Marca ao lado da pill de status (só quando pausada) | "Pausada nesta máquina" |
+| Detalhe da máquina | Banner de aviso (warning) | Título "Pausada nesta máquina" / "O agente continua online, mas não pega novas execuções até alguém retomar na própria máquina. O painel não consegue retomar." |
+| Detalhe da máquina | Execuções pendentes por causa da pausa | sem texto novo: a Timeline mostra "nenhuma máquina livre", como hoje |
+
+**Glossário de ações (acrescenta à §9)**
+
+| Ação | Texto do botão | Onde |
+|---|---|---|
+| Subir uma versão assinada | Publicar versão | Detalhe do bot, aba Versões (já em §4) |
+| Trocar a versão que roda | Colocar em uso | Detalhe do bot, aba Versões |

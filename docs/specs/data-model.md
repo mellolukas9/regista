@@ -69,6 +69,8 @@ id, tenant_id, pool_id, name, public_key (bytea, Ed25519), mode (`service`, `ses
 
 Identidade e autenticação do agente: `credential_version` int (sobe a cada cadastro; um token com versão antiga é recusado, o que derruba o agente anterior no recadastro) e o desafio em andamento, `challenge_hash` (sha256 do nonce) e `challenge_expires_at` (60 s), limpos no primeiro uso. `public_key` é nula até o cadastro. O nome segue `[a-z0-9][a-z0-9-]{0,62}` e é único por cliente entre as máquinas não revogadas. A API só aceita os modos `service` e `session`.
 
+`paused_locally` bool (M4): o agente avisa pelo heartbeat que o kill switch local está ligado; é só indicação, o painel não controla.
+
 Regras: `offline` após **2 minutos** sem sinal; volta a `online` no próximo sinal. **Uma execução por máquina por vez.**
 
 ### `machine_events` (M2)
@@ -81,7 +83,20 @@ id, tenant_id, machine_id, key_hash (sha256, único), expires_at, used_at, revok
 id, tenant_id, pool_id, name (único por cliente, sem diferenciar maiúsculas), `package_name` (`^[a-z][a-z0-9_]{0,62}$`, único por cliente, não muda: é a pasta do robô em dev e o pacote no M4), description, concurrency int default 1, is_active, created_by, current_version_id (M4).
 
 ### `bot_versions` (M4)
-id, tenant_id, bot_id, version text, package_sha256, signature bytea, storage_key, size_bytes, release_note text, created_by. Só a equipe Artemisys publica versões.
+| Coluna | Notas |
+|---|---|
+| id, tenant_id, bot_id | FK composta `(tenant_id, bot_id)` → `bots`; `UNIQUE (tenant_id, bot_id, id)` |
+| version | `^\d+\.\d+\.\d+$`, única por bot |
+| package_sha256, size_bytes | do `.rgpkg`; o servidor os recalcula ao concluir o upload |
+| signature (bytea, 64), key_id | assinatura Ed25519 e a chave que a fez |
+| manifest jsonb | o manifesto assinado (cliente, pacote, versão, runtime) |
+| storage_key | montada só pelo servidor: `tenants/<tenant>/bots/<bot>/versions/<id>.rgpkg` |
+| status | `uploading`, `published`, `expired` (upload que venceu sem concluir) |
+| upload_expires_at, published_at | |
+| release_note | até 2000 caracteres |
+| created_by, created_at | |
+
+Só a equipe Artemisys publica versões. Publicada, a versão é imutável (sem `DELETE`; só `status` e `published_at` mudam). `bots.current_version_id` tem FK composta `(tenant_id, id, current_version_id)` → `bot_versions(tenant_id, bot_id, id)`: o banco recusa colocar em uso a versão de outro bot ou de outro cliente. A mesma FK vale para `jobs.bot_version_id`.
 
 ### `jobs` (M3)
 | Coluna | Tipo | Notas |
@@ -100,7 +115,7 @@ id, tenant_id, bot_id, version text, package_sha256, signature bytea, storage_ke
 | assigned_at | timestamptz | quando um agente assumiu (alimenta a Timeline) |
 | items_successful, items_failed, items_abandoned, items_total | int | contagem para a coluna Itens |
 
-`error_code` aceita: `machine_lost`, `machine_revoked`, `timeout`, `robot_failed`, `robot_not_found`, `cancelled`, `internal`.
+`error_code` aceita: `machine_lost`, `machine_revoked`, `timeout`, `robot_failed`, `robot_not_found`, `cancelled`, `internal` e, a partir do M4, `package_invalid`, `robot_not_allowed`, `runtime_missing`, `environment_failed`. `bot_version_id` é preenchido **quando o agente assume** a execução (a versão em uso naquele momento), não na criação.
 
 Regras: `failed` quando qualquer item termina com falha, mesmo que o robô encerre normalmente. "Executar agora" com execução ativa do mesmo bot cria outro job `pending` (não bloqueia). Cancelar só em `pending`, `assigned` ou `running`.
 

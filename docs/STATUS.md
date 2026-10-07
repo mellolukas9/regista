@@ -4,9 +4,9 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 
 ## Agora
 
-- **Marco atual:** M4 — Pacotes de robô assinados (o M3 está pronto; PR #4 aguardando revisão e merge pelo responsável do projeto)
-- **Situação:** M3 concluído: bots, execuções ("jobs"), logs em lote e capturas de tela por URL pré-assinada (SeaweedFS em dev), "Executar agora" até o robô rodar pelo agente real, long-polling acordado por `LISTEN/NOTIFY`, cancelamento pelo heartbeat, revogar cancela a execução em andamento, `machine_lost` pelo worker, partições mensais de `job_logs`, robô de demonstração `bots/demo_busca_wikipedia`, e as telas Bots, Detalhe do bot, Execuções, Detalhe da execução, Dashboard e os itens do M3 em Máquinas, com polling de 15 s e o indicador de sincronização.
-- **Próximo passo:** depois do merge do PR #4, abrir a branch `m4-signed-packages` a partir da `main` e planejar o M4 (`regista-pack`, `bot_versions`, verificação de assinatura no agente, ambiente por versão com `uv`, lista local de robôs permitidos e kill switch; a flag `REGISTA_DEV_UNSIGNED` deixa de ser necessária). Ler `docs/specs/agent.md` e a ADR 0008 antes do plano, que deve ser aprovado antes de implementar.
+- **Marco atual:** M4 — Pacotes de robô assinados (branch `m4-packages`, PR #5 em rascunho; o M3 está mergeado, PR #4)
+- **Situação:** plano do M4 aprovado (ver "Decisões aprovadas para o M4"). Passo 0 pronto: os testes que dependiam de tempo real ficaram determinísticos. Passo 1 pronto: ADR 0021, runbook da chave de assinatura, specs e ROADMAP atualizados, e a **§15 do `design-system.md` proposta**. Nada de código do M4 foi escrito.
+- **Próximo passo:** o responsável aprova (ou ajusta) a §15 de `docs/specs/design-system.md`; depois, passo 2 do plano (migration `0005_bot_versions`).
 - **Pendências para decisão:** ESLint 10 (depois do M3, abaixo) e o teste do `enroll` real em console elevado antes do primeiro cliente (abaixo).
 
 ## Decisões já aprovadas para o M0 (não perguntar de novo)
@@ -74,7 +74,24 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 | Robô de demonstração | `bots/demo_busca_wikipedia` (a Wikipédia é estável e não pede verificação anti-robô; o Google pedia) |
 | Textos | `design-system.md` §14, aprovados na revisão do M3 |
 
-## Pendências para o início do M4
+## Decisões aprovadas para o M4 (não perguntar de novo)
+
+| Tema | Decisão |
+|---|---|
+| Dependências do robô | Wheels dentro do pacote assinado, instaladas offline com `uv` (`--no-index --require-hashes`); a máquina do cliente nunca acessa o PyPI (ADR 0021) |
+| Plataforma | **Limite do MVP: pacotes só para Windows 64 bits** (`win_amd64`). Dependência que só tem sdist faz o `regista-pack` falhar apontando o pacote; sdist nunca entra. Outras plataformas ficam como evolução |
+| Runtime | Python e Chromium preparados por `regista-agent setup` (elevado), versões exatas declaradas no manifesto, em `%ProgramData%\Regista\python` e `\browsers`, escrita só para Administradores e SYSTEM; a execução nunca baixa nada. **Risco aceito:** o Chromium do CDN do Playwright só tem HTTPS, sem hash verificável (evolução: MSI offline no M8) |
+| Cliente no manifesto | A assinatura cobre `tenant_id`, `package_name` e versão; o agente compara com o `tenant_id` do cadastro (`keys\identity.json`). `regista-pack --client` repetível |
+| Chaves | Ativa e reserva, ambas confiáveis nos agentes desde o primeiro MSI; privada cifrada com senha na máquina de build, **nunca na CI nem nos segredos do GitHub** (só chaves de teste geradas na hora). Roteiro de vazamento em `docs/runbooks/chave-de-assinatura.md` |
+| Flag de dev | `REGISTA_DEV_UNSIGNED` **continua, só em dev**; o ROADMAP foi corrigido |
+| Kill switch | Só local (`PAUSED`, `allow`/`disallow`); o painel mostra apenas a indicação "Pausada nesta máquina" via heartbeat (`machines.paused_locally`), sem ação de pausar ou retomar |
+| Máquinas antigas | As cadastradas antes do M4 não têm o `tenant_id` local: precisam de "Gerar nova chave" e novo `enroll` |
+
+## Pendências para o início do M4 (resolvidas)
+
+- **Resolvidas no passo 0:** os testes instáveis e o teste que falhava por causa do `.env` local (ver o registro de 2026-10-07). A pendência do Chromium está decidida acima e entra nos passos 8 e 9 do plano.
+
+Texto original das pendências, para referência:
 
 - **Testes dependentes de tempo real.** `test_worker.py::test_two_workers_run_each_tick_once` e o e2e `test_jobs_e2e.py::test_a_machine_that_goes_away_in_the_middle_makes_the_run_machine_lost` falharam numa rodada local completa (a suíte estava sob carga: 10 min seguidos de contêineres e processos) e passaram isolados e na CI. **Investigar a causa e torná-los determinísticos (relógio e tarefas controlados pelo teste, sem esperar tempo real), não só aumentar timeouts.** Antes, reproduzir sob carga para achar o que de fato atrasa (a rodada do worker, a varredura de "Sem sinal" ou a espera do heartbeat).
 
@@ -118,6 +135,7 @@ A interface foi desenhada e entregue como handoff em `docs/specs/design-system.m
 | 2026-10-03 | M2 | Pasta local perdida de novo e refeita a partir do GitHub (passos 1 a 8 estavam enviados). Ajustes pós-plano conferidos e completados (`agent/README.md`, procedimento do Procrastinate); nova regra de commit e push por passo. |
 | 2026-10-03 | M2 | Telas 7.13 e 7.14, sidebar com contador de "sem sinal", seletor de cliente com "N sem sinal" e coluna Máquinas em Clientes. Conferido no navegador contra o stack de dev: cadastrar pool e máquina, KeyReveal (sem Esc, "Concluir" só após o checkbox), máquina online, "Sem sinal" com banner e contador, revogação com nome digitado, 390 px. Docs fechados (ADR 0018 aceita, specs, runbook, ROADMAP). |
 | 2026-10-03 | M3 | Plano aprovado e M3 implementado em 14 passos (PR #4): ADRs 0019 e 0020; migration `0004`; bots, execuções, distribuição por long-polling, cancelamento, `machine_lost`, logs, capturas por URL pré-assinada; runner do agente em modo de desenvolvimento; robô de demonstração; telas Bots, Execuções, Detalhe da execução e Dashboard. Conferido no navegador com o agente real (Executar agora, cancelar no meio, agente derrubado, revogar com execução em andamento); a conferência achou um traceback no thread de logs ao revogar, corrigido com teste. O robô de demonstração passou do Google (verificação anti-robô) para a Wikipédia. |
+| 2026-10-07 | M4 | Branch `m4-packages`, PR #5 em rascunho. Plano aprovado com ajustes (chave fora da CI, só wheels `win_amd64`, runbook com reserva e roteiro de vazamento, kill switch só como indicação). **Passo 0:** carga de CPU sozinha (8 e 14 processos) não reproduziu as instabilidades (16 de 16 rodadas passaram); a falha original veio de uma suíte inteira com contêineres competindo. A análise do código achou o que dependia de tempo real e o teste do worker passou a controlar o relógio (dois deferidores periódicos recebem ticks de horário fixo e a fila é esvaziada a cada tick); nos e2e o limite de "Sem sinal" subiu para 1 h e a máquina "parada" é simulada recuando o `last_seen_at`. Uma primeira versão do teste novo falhou 1 de 3 rodadas completas (sobra de um job de varredura de outro teste segurando o `queueing_lock`) e foi corrigida. Evidência: os dois testes 20 de 20 sob 14 processos de carga; 3 de 3 rodadas completas (449 passaram, 6 pulados). O teste `test_prod_accepts_the_iam_role_setup...` falhava só localmente porque o `.env` entrava nas settings do teste; os testes agora ignoram o `.env`. **Passo 1:** ADR 0021, runbook, specs e §15 proposta. |
 
 ## Desvios e escolhas do M1 para a revisão
 

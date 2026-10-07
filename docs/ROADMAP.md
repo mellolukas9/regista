@@ -99,9 +99,11 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 - [ ] Agente verifica assinatura com a chave pública embutida antes de executar; recusa pacote inválido
 - [ ] Ambiente isolado por versão com `uv` (cache local)
 - [ ] Lista local de robôs permitidos por máquina e kill switch local
-- [ ] Remover a flag de desenvolvimento do M3 (`REGISTA_DEV_UNSIGNED`); desde o M3 o agente já se recusa a iniciar com ela em produção e o servidor recusa criar execução em produção sem versão assinada
+- [ ] A flag de desenvolvimento do M3 (`REGISTA_DEV_UNSIGNED`) **continua, só em dev**: o agente se recusa a iniciar com ela em produção e o servidor recusa criar execução em produção de bot sem versão em uso (com teste das duas travas)
+- [ ] `regista-agent setup` (Python e Chromium exatos em `%ProgramData%\Regista`) e `diagnose` com runtimes, chaves confiáveis e estado local
+- [ ] ADR 0021 e runbook `chave-de-assinatura.md`
 
-**Pronto quando:** pacote adulterado é recusado pelo agente e o painel mostra o motivo; robô fora da lista local não executa.
+**Pronto quando:** pacote adulterado é recusado pelo agente e o painel mostra o motivo; pacote de outro cliente é recusado mesmo que o servidor o envie; robô fora da lista local não executa; trocar a versão em uso faz a próxima execução usar a nova.
 
 ---
 
