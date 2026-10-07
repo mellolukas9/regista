@@ -15,7 +15,6 @@ not, and a development checkout needs `--allow-insecure-path` and says so. The M
 this installer and installs under `Program Files`.
 """
 
-import os
 import subprocess
 import sys
 import tempfile
@@ -150,27 +149,6 @@ def insecure_paths(python: Path) -> list[str]:
     return sorted(set(problems))
 
 
-def _refuse_a_launcher(interpreter: Path) -> None:
-    """A service must be the interpreter itself. In a venv made from an installed Python,
-    `python.exe` is a launcher that starts the real interpreter as a child: the service manager
-    would watch the launcher while the agent runs in the child, and the identity checks of the
-    pipe (the service's process id) would never match. Python managed by `uv` has no such
-    launcher."""
-    if sys.platform != "win32":
-        return
-    from regista_agent import winpipe
-
-    image = winpipe.process_image(os.getpid())
-    if image and os.path.normcase(os.path.realpath(image)) != os.path.normcase(
-        os.path.realpath(interpreter)
-    ):
-        raise AgentError(
-            f"{interpreter} é um iniciador de ambiente virtual (o interpretador de verdade é "
-            f"{image}) e não pode ser um serviço. Instale o programa em um ambiente criado com um "
-            "Python gerenciado pelo uv (`uv python install 3.13` e `uv venv --python 3.13`)."
-        )
-
-
 # --- install ----------------------------------------------------------------------------------
 
 
@@ -204,8 +182,6 @@ def install(
         raise AgentError("O instalador de serviços só existe no Windows.")
     policy.require_elevation(settings, "A instalação dos serviços")
     interpreter = Path(python or sys.executable).resolve()
-    if python is None:
-        _refuse_a_launcher(interpreter)
     if mode not in ("service", "session"):
         raise AgentError("O modo precisa ser service ou session.")
     if mode == "session" and not robot_account:
