@@ -117,7 +117,7 @@ if sys.platform == "win32":
         try:
             with _local_user(agent_user, password), _local_user(other_user, password):
                 computer = os.environ["COMPUTERNAME"]
-                server = EnrollServer(mode="session")
+                server = EnrollServer(mode="service")
                 result = enroll_module.enroll(
                     AgentSettings(),
                     url=SERVER,

@@ -137,7 +137,13 @@ if sys.platform == "win32":
 
         # --- the program: in a folder only administrators can change -------------------------
         APP.mkdir(parents=True)
-        env = {**os.environ, "UV_PYTHON_INSTALL_DIR": str(APP / "python")}
+        # A Python managed by uv, inside the program folder: the runner's own Python lives in a
+        # folder every user can write to, and its venv has a launcher (the installer refuses both).
+        env = {
+            **os.environ,
+            "UV_PYTHON_INSTALL_DIR": str(APP / "python"),
+            "UV_PYTHON_PREFERENCE": "only-managed",
+        }
         version = ".".join(str(n) for n in sys.version_info[:3])
         run([uv_bin, "venv", "--python", version, str(APP / "venv")], env=env)
         python = APP / "venv" / "Scripts" / "python.exe"

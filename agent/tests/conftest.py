@@ -59,6 +59,7 @@ def agent_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     # Writing ACLs (also for the run folders) has its own tests; here a production-mode run on a
     # non-elevated Windows console would lock out the very person running the tests.
     monkeypatch.setattr(layout, "lock_applies", lambda settings: False)
+    monkeypatch.setattr(layout, "separate_identities", lambda settings: False)
     keys = home / "keys"
     keys.mkdir(parents=True)
     (keys / "identity.json").write_text(json.dumps({"tenant_id": str(TENANT_ID)}), "utf-8")

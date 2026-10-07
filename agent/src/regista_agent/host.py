@@ -192,12 +192,12 @@ class HostCore:
         run_dir = self._runs_root / spec.run_id
         if not run_dir.is_dir():
             return self._refuse(spec.run_id, "a pasta da execução não existe")
-        for what, path, parent in (
-            ("o Python", spec.python, run_dir / "venv"),
-            ("o código", spec.entry, run_dir / "package"),
-            ("a pasta de trabalho", spec.cwd, run_dir / "package"),
+        for what, path, parent, follow in (
+            ("o Python", spec.python, run_dir / "venv", False),
+            ("o código", spec.entry, run_dir / "package", True),
+            ("a pasta de trabalho", spec.cwd, run_dir / "package", True),
         ):
-            if not hostproto.within(path, parent):
+            if not hostproto.within(path, parent, follow_final=follow):
                 return self._refuse(spec.run_id, f"{what} não está dentro da pasta da execução")
         env = dict(spec.env)
         for name in PROFILE_VARIABLES:

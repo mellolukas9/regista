@@ -126,6 +126,7 @@ def test_cancelling_stops_a_cooperative_robot(agent_home: Path, key: TestKey) ->
         worker = threading.Thread(
             target=run_through_host,
             args=(cfg, api, key, host, assignment(params={"mode": "wait"}), state),
+            daemon=True,
         )
         worker.start()
         assert wait_for(lambda: "robo iniciado" in api.messages)
@@ -147,6 +148,7 @@ def test_cancelling_kills_a_stubborn_robot_and_what_it_started(
         worker = threading.Thread(
             target=run_through_host,
             args=(cfg, api, key, host, assignment(params={"mode": "stubborn"}), state),
+            daemon=True,
         )
         worker.start()
         assert wait_for(lambda: any(m.startswith("child") for m in api.messages))
@@ -223,6 +225,7 @@ def test_a_host_that_dies_in_the_middle_of_a_run_fails_the_run(
         worker = threading.Thread(
             target=run_through_host,
             args=(cfg, api, key, host, assignment(params={"mode": "stubborn"})),
+            daemon=True,
         )
         worker.start()
         assert wait_for(lambda: any(m.startswith("child") for m in api.messages))

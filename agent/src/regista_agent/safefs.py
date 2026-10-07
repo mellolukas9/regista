@@ -24,9 +24,14 @@ def read_regular_file(path: Path, max_bytes: int) -> bytes | None:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0))
     except OSError:
         return None
-    with os.fdopen(descriptor, "rb") as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            os.close(descriptor)
             return None
+    except OSError:
+        os.close(descriptor)
+        return None
+    with os.fdopen(descriptor, "rb") as stream:
         data = stream.read(max_bytes + 1)
     return data if len(data) <= max_bytes else None
 

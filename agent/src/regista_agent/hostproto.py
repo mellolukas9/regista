@@ -17,6 +17,7 @@ The module is pure Python (no Windows calls), so the whole protocol is tested on
 """
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -340,10 +341,21 @@ class HostConversation:
         return message
 
 
-def within(path: str, root: Path) -> bool:
-    """True when `path` (resolved, links followed) is inside `root`. The host uses it so that even
-    a message from the agent cannot make it run something outside the run folder."""
+def within(path: str, root: Path, *, follow_final: bool = True) -> bool:
+    """True when `path` is inside `root`, links followed. The host uses it so that even a message
+    from the agent cannot make it run something outside the run folder.
+
+    `follow_final=False` is for the interpreter of a virtual environment: on POSIX its last
+    component is a link to the base interpreter by design, so only the folders above it are
+    resolved (they are the agent's, and the robot cannot change them)."""
     try:
-        return Path(path).resolve().is_relative_to(root.resolve())
+        resolved_root = root.resolve()
+        target = Path(path)
+        if follow_final:
+            return target.resolve().is_relative_to(resolved_root)
+        absolute = Path(os.path.abspath(target))
+        return absolute.parent.resolve().is_relative_to(resolved_root) and (
+            absolute.parent.resolve() / absolute.name
+        ).is_relative_to(resolved_root)
     except (OSError, ValueError):
         return False

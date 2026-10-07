@@ -172,9 +172,18 @@ def check(settings: AgentSettings, agent_sid: str, robot_sid: str) -> list[str]:
     return problems
 
 
+def separate_identities(settings: AgentSettings) -> bool:
+    """Is the robot a different identity from the agent (it runs through the robot host)? Only
+    then do the folders of a run need their own permissions. A robot that is the agent's own child
+    (development, outside Windows) has nobody to be separated from."""
+    from regista_agent import launcher
+
+    return sys.platform == "win32" and not launcher.direct_allowed(settings)
+
+
 def identities(settings: AgentSettings) -> tuple[str | None, str | None]:
-    """(agent SID, robot SID) when permissions are written on this machine, else (None, None)."""
-    if not lock_applies(settings):
+    """(agent SID, robot SID) when the run folders get their own permissions, else (None, None)."""
+    if not separate_identities(settings):
         return None, None
     from regista_agent import _windows
     from regista_agent.config import DEFAULT_SERVICE_ACCOUNT

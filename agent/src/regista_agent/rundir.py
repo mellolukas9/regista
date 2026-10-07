@@ -104,7 +104,7 @@ def create(
     else:  # pragma: no cover  (five collisions of 48 random bits)
         raise AgentError("Não foi possível criar a pasta da execução.")
     run = RunDir(root)
-    lock = layout.lock_applies(settings)
+    lock = layout.separate_identities(settings)
     if lock and (agent_sid is None or robot_sid is None):
         safefs.remove_tree(root)
         raise AgentError("Faltam as contas do agente e do robô para preparar a execução.")

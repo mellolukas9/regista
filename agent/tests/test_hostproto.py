@@ -4,6 +4,8 @@ The host runs as the robot's identity, so a compromised robot can speak through 
 that comes from the host is untrusted input: these tests are the table of what is refused."""
 
 import json
+import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -262,3 +264,31 @@ def test_the_host_reads_cancel_and_ping_and_nothing_else() -> None:
     ):
         with pytest.raises(ProtocolViolation):
             hostproto.decode_agent(payload)
+
+
+def test_an_interpreter_that_is_a_link_to_the_base_python_is_accepted_but_not_a_link_out(
+    tmp_path: Path,
+) -> None:
+    """A venv's `bin/python` is a link to the base interpreter by design (POSIX); only the folders
+    above the last component are resolved. A file the robot could swap is never the last link."""
+    if sys.platform == "win32":
+        pytest.skip("symbolic links need a privilege on Windows")
+    base = tmp_path / "base" / "python3"
+    base.parent.mkdir()
+    base.write_text("#!/bin/sh\n")
+    root = tmp_path / "run"
+    (root / "venv" / "bin").mkdir(parents=True)
+    (root / "venv" / "bin" / "python").symlink_to(base)
+    assert hostproto.within(
+        str(root / "venv" / "bin" / "python"), root / "venv", follow_final=False
+    )
+    assert not hostproto.within(str(root / "venv" / "bin" / "python"), root / "venv")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (root / "venv" / "linked").symlink_to(elsewhere, target_is_directory=True)
+    assert not hostproto.within(
+        str(root / "venv" / "linked" / "python"), root / "venv", follow_final=False
+    )
+    assert not hostproto.within(
+        str(tmp_path / "base" / "python3"), root / "venv", follow_final=False
+    )
