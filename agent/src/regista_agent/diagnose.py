@@ -21,8 +21,10 @@ from urllib.parse import urlparse
 import httpx
 import truststore
 
+from regista_agent import policy, runtime, trust
 from regista_agent.config import AgentSettings
 from regista_agent.errors import AgentError, IdentityRejected, ServerUnavailable
+from regista_agent.jobapi import HttpJobApi, RuntimeNeed
 from regista_agent.keystore import KeyStore
 from regista_agent.transport import AgentSession, HttpSession, make_client
 
@@ -245,6 +247,7 @@ def _finish_with_key(
 ) -> list[Check]:
     """The key's permissions and a real login: the last two questions."""
     store = KeyStore(settings.keys_dir, agent_account=settings.agent_account)
+    checks.extend(local_checks(settings, store))
     if not store.exists():
         checks.append(Check("Chave da máquina", "aviso", "Ainda não há chave nesta máquina."))
         return checks
@@ -267,20 +270,163 @@ def _finish_with_key(
         or settings.server_url is None
     ):
         return checks
+    session = AgentSession(
+        http,
+        machine_id=str(settings.machine_id),
+        private_key=store.load(),
+        server_url=settings.server_url,
+    )
     try:
-        AgentSession(
-            http,
-            machine_id=str(settings.machine_id),
-            private_key=store.load(),
-            server_url=settings.server_url,
-        ).login()
+        session.login()
     except IdentityRejected as exc:
         checks.append(Check("Login", "erro", str(exc)))
     except (AgentError, ServerUnavailable) as exc:
         checks.append(Check("Login", "erro", f"Não foi possível obter um token: {exc}"))
     else:
         checks.append(Check("Login", "ok", "O servidor aceitou a identidade desta máquina."))
+        checks.append(runtime_check(settings, HttpJobApi(session)))
     return checks
+
+
+def local_checks(settings: AgentSettings, store: KeyStore) -> list[Check]:
+    """What this machine itself allows, none of it from the server: the keys it trusts, whose it
+    is, which robots it may run, the kill switch and the runtimes installed (M4)."""
+    checks: list[Check] = []
+    try:
+        keys = trust.trusted_keys(settings.environment)
+    except AgentError as exc:
+        checks.append(Check("Chaves de assinatura", "erro", str(exc)))
+    else:
+        dev = trust.dev_keys_file(settings.environment) is not None
+        if not keys:
+            checks.append(
+                Check(
+                    "Chaves de assinatura",
+                    "erro",
+                    "Nenhuma chave de assinatura confiável: nenhum pacote vai rodar.",
+                )
+            )
+        else:
+            detail = "Confia em " + ", ".join(sorted(keys)) + "."
+            if dev:
+                detail += " Há chaves extras de desenvolvimento (REGISTA_DEV_TRUSTED_KEYS)."
+            checks.append(Check("Chaves de assinatura", "aviso" if dev else "ok", detail))
+
+    try:
+        tenant = store.read_tenant_id()
+    except AgentError as exc:
+        checks.append(Check("Cliente da máquina", "erro", str(exc)))
+    else:
+        if tenant is None:
+            checks.append(
+                Check(
+                    "Cliente da máquina",
+                    "aviso",
+                    "Esta máquina foi cadastrada antes dos pacotes assinados e não guarda o "
+                    "próprio cliente. Gere uma nova chave no painel e rode o cadastro de novo "
+                    "(enroll).",
+                )
+            )
+        else:
+            checks.append(Check("Cliente da máquina", "ok", f"Pertence ao cliente {tenant}."))
+
+    if settings.allowed_bots:
+        checks.append(
+            Check("Robôs permitidos", "ok", ", ".join(sorted(settings.allowed_bots)) + ".")
+        )
+    else:
+        checks.append(
+            Check(
+                "Robôs permitidos",
+                "aviso",
+                "A lista está vazia: nenhum robô roda. Libere com `regista-agent allow <pacote>`.",
+            )
+        )
+    if policy.is_paused(settings):
+        checks.append(
+            Check(
+                "Kill switch",
+                "aviso",
+                f"Ligado ({policy.pause_path(settings)}): o agente não pega novas execuções. "
+                "Retome com `regista-agent resume`.",
+            )
+        )
+    else:
+        checks.append(Check("Kill switch", "ok", "Desligado."))
+
+    pythons, revisions = runtime.installed(settings)
+    checks.append(
+        Check(
+            "Runtimes instalados",
+            "ok" if pythons else "aviso",
+            f"Python: {', '.join(pythons) or 'nenhum'}; "
+            f"Chromium: {', '.join(revisions) or 'nenhum'}."
+            + ("" if pythons else " Prepare com `regista-agent setup`."),
+        )
+    )
+    checks.extend(runtime_acl_checks(settings))
+    return checks
+
+
+def runtime_acl_checks(settings: AgentSettings) -> list[Check]:
+    """The runtime folders must not be writable by the account that runs the robots."""
+    if sys.platform != "win32":
+        return []
+    from regista_agent import _windows
+
+    if not settings.agent_account:
+        return []
+    try:
+        agent_sid = _windows.resolve_sid(settings.agent_account)
+    except OSError as exc:
+        return [Check("Permissões do runtime", "erro", str(exc))]
+    allowed = {_windows.SYSTEM_SID, _windows.ADMINISTRATORS_SID, agent_sid}
+    problems: list[str] = []
+    for folder in (settings.python_dir, settings.browsers_dir):
+        if not folder.exists():
+            continue
+        try:
+            dacl = _windows.read_dacl(folder)
+        except OSError as exc:
+            problems.append(str(exc))
+            continue
+        if not dacl.protected:
+            problems.append(f"{folder} herda permissões da pasta de cima.")
+        for ace in dacl.aces:
+            if ace.kind != "A":
+                continue
+            if ace.sid not in allowed:
+                problems.append(f"Uma conta fora da lista tem acesso a {folder}: {ace.sid}.")
+            elif ace.sid == agent_sid and ace.can_write:
+                problems.append(f"A conta do agente pode alterar {folder}; deveria só ler.")
+    if problems:
+        return [Check("Permissões do runtime", "erro", " ".join(problems))]
+    return [Check("Permissões do runtime", "ok", "Só administradores e SYSTEM alteram o runtime.")]
+
+
+def runtime_check(settings: AgentSettings, api: HttpJobApi) -> Check:
+    """Does this machine have what the versions in use in its pool ask for?"""
+    try:
+        needs: list[RuntimeNeed] = api.runtimes()
+    except (AgentError, ServerUnavailable) as exc:
+        return Check("Runtimes do pool", "aviso", f"Não foi possível consultar: {exc}")
+    pythons, revisions = runtime.installed(settings)
+    missing: list[str] = []
+    for need in needs:
+        if need.python not in pythons and runtime.python_executable(settings, need.python) is None:
+            missing.append(f"{need.package_name} v{need.version} pede Python {need.python}")
+        if need.chromium_revision and need.chromium_revision not in revisions:
+            missing.append(
+                f"{need.package_name} v{need.version} pede Chromium {need.chromium_revision}"
+            )
+    if missing:
+        return Check(
+            "Runtimes do pool",
+            "erro",
+            "Falta preparar esta máquina: " + "; ".join(missing) + ". Rode `regista-agent setup "
+            "--from-server` como administrador.",
+        )
+    return Check("Runtimes do pool", "ok", "Tudo o que as versões em uso pedem está instalado.")
 
 
 def format_checks(checks: list[Check]) -> str:

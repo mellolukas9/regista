@@ -256,6 +256,7 @@ class AgentSession:
         os_info: dict[str, str],
         interactive_session: bool,
         current_job_id: str | None = None,
+        paused: bool = False,
     ) -> HeartbeatInfo:
         body: dict[str, Any] = {
             "agent_version": agent_version,
@@ -264,6 +265,8 @@ class AgentSession:
         }
         if current_job_id is not None:
             body["current_job_id"] = current_job_id
+        if paused:
+            body["paused"] = True
         response = self.request("POST", "/agent/heartbeat", json=body)
         if response.status_code != 200:
             raise ServerUnavailable(f"O servidor recusou o sinal (HTTP {response.status_code}).")

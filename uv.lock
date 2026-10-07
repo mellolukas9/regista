@@ -1614,6 +1614,7 @@ dependencies = [
     { name = "regista-pkg" },
     { name = "tomli-w" },
     { name = "truststore" },
+    { name = "uv" },
 ]
 
 [package.metadata]
@@ -1625,6 +1626,7 @@ requires-dist = [
     { name = "regista-pkg", editable = "libs/pkg" },
     { name = "tomli-w", specifier = ">=1.2.0" },
     { name = "truststore", specifier = ">=0.10.4" },
+    { name = "uv", specifier = ">=0.9" },
 ]
 
 [[package]]

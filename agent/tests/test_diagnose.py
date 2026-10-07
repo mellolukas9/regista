@@ -77,11 +77,24 @@ def _by_name(checks: list[Check]) -> dict[str, Check]:
     return {c.name: c for c in checks}
 
 
+LOCAL_CHECKS = {
+    "Chaves de assinatura",
+    "Cliente da máquina",
+    "Robôs permitidos",
+    "Kill switch",
+    "Runtimes instalados",
+    "Permissões do runtime",
+    "Runtimes do pool",
+}
+
+
 def test_a_healthy_machine_has_nothing_to_report(enrolled: AgentSettings) -> None:
     checks = run_checks(enrolled, _probes())
-    assert [c.status for c in checks if c.status != "ok"] == []
-    assert diag.exit_code(checks) == 0
-    names = [c.name for c in checks]
+    # The checks of what this machine allows locally (M4) have their own tests below: a machine
+    # nobody prepared for robots yet rightly warns about them.
+    network = [c for c in checks if c.name not in LOCAL_CHECKS]
+    assert [c.status for c in network if c.status != "ok"] == []
+    names = [c.name for c in network]
     assert names == [
         "Python",
         "uv",
@@ -95,6 +108,7 @@ def test_a_healthy_machine_has_nothing_to_report(enrolled: AgentSettings) -> Non
         "Chave da máquina",
         "Login",
     ]
+    assert diag.exit_code(network) == 0
     text = diag.format_checks(checks)
     assert "[OK   ] Login: O servidor aceitou a identidade desta máquina." in text
 

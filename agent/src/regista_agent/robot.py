@@ -51,7 +51,6 @@ _INHERITED = (
     "LC_ALL",
     "DISPLAY",
     "XDG_RUNTIME_DIR",
-    "PLAYWRIGHT_BROWSERS_PATH",
     "HTTP_PROXY",
     "HTTPS_PROXY",
     "NO_PROXY",
@@ -85,8 +84,11 @@ def build_env(
     artifacts_dir: Path,
     cancel_file: Path,
     temp_dir: Path,
+    browsers_path: Path | None = None,
 ) -> dict[str, str]:
     env = {k: v for k, v in base.items() if k in _INHERITED or k.upper() in _INHERITED}
+    if browsers_path is not None:
+        env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
     env.update(
         {
             "PYTHONIOENCODING": "utf-8",

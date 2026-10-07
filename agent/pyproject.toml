@@ -5,12 +5,13 @@ description = "Regista agent (runs in the customer environment)"
 requires-python = ">=3.12"
 dependencies = [
     "cryptography>=50.0.2",
-    "regista-pkg",
     "httpx>=0.28.1",
     "psutil>=7.2.2",
     "pydantic-settings>=2.15.0",
     "tomli-w>=1.2.0",
     "truststore>=0.10.4",
+    "regista-pkg",
+    "uv>=0.9",
 ]
 
 [project.scripts]

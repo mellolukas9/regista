@@ -3,16 +3,16 @@
 See docs/specs/agent.md.
 
 One loop for every mode; what differs between modes is only what `modes.preflight` checks first.
-The server decides the interval and the agent follows it. With `REGISTA_DEV_UNSIGNED=1` (M3,
-development only) the agent also takes runs and executes robots from a local folder: the heartbeat
-then runs in its own thread and the main thread works on the runs (`jobs.py`).
+The server decides the interval and the agent follows it. The agent also takes runs: the
+heartbeat runs in its own thread and the main thread works on the runs (`jobs.py`), which only
+execute signed packages. `REGISTA_DEV_UNSIGNED=1` (development only) adds robots from a folder.
 """
 
 import logging
 import threading
 from typing import Protocol, cast
 
-from regista_agent import modes, sysinfo, trust
+from regista_agent import modes, policy, sysinfo, trust
 from regista_agent.config import AgentSettings
 from regista_agent.errors import AgentError, MachineRevoked, NotEnrolled, ServerUnavailable
 from regista_agent.jobapi import HttpJobApi, JobApi
@@ -35,6 +35,7 @@ class JobsHeartbeater(Protocol):
         os_info: dict[str, str],
         interactive_session: bool,
         current_job_id: str | None = None,
+        paused: bool = False,
     ) -> HeartbeatInfo: ...
 
 
@@ -88,13 +89,14 @@ def run(
 
     if settings.dev_unsigned:
         log.warning(
-            "DEV: robots run from %s without a signature (REGISTA_DEV_UNSIGNED)",
+            "DEV: robots without a version run from %s without a signature (REGISTA_DEV_UNSIGNED)",
             settings.dev_bots_dir,
         )
-        if jobs is None:
-            if not isinstance(session, AgentSession):
-                raise AgentError("O modo de desenvolvimento precisa de uma sessão real.")
-            jobs = HttpJobApi(session)
+    # With a real connection the agent always takes runs. A bare heartbeat (no job API and a
+    # session that is not the real one) is what the tests of the loop itself use.
+    if jobs is None and isinstance(session, AgentSession):
+        jobs = HttpJobApi(session)
+    if jobs is not None:
         _run_with_jobs(settings, cast(JobsHeartbeater, session), jobs, stop, interactive)
         log.info("agent stopped")
         return
@@ -134,6 +136,7 @@ def _run_with_jobs(
                     os_info=sysinfo.collect(),
                     interactive_session=interactive,
                     current_job_id=state.current,
+                    paused=policy.is_paused(settings),
                 )
             except ServerUnavailable as exc:
                 log.warning("no signal sent: %s", exc)

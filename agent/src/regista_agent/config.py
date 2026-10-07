@@ -81,6 +81,10 @@ class AgentSettings(BaseSettings):
     dev_unsigned: bool = False
     dev_bots_dir: Path | None = None
     dev_python: Path | None = None
+    # Development only: where the browsers are (a dev machine keeps them in the user's profile).
+    dev_browsers_path: Path | None = None
+    # M4: the robots this machine may run (`regista-agent allow <pacote>`). Empty runs nothing.
+    allowed_bots: list[str] = Field(default_factory=list)
     job_priority: Literal["below_normal", "normal"] = "below_normal"
     cancel_grace_seconds: int = Field(default=15, ge=0, le=300)
     log_flush_seconds: float = Field(default=2.0, gt=0, le=60)
@@ -113,6 +117,26 @@ class AgentSettings(BaseSettings):
     @property
     def key_path(self) -> Path:
         return self.keys_dir / "machine.key"
+
+    @property
+    def python_dir(self) -> Path:
+        return self.home / "python"
+
+    @property
+    def browsers_dir(self) -> Path:
+        return self.home / "browsers"
+
+    @property
+    def packages_dir(self) -> Path:
+        return self.home / "packages"
+
+    @property
+    def envs_dir(self) -> Path:
+        return self.home / "envs"
+
+    @property
+    def uv_cache_dir(self) -> Path:
+        return self.home / "uv-cache"
 
     @property
     def log_path(self) -> Path:
