@@ -27,6 +27,7 @@ from regista_api.main import create_app
 
 from .helpers import Env, FakeClock, Panel, new_client, onboard, unique_email
 from .jobs_helpers import Rig, enrolled_agent, make_bot
+from .package_helpers import SigningKey, new_signing_key
 
 # The Ryuk reaper container races with Docker Desktop port publishing on Windows. The
 # container below is stopped by its context manager instead.
@@ -233,17 +234,28 @@ async def env(db_urls: DbUrls, seed: Seed) -> AsyncIterator[Env]:
         yield e
 
 
+@pytest.fixture(scope="session")
+def signing(tmp_path_factory: pytest.TempPathFactory) -> SigningKey:
+    """A throwaway key that signs the packages of the tests. The apps trust it through the
+    development-only override; the production key never exists in a test."""
+    return new_signing_key(tmp_path_factory.mktemp("signing"))
+
+
 @pytest_asyncio.fixture
 async def panel(
-    request: pytest.FixtureRequest, db_urls: DbUrls, seed: Seed, internal_tenant: uuid.UUID
+    request: pytest.FixtureRequest,
+    db_urls: DbUrls,
+    seed: Seed,
+    internal_tenant: uuid.UUID,
+    signing: SigningKey,
 ) -> AsyncIterator[Panel]:
     """Browsers of client A (admin, operator, viewer), of client B (admin) and of the staff.
 
     A test (or module) marked `s3` also gets a running SeaweedFS and an app configured for it."""
-    overrides: dict[str, object] = {}
+    overrides: dict[str, object] = {"dev_trusted_keys": str(signing.keys_file)}
     if request.node.get_closest_marker("s3") is not None:
         s3: S3Env = request.getfixturevalue("s3_env")
-        overrides = {
+        overrides |= {
             "s3_endpoint_url": s3.endpoint_url,
             "s3_access_key_id": s3.access_key_id,
             "s3_secret_access_key": s3.secret_access_key,

@@ -14,6 +14,7 @@ from regista_api.auth.account import router as account_router
 from regista_api.auth.deps import PublicRoute
 from regista_api.auth.router import router as auth_router
 from regista_api.bots.router import router as bots_router
+from regista_api.bots.versions import router as versions_router
 from regista_api.core.config import Settings, get_settings
 from regista_api.core.db import create_engine, create_session_factory
 from regista_api.core.email import EmailSender, create_email_sender
@@ -78,6 +79,7 @@ def create_app(
         storage = S3Storage(settings)
         app.state.storage = storage
         await storage.ensure_bucket()
+        await storage.ensure_cors([settings.public_url.rstrip("/")])
         try:
             yield
         finally:
@@ -122,6 +124,7 @@ def create_app(
     app.include_router(users_router)
     app.include_router(machines_router)
     app.include_router(bots_router)
+    app.include_router(versions_router)
     app.include_router(jobs_router)
     app.include_router(dashboard_router)
     app.include_router(agent_router)

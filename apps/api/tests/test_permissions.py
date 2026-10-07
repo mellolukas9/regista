@@ -21,7 +21,16 @@ from .isolation import RouteSpec, discover
 
 ACTORS = ("artemisys", "tenant_admin", "operator", "viewer")
 # Path parameters of the routes; a random id of each is enough to reach the permission check.
-UNKNOWN_IDS = ("user_id", "session_id", "machine_id", "pool_id", "bot_id", "job_id", "artifact_id")
+UNKNOWN_IDS = (
+    "user_id",
+    "session_id",
+    "machine_id",
+    "pool_id",
+    "bot_id",
+    "job_id",
+    "artifact_id",
+    "version_id",
+)
 
 # Rows of the permission table (design-system.md section 4) that M1 implements.
 #   "Ver todos os clientes, seletor de cliente, tela Clientes"
@@ -68,6 +77,12 @@ MATRIX: dict[Permission, dict[str, bool]] = {
         "viewer": True,
     },
     Permission.BOTS_MANAGE: {
+        "artemisys": True,
+        "tenant_admin": False,
+        "operator": False,
+        "viewer": False,
+    },
+    Permission.VERSIONS_MANAGE: {
         "artemisys": True,
         "tenant_admin": False,
         "operator": False,

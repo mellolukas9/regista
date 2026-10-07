@@ -23,6 +23,7 @@ from regista_api.bots.schemas import (
     CreateBotRequest,
     LastRun,
 )
+from regista_api.bots.version_schemas import CurrentVersion
 from regista_api.core.errors import api_error
 from regista_api.core.pagination import Pagination, like_pattern, order_by
 
@@ -41,10 +42,13 @@ _FROM = (
     "FROM bots b"
     " JOIN pools p ON p.tenant_id = b.tenant_id AND p.id = b.pool_id"
     " JOIN tenants t ON t.id = b.tenant_id"
+    " LEFT JOIN bot_versions cv ON cv.tenant_id = b.tenant_id AND cv.bot_id = b.id"
+    " AND cv.id = b.current_version_id"
 )
 _COLUMNS = (
     "b.id, b.name, b.package_name, b.description, b.pool_id, p.name AS pool_name,"
     " b.tenant_id, t.name AS client_name, b.is_active, b.created_at,"
+    " cv.id AS current_version_id, cv.version AS current_version,"
     " EXISTS (SELECT 1 FROM jobs a WHERE a.tenant_id = b.tenant_id AND a.bot_id = b.id"
     "         AND a.status IN ('pending', 'assigned', 'running')) AS has_active_run"
 )
@@ -91,6 +95,9 @@ async def _items(db: AsyncSession, rows: list[Row[Any]]) -> list[BotItem]:
                 recent_statuses=[x.status for x in reversed(runs)],
                 recent_ids=[x.id for x in reversed(runs)],
                 has_active_run=r.has_active_run,
+                current_version=None
+                if r.current_version_id is None
+                else CurrentVersion(id=r.current_version_id, version=r.current_version),
             )
         )
     return items
