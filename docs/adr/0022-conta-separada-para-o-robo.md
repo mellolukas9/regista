@@ -26,7 +26,7 @@ O modelo de ameaças do `security.md` (robô explorado: "usuário Windows dedica
 1. **O agente roda sempre como serviço** (`NT SERVICE\RegistaAgent`, sessão 0) e é o **único** que acessa `keys\`, `agent.toml` e `PAUSED` (os dois últimos só leitura: só um administrador os altera).
 2. **Um hospedeiro** (`regista-agent host`) roda como a identidade do robô e é quem inicia o robô: no modo `service`, o serviço `RegistaRobot` (conta virtual `NT SERVICE\RegistaRobot`, sem perfil interativo); no modo `session`, uma tarefa de logon do **usuário dedicado** (sem senha: o gatilho é o logon do próprio usuário), na sessão interativa, para robôs com tela e com o perfil desse usuário. Os modos `service` e `session` passam a dizer **onde o hospedeiro roda** (emenda à ADR 0010).
 3. **Canal por named pipe**, com comando de mão única: o agente manda "execute esta versão, já verificada, com estes parâmetros, nestas pastas"; o hospedeiro só inicia o robô e devolve saída, código de saída e eventos. O hospedeiro **não pede nada** ao agente (nem token, nem chave, nem dado do servidor).
-   - O pipe é criado pelo agente (`FILE_FLAG_FIRST_PIPE_INSTANCE`, **uma única instância**, clientes remotos recusados), com DACL só para o SID esperado do hospedeiro. O hospedeiro confere que o servidor do pipe é o agente.
+   - O pipe é criado pelo agente (`FILE_FLAG_FIRST_PIPE_INSTANCE`, **uma única instância**, clientes remotos recusados), com DACL só para o SID esperado do hospedeiro. O hospedeiro confere que o servidor do pipe é o agente (o PID do servidor do pipe tem de ser o que o gerenciador de serviços informa para `RegistaAgent`; ver "Resultado do spike").
    - Ao aceitar, o agente confere a identidade de quem conectou: PID do cliente do pipe, SID do token do processo e caminho do executável. Tudo que vem do hospedeiro é **dado não confiável** (formato estrito, tamanhos, taxa, só o `run_id` da execução corrente).
    - Como robô e hospedeiro têm a mesma identidade, um robô não pode se passar pelo hospedeiro porque a instância única já está ocupada, o hospedeiro segura o robô num Job Object com `KILL_ON_JOB_CLOSE` (cai o hospedeiro, morrem os robôs e o pipe libera) e o executável do cliente é conferido.
 4. **Sem fallback.** Hospedeiro ausente, sem resposta, com identidade ou protocolo divergentes: a execução falha com o código `robot_host_unavailable`, com texto fixo no painel. No Windows, produção nunca roda o robô como a conta do agente.
@@ -53,7 +53,19 @@ Outros resíduos: o perfil e o `HKCU` da identidade do robô persistem entre exe
 
 ## Resultado do spike
 
-_(preenchido no passo 1 do M4b: custo do venv por execução com Playwright, comportamento do cache do `uv`, Chromium sob `NT SERVICE\RegistaRobot`, Job Object, pipe entre serviços e persistência pelo registro.)_
+Medido no passo 1 (máquina de desenvolvimento e runner Windows do GitHub, com serviços de verdade e contas virtuais):
+
+| Pergunta | Resultado |
+|---|---|
+| Custo do venv novo por execução (robô de demonstração, `playwright` + 3 dependências, `--offline --require-hashes --link-mode=copy`) | **~0,5 a 1 s** (cache frio 0,83 s, quente 0,46 s, sem cache 0,8 a 1,0 s); apagar o venv: 0,07 s. Bem abaixo do limite de 5 s. |
+| O `uv` reconfere o hash de itens que vêm do cache? | **Não.** Um arquivo envenenado no cache apareceu no venv novo. Com `--no-cache` o envenenamento não passa. Decisão: **sempre `--no-cache`** (custo ~0,5 s a mais). |
+| Chromium (headless, sem `--no-sandbox`) sob `NT SERVICE\RegistaRobot` com `TEMP`/`LOCALAPPDATA` numa pasta própria | **Funciona** (1,3 s para abrir uma página). |
+| Job Object `KILL_ON_JOB_CLOSE` / `TerminateJobObject` a partir de um serviço | Mata o filho **e o neto**. |
+| Pipe entre dois serviços: o agente confere o cliente | **Funciona**: o SID do token (por `ImpersonateNamedPipeClient` no nível de identificação) bate com o da conta do hospedeiro. Um cliente de outra conta (Administrador) recebe "acesso negado" (erro 5); um segundo servidor com o mesmo nome é recusado (instância única). |
+| Pipe entre dois serviços: o hospedeiro confere o servidor | O hospedeiro **não consegue abrir o processo do agente** (outra conta de serviço), então o SID e o executável do servidor não são legíveis por ele. Alternativa adotada: o hospedeiro pergunta ao **gerenciador de serviços** (`QueryServiceStatusEx`, permitido a qualquer conta) qual é o PID do serviço `RegistaAgent` e compara com `GetNamedPipeServerProcessId`. Funciona; um serviço diferente não passa. No modo session a mesma conferência vale (o gerenciador de serviços é consultável pelo usuário dedicado). |
+| Persistência pelo registro (HKCU `Software\Python\PythonCore\<versão>\PythonPath` e `HKCU\Environment`) | O Python do venv **ignorou** o `PythonPath` do HKCU; com o ambiente de processo montado só pelo agente, `HKCU\Environment` também não chega. Herdar o ambiente do hospedeiro, ao contrário, expõe. Decisão: o ambiente do robô é sempre montado pelo agente (já previsto) e `-I` é desnecessário. O `isolation_probe` repete o teste. |
+
+Não coberto no CI: o pipe com o hospedeiro na sessão **interativa** (modo session); fica na conferência manual.
 
 ## Consequências
 
