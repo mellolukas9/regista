@@ -203,6 +203,7 @@ if sys.platform == "win32":
             self._handle = handle
             self._server = server
             self._closed = False
+            self._buffer = bytearray()
 
         # --- raw I/O with a timeout ------------------------------------------------------------
 
@@ -244,15 +245,16 @@ if sys.platform == "win32":
             finally:
                 _k32.CloseHandle(event)
 
-        def _read_exact(self, count: int, timeout: float) -> bytes:
-            out = bytearray()
-            while len(out) < count:
-                chunk = ctypes.create_string_buffer(count - len(out))
-                got = self._io(_k32.ReadFile, chunk, count - len(out), timeout, "leitura do pipe")
+        def _fill(self, count: int, timeout: float) -> None:
+            """Read until the buffer holds `count` bytes. A timeout keeps what already arrived, so
+            the next call goes on from there and a quiet pipe never loses the middle of a frame."""
+            while len(self._buffer) < count:
+                missing = count - len(self._buffer)
+                chunk = ctypes.create_string_buffer(missing)
+                got = self._io(_k32.ReadFile, chunk, missing, timeout, "leitura do pipe")
                 if got == 0:
                     raise PipeError("o pipe foi fechado pelo outro lado")
-                out += chunk.raw[:got]
-            return bytes(out)
+                self._buffer += chunk.raw[:got]
 
         def _write_all(self, data: bytes, timeout: float) -> None:
             view = memoryview(data)
@@ -273,10 +275,14 @@ if sys.platform == "win32":
         def receive(self, *, timeout: float = 10.0) -> bytes:
             """The next whole message. A length above the limit is a protocol violation: the pipe
             is unusable from then on (the caller closes it), and nothing is allocated for it."""
-            (length,) = struct.unpack("<I", self._read_exact(4, timeout))
+            self._fill(4, timeout)
+            (length,) = struct.unpack("<I", bytes(self._buffer[:4]))
             if length > MAX_FRAME_BYTES:
                 raise PipeError(f"mensagem de {length} bytes passa do limite do pipe")
-            return self._read_exact(length, timeout) if length else b""
+            self._fill(4 + length, timeout)
+            payload = bytes(self._buffer[4 : 4 + length])
+            del self._buffer[: 4 + length]
+            return payload
 
         # --- who is there ----------------------------------------------------------------------
 

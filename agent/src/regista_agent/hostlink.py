@@ -72,7 +72,11 @@ def _windows_launcher(settings: AgentSettings) -> RobotLink:
     except OSError as exc:
         raise AgentError(f"Não foi possível criar o canal do hospedeiro do robô: {exc}") from exc
     session_mode = settings.mode == "session"
-    my_image = os.path.normcase(os.path.realpath(sys.executable))
+    # The image of this very process (in a venv built from an installed Python, `sys.executable`
+    # is a launcher and the process is the interpreter behind it).
+    my_image = os.path.normcase(
+        os.path.realpath(winpipe.process_image(os.getpid()) or sys.executable)
+    )
 
     def accept() -> launcher.Connection | None:
         connection = server.accept(timeout=2.0)  # a timeout is a TimeoutError: just asked again

@@ -1,4 +1,4 @@
-"""Files and folders a robot may have tampered with (ADR 0022).
+r"""Files and folders a robot may have tampered with (ADR 0022).
 
 A robot writes in its run folder, and the agent (more privileged) later reads and deletes what is
 there. That is a confused-deputy situation: the robot can create a junction or a link in

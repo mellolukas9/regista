@@ -72,7 +72,7 @@ uv run pre-commit install
 
 **Três terminais em desenvolvimento:** API (`uvicorn`), worker (`regista-worker`, sem ele ninguém vira "Sem sinal", as execuções de máquina perdida não terminam e as partições dos logs não são criadas) e web (`npm run dev`). Para rodar robôs, um quarto: o agente em modo de desenvolvimento (abaixo).
 
-**Agente (`regista-agent`).** No painel, cadastre a máquina (Máquinas, "Cadastrar máquina") e copie a chave de registro (aparece uma vez). Em dev, `REGISTA_HOME` aponta o agente para uma pasta própria (configuração, chave e logs) em vez de `%ProgramData%\Regista`:
+**Agente (`regista-agent`).** No painel, cadastre a máquina (Máquinas, "Cadastrar máquina") e copie a chave de registro (aparece uma vez). Em dev, `REGISTA_HOME` aponta o agente para uma pasta própria (configuração, chave e logs) em vez de `%ProgramData%\Regista`. **Desde o M4b (ADR 0022) o robô nunca roda com a conta do agente em produção**: quem o inicia é o hospedeiro do robô (`regista-agent host`, serviço `RegistaRobot`). Em desenvolvimento, `REGISTA_DEV_DIRECT_ROBOT=1` (com `REGISTA_ENVIRONMENT=dev`; recusado em produção) mantém o robô como filho do agente, como era:
 
 ```powershell
 $env:REGISTA_HOME = "$env:TEMP\regista-agent-dev"
@@ -100,12 +100,27 @@ Os dados que já estão no banco ficam. O `seed-dev` só roda em banco vazio, en
 $env:REGISTA_HOME = "$env:TEMP\regista-agent-dev"
 $env:REGISTA_ENVIRONMENT = "dev"
 $env:REGISTA_DEV_UNSIGNED = "1"
+$env:REGISTA_DEV_DIRECT_ROBOT = "1"   # sem hospedeiro (só em dev)
 $env:REGISTA_DEV_BOTS_DIR = "$PWD\bots"
 uv run regista-agent enroll --url http://127.0.0.1:8000 --key rgk_...   # PowerShell ELEVADO, só na primeira vez
 uv run regista-agent run
 ```
 
 Em **Bots**, **Executar agora**: o painel mostra estados, logs e a captura de tela, atualizando sozinho. Mais opções do agente em `agent/README.md`.
+
+**Agente como serviço, com o hospedeiro do robô (M4b).** Em um PowerShell **elevado**, com o programa instalado em uma pasta só de administradores (veja o roteiro em `docs/runbooks/implantacao-cliente.md`; em desenvolvimento acrescente `--allow-insecure-path`):
+
+```powershell
+regista-agent enroll --url https://<regista> --key rgk_...     # modo Sessão: --robot-account <usuário dedicado>
+regista-agent setup --from-server      # grava as permissões das pastas, instala Python e Chromium
+regista-agent allow isolation_probe
+regista-agent service install --start  # serviços RegistaAgent e RegistaRobot (ou a tarefa de logon, no modo Sessão)
+regista-agent service status
+regista-agent diagnose
+regista-agent service uninstall
+```
+
+`bots/isolation_probe` é um robô inofensivo que **tenta** ler a chave, alterar a configuração, o kill switch, os pacotes e a própria versão (tudo tem de ser NEGADO) e roda normalmente; serve à CI do Windows e à conferência manual. Os testes com serviços de verdade (`agent/tests/test_windows_host.py`) só rodam com `REGISTA_TEST_REAL_SERVICES=1` em console elevado (o job `agent-windows` da CI).
 
 **Pacotes assinados (M4).** Em produção o agente só roda pacotes assinados. O `regista-pack` roda na máquina de build da Artemisys (precisa do PyPI); a chave de assinatura **nunca** vai para o repositório, o servidor ou a CI (ADR 0021 e `docs/runbooks/chave-de-assinatura.md`):
 
@@ -129,7 +144,7 @@ uv run regista-agent pause                           # kill switch local; `resum
 uv run regista-agent diagnose                        # chaves confiáveis, cliente, lista, kill switch, runtimes
 ```
 
-Em dev, `setup`, `allow` e `pause` não exigem console elevado com `REGISTA_ENVIRONMENT=dev`. Para rodar um robô **assinado** de ponta a ponta em dev: gere a chave de teste, faça o `build` para o cliente, publique pelo painel, rode `setup --from-server` (ou aponte `REGISTA_DEV_PYTHON` e `REGISTA_DEV_BROWSERS_PATH` para um Python e uma pasta de navegadores existentes) e `allow` do pacote. A flag `REGISTA_DEV_UNSIGNED` continua existindo, só em dev, para robôs de uma pasta sem versão.
+Em dev, `setup`, `allow` e `pause` não exigem console elevado com `REGISTA_ENVIRONMENT=dev`. Para rodar um robô **assinado** de ponta a ponta em dev sem instalar os serviços (com `REGISTA_DEV_DIRECT_ROBOT=1`): gere a chave de teste, faça o `build` para o cliente, publique pelo painel, rode `setup --from-server` (ou aponte `REGISTA_DEV_PYTHON` e `REGISTA_DEV_BROWSERS_PATH` para um Python e uma pasta de navegadores existentes) e `allow` do pacote. A flag `REGISTA_DEV_UNSIGNED` continua existindo, só em dev, para robôs de uma pasta sem versão.
 
 **Roles e init do banco.** Os scripts de `infra/compose/initdb/` (que criam `regista_owner` e `regista_app`) só rodam quando o volume do Postgres está **vazio**. Mudou o script ou quer um banco limpo? Recrie o banco de dev do zero (**apaga todos os dados locais**):
 
