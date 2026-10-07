@@ -146,6 +146,7 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 - [ ] Prévia em linguagem natural e próximas 3 execuções
 - [ ] Tabelas `alerts` e `notifications`; envio por e-mail (SMTP), uma vez por ocorrência, com link para o alvo
 - [ ] Eventos de `design-system.md` §11.6: execução falhou, execução pendente há mais de 30 min, máquina sem sinal há mais de 15 min, itens com falha ou abandonados (um e-mail por execução), item abandonado
+- [ ] Alerta para a equipe Artemisys quando uma execução termina com `package_invalid` (pode indicar adulteração; ver STATUS)
 - [ ] Notificações do sino (lida/não lida, "Marcar todas como lidas", contagem na topbar), guardadas por 30 dias
 - [ ] API devolve as próximas 3 datas de cada agendamento e os disparos das próximas 48 h
 - [ ] Frontend: Agendamentos (7.7 e aba do bot), Alertas (7.15), sino de notificações, Dashboard completo (7.2)

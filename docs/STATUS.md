@@ -87,6 +87,10 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 | Kill switch | Só local (`PAUSED`, `allow`/`disallow`); o painel mostra apenas a indicação "Pausada nesta máquina" via heartbeat (`machines.paused_locally`), sem ação de pausar ou retomar |
 | Máquinas antigas | As cadastradas antes do M4 não têm o `tenant_id` local: precisam de "Gerar nova chave" e novo `enroll` |
 
+## Pendências para o M7
+
+- **Alerta para a equipe Artemisys quando uma execução termina com `package_invalid`.** Motivos como `signature_invalid`, `unknown_key` e `wrong_client` podem indicar adulteração (ou um servidor comprometido entregando pacote errado), e hoje só aparecem no banner da execução, que ninguém precisa abrir. O M7 (alertas e notificações) deve incluir esse evento, destinado à equipe Artemisys e não ao cliente.
+
 ## Pendências para o início do M4 (resolvidas)
 
 - **Resolvidas no passo 0:** os testes instáveis e o teste que falhava por causa do `.env` local (ver o registro de 2026-10-07). A pendência do Chromium está decidida acima e entra nos passos 8 e 9 do plano.

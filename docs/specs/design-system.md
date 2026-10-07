@@ -1300,7 +1300,8 @@ Telas e estados do M3 (Bots, Execuções, Detalhe da execução, Dashboard e ite
 | Detalhe do bot | Sem versão em uso (badge neutro) | "Sem versão em uso" |
 | Bots | Subtítulo do bot na lista (acrescenta a versão ao da §14) | `pacote demo_busca_wikipedia · v1.2.0`; sem versão em uso: `pacote demo_busca_wikipedia · sem versão` |
 | Detalhe da execução | "Versão do bot" na faixa meta | "v1.2.0" (com Tooltip do hash curto); execução em dev, sem versão: "—" |
-| Erro da API ao executar | Já existe na §14 | "Este bot ainda não tem uma versão publicada para rodar." (vale também quando há versões, mas nenhuma está em uso) |
+| Erro da API ao executar | Bot sem nenhuma versão publicada (texto da §14) | "Este bot ainda não tem uma versão publicada para rodar." |
+| Erro da API ao executar | Bot com versões publicadas, mas nenhuma em uso | "Nenhuma versão deste bot está em uso. A equipe Artemisys precisa colocar uma versão em uso." |
 
 **Detalhe da execução (7.4): motivos de recusa do agente**
 
@@ -1308,10 +1309,10 @@ O banner "A execução falhou" (§14) ganha um texto **fixo por código**. O pai
 
 | Código | Texto do banner |
 |---|---|
-| `package_invalid` | Primeira linha: "A máquina recusou o pacote do robô." Segunda linha: o texto do motivo (tabela abaixo) |
-| `robot_not_allowed` | "Este robô não está na lista de robôs permitidos desta máquina." |
-| `runtime_missing` | "Falta preparar esta máquina para a versão 1.2.0 do robô: rode regista-agent setup como administrador." (a versão vem da execução, não do agente) |
-| `environment_failed` | "Não foi possível montar o ambiente do robô nesta máquina." |
+| `package_invalid` | Primeira linha: "A máquina recusou o pacote do robô. Avise a equipe Artemisys." Segunda linha: o texto do motivo (tabela abaixo) |
+| `robot_not_allowed` | "Este robô não está na lista de robôs permitidos desta máquina. Para liberar, rode regista-agent allow <pacote> como administrador na própria máquina." (`<pacote>` é o nome do pacote do bot) |
+| `runtime_missing` | "Esta máquina ainda não está preparada para a versão 1.2.0 do robô. Peça a quem cuida da máquina para rodar regista-agent setup como administrador." (a versão vem da execução, não do agente) |
+| `environment_failed` | "Não foi possível montar o ambiente do robô nesta máquina. Veja os logs da execução e avise a equipe Artemisys." |
 
 | Motivo (`package_invalid`) | Segunda linha do banner |
 |---|---|
