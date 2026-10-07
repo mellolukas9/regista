@@ -11,6 +11,7 @@ import pytest
 from regista_agent import loop
 from regista_agent.config import AgentSettings, save_identity
 from regista_agent.errors import AgentError, MachineRevoked
+from regista_agent.launcher import DirectLauncher
 from regista_agent.transport import HeartbeatInfo
 
 from .jobs_support import FIXTURE_BOTS, FakeApi, job
@@ -72,7 +73,9 @@ def _run_in_thread(
 
     def go() -> None:
         try:
-            loop.run(settings, stop=stop, session=session, jobs=api)
+            loop.run(
+                settings, stop=stop, session=session, jobs=api, robot_launcher=DirectLauncher()
+            )
         except BaseException as exc:
             errors.append(exc)
 
@@ -150,7 +153,7 @@ def test_without_the_dev_flag_a_run_with_no_version_never_runs_a_folder_robot(
         def heartbeat(self, **_: Any) -> HeartbeatInfo:
             return HeartbeatInfo(heartbeat_seconds=1, mode="service", cancellations=[])
 
-    loop.run(settings, stop=stop, session=Beats(), jobs=api)
+    loop.run(settings, stop=stop, session=Beats(), jobs=api, robot_launcher=DirectLauncher())
     assert [f[1] for f in api.failed] == ["robot_not_found"]
     assert api.completed == [] and not api.lines, "no robot was started"
 

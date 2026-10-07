@@ -21,8 +21,6 @@ if sys.platform == "win32":
     from ctypes import wintypes
     from dataclasses import dataclass
 
-    from regista_agent import _windows
-
     PIPE_PREFIX = "\\\\.\\pipe\\"
     MAX_FRAME_BYTES = 1_048_576  # one message; the protocol keeps its own, smaller, limits too
 
@@ -55,7 +53,7 @@ if sys.platform == "win32":
     class PipeError(OSError):
         """The pipe is unusable (broken, refused, wrong peer)."""
 
-    class PipeTimeout(PipeError):
+    class PipeTimeout(PipeError, TimeoutError):
         """The peer did not answer in time."""
 
     class _Overlapped(ctypes.Structure):
@@ -318,8 +316,11 @@ if sys.platform == "win32":
                 return
             self._closed = True
             if self._server:
+                # The server keeps its single pipe instance (closing it would let anyone else
+                # create a pipe with the same name): only the client is let go.
                 _k32.DisconnectNamedPipe(self._handle)
-            _k32.CloseHandle(self._handle)
+            else:
+                _k32.CloseHandle(self._handle)
 
     class PipeServer:
         """The agent's end: creates the pipe (one instance, only these SIDs may connect)."""
@@ -463,11 +464,16 @@ if sys.platform == "win32":
         finally:
             _a32.CloseServiceHandle(manager)
 
+    _k32.ProcessIdToSessionId.argtypes = [wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+
+    def session_of_process(pid: int) -> int | None:
+        """The Windows session of a process (0 is where services run). Needs no access to it."""
+        session = wintypes.DWORD()
+        if not _k32.ProcessIdToSessionId(pid, ctypes.byref(session)):
+            return None
+        return int(session.value)
+
     def server_is_service(connection: "PipeConnection", service_name: str) -> bool:
         """True when the process at the server end of `connection` is the one the service manager
         reports for `service_name` (client side)."""
         return connection.peer().pid == service_process_id(service_name)
-
-    def sid_of_service(service_name: str) -> str:
-        """The SID of a service's virtual account (`NT SERVICE\\<name>`)."""
-        return _windows.service_sid(service_name)

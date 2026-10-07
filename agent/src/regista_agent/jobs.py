@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from regista_agent import (
     environment,
+    launcher,
     layout,
     packages,
     policy,
@@ -32,7 +33,7 @@ from regista_agent import (
     trust,
 )
 from regista_agent.config import AgentSettings
-from regista_agent.errors import MachineRevoked, ServerUnavailable
+from regista_agent.errors import AgentError, MachineRevoked, ServerUnavailable
 from regista_agent.jobapi import Assignment, JobApi, JobGone
 from regista_agent.keystore import KeyStore
 from regista_agent.shipper import MAX_LINE_BYTES, LogShipper, clean
@@ -93,6 +94,9 @@ class Prepared:
     entry: Path
     python: str
     browsers: Path | None
+    # A robot from a development folder (no signature, no run folder for its code): always started
+    # directly, never through the host, which only runs what lives under a run folder.
+    unsigned: bool = False
 
 
 class JobExecutor:
@@ -105,7 +109,17 @@ class JobExecutor:
         *,
         base_env: Mapping[str, str] | None = None,
         keys: Mapping[str, Ed25519PublicKey] | None = None,
+        robot_launcher: launcher.Launcher | None = None,
     ) -> None:
+        self._direct = launcher.DirectLauncher()
+        if robot_launcher is None:
+            if not launcher.direct_allowed(settings):
+                raise AgentError(
+                    "Falta o hospedeiro do robô: no Windows o robô nunca roda com a conta do "
+                    "agente (ADR 0022)."
+                )
+            robot_launcher = self._direct
+        self._launcher = robot_launcher
         self._keys = keys
         self._settings = settings
         self._api = api
@@ -198,9 +212,7 @@ class JobExecutor:
                 prepared = self._prepare(job, run, shipper)
                 if isinstance(prepared, Outcome):
                     return prepared
-                outcome = self._supervise(
-                    job, prepared, shipper, run.artifacts, run.tmp, run.cancel_file
-                )
+                outcome = self._supervise(job, prepared, shipper, run)
             finally:
                 shipper.close()
             self._upload_screenshots(job, run.artifacts)
@@ -295,6 +307,7 @@ class JobExecutor:
             entry=entry,
             python=str(self._settings.dev_python or _current_python()),
             browsers=None,
+            unsigned=True,
         )
 
     def _housekeeping(self, cache: packages.PackageCache, package_name: str, running: str) -> None:
@@ -309,33 +322,51 @@ class JobExecutor:
         job: Assignment,
         prepared: Prepared,
         shipper: LogShipper,
-        artifacts: Path,
-        temp: Path,
-        cancel_file: Path,
+        run: rundir.RunDir,
     ) -> Outcome:
+        through_host = not prepared.unsigned and self._launcher is not self._direct
         env = robot.build_env(
             base=self._base_env,
             job_id=job.job_id,
             params_json=json.dumps(job.params, ensure_ascii=False),
-            artifacts_dir=artifacts,
-            cancel_file=cancel_file,
-            temp_dir=temp,
+            artifacts_dir=run.artifacts,
+            cancel_file=run.cancel_file,
+            temp_dir=run.tmp,
             browsers_path=prepared.browsers,
+            # Through the host the robot is another identity: in `service` mode its profile is a
+            # folder of the run; in `session` mode it is the dedicated user's own (the host adds
+            # it), by product decision (desktop applications are configured there).
+            profile_dir=run.tmp if through_host and self._settings.mode != "session" else None,
+            inherit_profile=not through_host,
         )
-        process = robot.start(
+        spec = launcher.LaunchSpec(
+            run_id=run.name,
             python=prepared.python,
             entry=prepared.entry,
             env=env,
-            cancel_file=cancel_file,
+            cancel_file=run.cancel_file,
             priority=self._settings.job_priority,
-            on_stdout=lambda line: shipper.add("stdout", line),
-            on_stderr=lambda line: shipper.add("stderr", line),
         )
+        try:
+            process = (self._launcher if through_host else self._direct).start(
+                spec,
+                lambda line: shipper.add("stdout", line),
+                lambda line: shipper.add("stderr", line),
+            )
+        except launcher.LaunchFailed as exc:
+            shipper.note("ERROR", f"O robô não foi iniciado ({exc.code}): {exc.detail}")
+            return Outcome("failed", exc.code)
         deadline = time.monotonic() + job.timeout_seconds
         grace = float(self._settings.cancel_grace_seconds)
         try:
             while True:
                 code = process.poll()
+                if code is None and process.lost:
+                    shipper.note(
+                        "ERROR", "O hospedeiro do robô parou de responder durante a execução."
+                    )
+                    process.kill_tree()
+                    return Outcome("failed", launcher.HOST_UNAVAILABLE)
                 if code is not None:
                     process.join_readers()
                     process.kill_tree()  # whatever the robot left behind

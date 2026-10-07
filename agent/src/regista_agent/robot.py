@@ -25,6 +25,13 @@ import psutil
 PACKAGE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
 ENTRY_POINT = "main.py"
 
+# The variables that point at a user's profile. Where the robot runs as its own identity (the robot
+# host), the agent's copy of them is the agent's profile, not the robot's, so it is never passed on:
+# either they are redirected into the run folder or the host fills them in from its own environment.
+PROFILE_VARIABLES = (
+    "LOCALAPPDATA", "APPDATA", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "HOME", "USERNAME", "USER",
+)  # fmt: skip
+
 # What a robot may inherit. Proxy and certificate settings are not secrets and a robot behind a
 # corporate proxy needs them; everything else from the agent's environment stays out.
 _INHERITED = (
@@ -85,8 +92,26 @@ def build_env(
     cancel_file: Path,
     temp_dir: Path,
     browsers_path: Path | None = None,
+    profile_dir: Path | None = None,
+    inherit_profile: bool = True,
 ) -> dict[str, str]:
+    """The environment of the robot process, built from an allowlist, never inherited whole.
+
+    `profile_dir` redirects the profile variables into a folder of the run (a service account has
+    no profile worth keeping, and nothing the robot writes there outlives the run).
+    `inherit_profile=False` leaves them out (the host adds its own)."""
     env = {k: v for k, v in base.items() if k in _INHERITED or k.upper() in _INHERITED}
+    if not inherit_profile or profile_dir is not None:
+        env = {k: v for k, v in env.items() if k.upper() not in PROFILE_VARIABLES}
+    if profile_dir is not None:
+        env.update(
+            {
+                "HOME": str(profile_dir),
+                "USERPROFILE": str(profile_dir),
+                "APPDATA": str(profile_dir / "AppData" / "Roaming"),
+                "LOCALAPPDATA": str(profile_dir / "AppData" / "Local"),
+            }
+        )
     if browsers_path is not None:
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(browsers_path)
     env.update(
@@ -94,6 +119,7 @@ def build_env(
             "PYTHONIOENCODING": "utf-8",
             "PYTHONUTF8": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONNOUSERSITE": "1",  # no `usercustomize` or user site-packages from a profile
             "TEMP": str(temp_dir),
             "TMP": str(temp_dir),
             "TMPDIR": str(temp_dir),

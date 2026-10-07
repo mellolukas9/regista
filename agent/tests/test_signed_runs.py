@@ -4,7 +4,6 @@ with its code and reason, the runtime and the environment, the local list and th
 Environments are made by the real uv, offline, from the Python of the test run (the stand-in for
 the runtime that `regista-agent setup` installs on a customer's machine)."""
 
-import json
 import os
 import subprocess
 import sys
@@ -16,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from regista_agent import environment, layout, policy, runtime
+from regista_agent import environment, launcher, layout, policy, runtime
 from regista_agent.config import AgentSettings
 from regista_agent.jobapi import Assignment
 from regista_agent.jobs import JobExecutor, JobState
@@ -32,11 +31,6 @@ VERSION_ID = "11111111-1111-4111-8111-111111111111"
 
 
 @pytest.fixture
-def key(tmp_path: Path) -> TestKey:
-    return new_key(tmp_path / "keys")
-
-
-@pytest.fixture
 def no_runtime_acl(monkeypatch: pytest.MonkeyPatch) -> None:
     """The ACL of the runtime folders has its own test on Windows; here it is stood in for."""
     from regista_agent import layout
@@ -45,17 +39,7 @@ def no_runtime_acl(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 REAL_LOCK_APPLIES = layout.lock_applies
-
-
-@pytest.fixture
-def agent_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    # Writing ACLs (also for the run folders) has its own tests; here a production-mode run on a
-    # non-elevated Windows console would lock out the very person running the tests.
-    monkeypatch.setattr(layout, "lock_applies", lambda settings: False)
-    keys = home / "keys"
-    keys.mkdir(parents=True)
-    (keys / "identity.json").write_text(json.dumps({"tenant_id": str(TENANT_ID)}), "utf-8")
-    return home
+DIRECT = launcher.DirectLauncher()  # the host has its own tests (test_host.py)
 
 
 def settings(**over: Any) -> AgentSettings:
@@ -102,6 +86,7 @@ def execute(cfg: AgentSettings, api: FakeApi, key: TestKey, job: Assignment | No
             "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
         },
         keys=key.trusted(),
+        robot_launcher=DIRECT,
     )
     executor.execute(job or assignment())
 
@@ -292,7 +277,7 @@ def test_with_the_kill_switch_on_no_run_is_asked_for(agent_home: Path, key: Test
     cfg = settings()
     policy.pause(cfg)
     stop = threading.Event()
-    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted())
+    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted(), robot_launcher=DIRECT)
     worker = threading.Thread(target=executor.loop, daemon=True)
     worker.start()
     time.sleep(0.5)
@@ -542,7 +527,7 @@ def test_a_run_taken_just_as_the_kill_switch_went_on_is_given_back_untouched(
 
     api = PausingApi()
     api.queue = [assignment()]
-    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted())
+    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted(), robot_launcher=DIRECT)
     worker = threading.Thread(target=executor.loop, daemon=True)
     worker.start()
     worker.join(15)

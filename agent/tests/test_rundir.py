@@ -13,6 +13,7 @@ import pytest
 from regista_agent import layout, rundir, safefs
 from regista_agent.config import AgentSettings
 from regista_agent.jobs import JobExecutor, JobState
+from regista_agent.launcher import DirectLauncher
 
 from .jobs_support import FakeApi, job
 
@@ -119,7 +120,9 @@ def test_no_link_is_uploaded_as_a_screenshot_and_ordinary_ones_are(
     (run.artifacts / "real.png").write_bytes(b"\x89PNG-real")
     _link_dir(run.artifacts / "evil.png", secret)
     api = FakeApi()
-    executor = JobExecutor(settings, api, JobState(), threading.Event())
+    executor = JobExecutor(
+        settings, api, JobState(), threading.Event(), robot_launcher=DirectLauncher()
+    )
     executor._upload_screenshots(job(), run.artifacts)
     assert [u[2] for u in api.uploads] == [b"\x89PNG-real"]
     rundir.remove(run)

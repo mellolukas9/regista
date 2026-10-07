@@ -1,10 +1,14 @@
 """Shared fixtures of the agent tests."""
 
+import json
 import sys
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from .package_support import TestKey, new_key
+from .support import TENANT_ID
 
 
 @pytest.fixture
@@ -39,3 +43,23 @@ def no_acl(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
         monkeypatch.setattr(KeyStore, "_give_to_agent", lambda self, path: None)
     yield
+
+
+@pytest.fixture
+def key(tmp_path: Path) -> TestKey:
+    """A signing key made on the spot, trusted by the test agents through the dev override."""
+    return new_key(tmp_path / "keys")
+
+
+@pytest.fixture
+def agent_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A home that already knows its client (the identity written at enrollment)."""
+    from regista_agent import layout
+
+    # Writing ACLs (also for the run folders) has its own tests; here a production-mode run on a
+    # non-elevated Windows console would lock out the very person running the tests.
+    monkeypatch.setattr(layout, "lock_applies", lambda settings: False)
+    keys = home / "keys"
+    keys.mkdir(parents=True)
+    (keys / "identity.json").write_text(json.dumps({"tenant_id": str(TENANT_ID)}), "utf-8")
+    return home

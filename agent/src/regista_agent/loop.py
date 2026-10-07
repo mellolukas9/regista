@@ -10,9 +10,10 @@ execute signed packages. `REGISTA_DEV_UNSIGNED=1` (development only) adds robots
 
 import logging
 import threading
+from collections.abc import Callable
 from typing import Protocol, cast
 
-from regista_agent import modes, policy, rundir, sysinfo, trust
+from regista_agent import hostlink, launcher, modes, policy, rundir, sysinfo, trust
 from regista_agent.config import AgentSettings
 from regista_agent.errors import AgentError, MachineRevoked, NotEnrolled, ServerUnavailable
 from regista_agent.jobapi import HttpJobApi, JobApi
@@ -65,6 +66,7 @@ def run(
     stop: threading.Event | None = None,
     session: Heartbeater | None = None,
     jobs: JobApi | None = None,
+    robot_launcher: launcher.Launcher | None = None,
 ) -> None:
     """Heartbeat until `stop` is set. Raises `MachineRevoked` when the server says the machine is
     gone; anything else that goes wrong with the network is logged and retried next beat."""
@@ -97,7 +99,15 @@ def run(
     if jobs is None and isinstance(session, AgentSession):
         jobs = HttpJobApi(session)
     if jobs is not None:
-        _run_with_jobs(settings, cast(JobsHeartbeater, session), jobs, stop, interactive)
+        release: Callable[[], None] = lambda: None  # noqa: E731
+        if robot_launcher is None:
+            robot_launcher, release = hostlink.make_launcher(settings)
+        try:
+            _run_with_jobs(
+                settings, cast(JobsHeartbeater, session), jobs, stop, interactive, robot_launcher
+            )
+        finally:
+            release()
         log.info("agent stopped")
         return
 
@@ -123,6 +133,7 @@ def _run_with_jobs(
     jobs: JobApi,
     stop: threading.Event,
     interactive: bool,
+    robot_launcher: launcher.Launcher,
 ) -> None:
     rundir.sweep(settings)  # a crash may have left a run folder; nothing is running yet
     state = JobState()
@@ -153,7 +164,7 @@ def _run_with_jobs(
     thread = threading.Thread(target=beats, name="heartbeat", daemon=True)
     thread.start()
     try:
-        JobExecutor(settings, jobs, state, stop).loop()
+        JobExecutor(settings, jobs, state, stop, robot_launcher=robot_launcher).loop()
     except MachineRevoked as exc:
         fatal.append(exc)
     finally:
