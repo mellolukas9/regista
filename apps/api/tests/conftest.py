@@ -340,7 +340,12 @@ def s3_env() -> Iterator[S3Env]:
 
     container = (
         DockerContainer(S3_IMAGE)
-        .with_command("server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json")
+        # Every bucket is a collection with volumes of its own, and the tests make one each: on a
+        # small disk the default limit of volumes runs out and PutObject answers InternalError.
+        .with_command(
+            "server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json"
+            " -volume.max=2000 -master.volumeSizeLimitMB=64"
+        )
         .with_volume_mapping(str(S3_CONFIG), "/etc/seaweedfs/s3.json", "ro")
         .with_exposed_ports(8333)
     )
