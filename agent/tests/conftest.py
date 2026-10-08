@@ -67,7 +67,11 @@ def agent_home(home: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def _agent_home_in_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _agent_home_in_tmp(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """No test may touch the real home of the agent (`/etc/regista`, `%ProgramData%`): runs make a
     folder under it. Tests that care use the `home` fixture, which replaces this."""
+    if request.module.__name__.endswith("test_windows_host"):
+        return  # that module works on the real home, on purpose (real services)
     monkeypatch.setenv("REGISTA_HOME", str(tmp_path / "auto-home"))
