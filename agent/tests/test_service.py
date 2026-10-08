@@ -33,9 +33,12 @@ class Recorder:
         self.calls.append(call)
         if call[0] == "sc.exe" and call[1] == "query":
             missing = call[2] not in self.services
+            state = "STOPPED" if call[2] in self.stopped else "RUNNING"
             return subprocess.CompletedProcess(
-                call, 1060 if missing else 0, "STATE : 4 RUNNING", ""
+                call, 1060 if missing else 0, f"STATE : 1 {state}", ""
             )
+        if call[0] == "sc.exe" and call[1] == "stop":
+            self.stopped.add(call[2])
         if call[0] == "sc.exe" and call[1] == "create":
             self.services.add(call[2])
         if call[0] == "schtasks.exe" and "/XML" in call:
