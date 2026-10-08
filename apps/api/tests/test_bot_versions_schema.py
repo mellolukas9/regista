@@ -238,6 +238,7 @@ async def test_job_error_codes_and_reasons(app_factory: Factory, seed: Seed) -> 
             "robot_not_allowed",
             "runtime_missing",
             "environment_failed",
+            "robot_host_unavailable",
         ):
             await _job(s, seed.tenant_a, a["bot"], a["pool"], error_code=code, **finished)
         await _job(

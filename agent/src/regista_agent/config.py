@@ -31,6 +31,12 @@ Mode = Literal["service", "session", "oneshot"]
 # The account a Windows service runs as, when the machine is registered in `service` mode. A
 # virtual service account: no password, and its SID follows from the service name alone.
 DEFAULT_SERVICE_ACCOUNT = r"NT SERVICE\RegistaAgent"
+# The identity the robot host (and so every robot) runs as in `service` mode (ADR 0022). In
+# `session` mode it is the dedicated user, chosen at enrollment (`--robot-account`).
+DEFAULT_ROBOT_ACCOUNT = r"NT SERVICE\RegistaRobot"
+AGENT_SERVICE_NAME = "RegistaAgent"
+ROBOT_SERVICE_NAME = "RegistaRobot"
+ROBOT_HOST_PIPE = "regista-robot-host"
 
 
 def default_home() -> Path:
@@ -68,6 +74,8 @@ class AgentSettings(BaseSettings):
     # The account that runs the agent: the only one besides SYSTEM and Administrators that may
     # read the private key (see keystore.py).
     agent_account: str | None = None
+    # The account the robot host, and every robot, runs as (ADR 0022). Never the agent's account.
+    robot_account: str | None = None
     proxy: str | None = None
     ca_bundle: Path | None = None
     log_level: str = Field(default="INFO")
@@ -81,6 +89,9 @@ class AgentSettings(BaseSettings):
     dev_unsigned: bool = False
     dev_bots_dir: Path | None = None
     dev_python: Path | None = None
+    # Development and tests only: start the robot as a child of the agent, under the agent's own
+    # account, instead of through the robot host. Refused in production (`check_dev_direct`).
+    dev_direct_robot: bool = False
     # Development only: where the browsers are (a dev machine keeps them in the user's profile).
     dev_browsers_path: Path | None = None
     # M4: the robots this machine may run (`regista-agent allow <pacote>`). Empty runs nothing.
@@ -131,8 +142,8 @@ class AgentSettings(BaseSettings):
         return self.home / "packages"
 
     @property
-    def envs_dir(self) -> Path:
-        return self.home / "envs"
+    def runs_dir(self) -> Path:
+        return self.home / "runs"
 
     @property
     def uv_cache_dir(self) -> Path:
@@ -145,6 +156,24 @@ class AgentSettings(BaseSettings):
     @property
     def enrolled(self) -> bool:
         return self.machine_id is not None and self.server_url is not None
+
+    def check_dev_direct(self) -> None:
+        """Running a robot under the agent's own account is a development tool, and only that."""
+        if self.dev_direct_robot and self.environment != "dev":
+            raise AgentError(
+                "REGISTA_DEV_DIRECT_ROBOT só pode ser usado com REGISTA_ENVIRONMENT=dev. Em "
+                "produção o robô roda sempre pelo hospedeiro, com a conta do robô."
+            )
+
+    @property
+    def effective_robot_account(self) -> str | None:
+        """The robot's account: the one chosen at enrollment, else the virtual service account
+        (Windows `service` mode)."""
+        if self.robot_account:
+            return self.robot_account
+        if sys.platform == "win32" and self.mode in ("service", None):
+            return DEFAULT_ROBOT_ACCOUNT
+        return None
 
     def check_dev_unsigned(self) -> None:
         """Running a robot that nobody signed is a development tool, and only that."""
@@ -163,7 +192,13 @@ class AgentSettings(BaseSettings):
 
 
 def save_identity(
-    home: Path, *, server_url: str, machine_id: uuid.UUID, mode: str, agent_account: str | None
+    home: Path,
+    *,
+    server_url: str,
+    machine_id: uuid.UUID,
+    mode: str,
+    agent_account: str | None,
+    robot_account: str | None = None,
 ) -> Path:
     """Write what enrollment learned into `agent.toml`, keeping any other setting already there."""
     path = home / CONFIG_NAME
@@ -171,6 +206,8 @@ def save_identity(
     current.update({"server_url": server_url, "machine_id": str(machine_id), "mode": mode})
     if agent_account:
         current["agent_account"] = agent_account
+    if robot_account:
+        current["robot_account"] = robot_account
     home.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".toml.new")
     temporary.write_text(tomli_w.dumps(current), encoding="utf-8")

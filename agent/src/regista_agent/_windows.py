@@ -258,12 +258,53 @@ _WRITE_MASK = 0x2 | 0x4 | 0x40000000 | 0x10000000
 _WRITE_RIGHTS = frozenset({"FA", "FW", "GA", "GW", "WD", "AD"})
 
 
+# Access levels of the permission matrix (agent/robot in docs/specs/security.md), lowest first.
+LEVELS = ("-", "T", "R", "M", "F")  # none, traverse only, read, modify, full
+
+_SDDL_MASKS = {
+    "FA": 0x1F01FF, "FR": 0x120089, "FW": 0x100116, "FX": 0x1200A0,
+    "GA": 0x10000000, "GR": 0x80000000, "GW": 0x40000000, "GX": 0x20000000,
+    "SD": 0x10000, "RC": 0x20000, "WD": 0x40000, "WO": 0x80000,
+}  # fmt: skip
+_READ_DATA = 0x1
+_TRAVERSE_OR_ATTRIBUTES = 0x20 | 0x80
+_MODIFY_BITS = 0x2 | 0x4 | 0x10 | 0x100 | 0x40 | 0x10000  # write, append, EA, attributes, delete
+_CONTROL_BITS = 0x40000 | 0x80000  # change the ACL, take ownership
+
+
+def rights_mask(rights: str) -> int:
+    """The access mask of the rights field of an ACE (hex, or SDDL two-letter tokens)."""
+    if rights.lower().startswith("0x"):
+        return int(rights, 16)
+    mask = 0
+    for i in range(0, len(rights), 2):
+        mask |= _SDDL_MASKS.get(rights[i : i + 2], 0)
+    return mask
+
+
+def mask_level(mask: int) -> str:
+    """The highest level of the matrix this mask reaches."""
+    if mask & (_CONTROL_BITS | 0x10000000):  # change ACL / owner, generic all
+        return "F"
+    if mask & (_MODIFY_BITS | 0x40000000):
+        return "M"
+    if mask & (_READ_DATA | 0x80000000):
+        return "R"
+    if mask & _TRAVERSE_OR_ATTRIBUTES:
+        return "T"
+    return "-"
+
+
 @dataclass(frozen=True)
 class Ace:
     kind: str  # "A" (allow) or "D" (deny)
     flags: str
     rights: str
     sid: str
+
+    @property
+    def level(self) -> str:
+        return mask_level(rights_mask(self.rights))
 
     @property
     def can_read(self) -> bool:
@@ -373,7 +414,7 @@ def apply_dacl(path: Path, sddl: str) -> None:
         _kernel32.LocalFree(descriptor)
 
 
-def _hand_ownership_to_administrators(path: Path) -> None:
+def hand_ownership_to_administrators(path: Path) -> None:
     """The owner can always change the ACL (never read the data). Handing ownership to the
     Administrators group needs an elevated process, which is how `enroll` runs for real; in a
     development run without elevation it is skipped and the person keeps ownership."""
@@ -400,19 +441,7 @@ def restrict_directory(directory: Path, agent_sid: str) -> None:
         directory,
         f"D:P(A;OICI;FA;;;{SYSTEM_SID})(A;OICI;FA;;;{ADMINISTRATORS_SID})(A;OICI;FR;;;{agent_sid})",
     )
-    _hand_ownership_to_administrators(directory)
-
-
-def restrict_directory_read_only(directory: Path, agent_sid: str) -> None:
-    """Like `restrict_directory`, but the agent's account may only read and run what is inside:
-    full control stays with SYSTEM and Administrators. Used for the runtime folders, so a robot
-    (which runs as the agent's account) cannot change the Python or the browser of the next one."""
-    apply_dacl(
-        directory,
-        f"D:P(A;OICI;FA;;;{SYSTEM_SID})(A;OICI;FA;;;{ADMINISTRATORS_SID})"
-        f"(A;OICI;FRFX;;;{agent_sid})",
-    )
-    _hand_ownership_to_administrators(directory)
+    hand_ownership_to_administrators(directory)
 
 
 def read_dacl(path: Path) -> Dacl:
@@ -461,3 +490,166 @@ def current_session_id() -> int:
     if not _kernel32.ProcessIdToSessionId(os.getpid(), ctypes.byref(session)):
         raise WindowsApiError(f"ProcessIdToSessionId failed (error {ctypes.get_last_error()})")
     return int(session.value)
+
+
+# --- files that a robot may have tampered with --------------------------------------------------
+
+_GENERIC_READ = 0x80000000
+_FILE_SHARE_ALL = 0x7
+_OPEN_EXISTING = 3
+_FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+_FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
+_FILE_ATTRIBUTE_DIRECTORY = 0x10
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+_INVALID_HANDLE = wintypes.HANDLE(-1).value
+
+
+class _FileInformation(ctypes.Structure):
+    _fields_ = [
+        ("dwFileAttributes", wintypes.DWORD),
+        ("ftCreationTime", wintypes.FILETIME),
+        ("ftLastAccessTime", wintypes.FILETIME),
+        ("ftLastWriteTime", wintypes.FILETIME),
+        ("dwVolumeSerialNumber", wintypes.DWORD),
+        ("nFileSizeHigh", wintypes.DWORD),
+        ("nFileSizeLow", wintypes.DWORD),
+        ("nNumberOfLinks", wintypes.DWORD),
+        ("nFileIndexHigh", wintypes.DWORD),
+        ("nFileIndexLow", wintypes.DWORD),
+    ]
+
+
+_kernel32.CreateFileW.restype = wintypes.HANDLE
+_kernel32.CreateFileW.argtypes = [
+    wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
+    wintypes.DWORD, wintypes.HANDLE,
+]  # fmt: skip
+_kernel32.GetFileInformationByHandle.argtypes = [wintypes.HANDLE, ctypes.POINTER(_FileInformation)]
+_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+
+def read_regular_file(path: Path, max_bytes: int) -> bytes | None:
+    r"""The bytes of `path` if it is an ordinary file, else None (a link, a junction, a folder, too
+    big, unreadable). The file is opened **as itself** (`FILE_FLAG_OPEN_REPARSE_POINT`) and looked
+    at through the open handle, so there is no gap between the check and the use in which a robot
+    could swap the file for a link to something of the agent's (`keys\machine.key`, say)."""
+    import msvcrt
+
+    handle = _kernel32.CreateFileW(
+        str(path),
+        _GENERIC_READ,
+        _FILE_SHARE_ALL,
+        None,
+        _OPEN_EXISTING,
+        _FILE_FLAG_OPEN_REPARSE_POINT,
+        None,
+    )
+    if handle == _INVALID_HANDLE or not handle:
+        return None
+    info = _FileInformation()
+    if not _kernel32.GetFileInformationByHandle(handle, ctypes.byref(info)):
+        _kernel32.CloseHandle(handle)
+        return None
+    size = (info.nFileSizeHigh << 32) | info.nFileSizeLow
+    if (
+        info.dwFileAttributes & (_FILE_ATTRIBUTE_REPARSE_POINT | _FILE_ATTRIBUTE_DIRECTORY)
+        or size > max_bytes
+    ):
+        _kernel32.CloseHandle(handle)
+        return None
+    descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)  # owns the handle now
+    with os.fdopen(descriptor, "rb") as stream:
+        data = stream.read(max_bytes + 1)  # it may have grown since the check
+    return data if len(data) <= max_bytes else None
+
+
+# --- who is an administrator --------------------------------------------------------------------
+
+_netapi32 = ctypes.WinDLL("netapi32")
+_netapi32.NetLocalGroupGetMembers.argtypes = [
+    wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p),
+    wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.DWORD),
+    ctypes.c_void_p,
+]  # fmt: skip
+_netapi32.NetApiBufferFree.argtypes = [ctypes.c_void_p]
+_advapi32.LookupAccountSidW.argtypes = [
+    wintypes.LPCWSTR, ctypes.c_void_p, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
+    wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.DWORD),
+]  # fmt: skip
+
+
+def _group_name(sid_text: str) -> str:
+    """The (localized) name of a well-known group, from its SID."""
+    sid = ctypes.c_void_p()
+    if not _advapi32.ConvertStringSidToSidW(sid_text, ctypes.byref(sid)):
+        raise WindowsApiError(f"SID inválido: {sid_text}")
+    try:
+        name_size, domain_size, use = wintypes.DWORD(256), wintypes.DWORD(256), wintypes.DWORD()
+        name = ctypes.create_unicode_buffer(256)
+        domain = ctypes.create_unicode_buffer(256)
+        if not _advapi32.LookupAccountSidW(
+            None, sid, name, ctypes.byref(name_size), domain, ctypes.byref(domain_size),
+            ctypes.byref(use),
+        ):  # fmt: skip
+            raise WindowsApiError(f"LookupAccountSid falhou (erro {ctypes.get_last_error()})")
+        return name.value
+    finally:
+        _kernel32.LocalFree(sid)
+
+
+def is_local_administrator(account: str) -> bool:
+    """Is `account` a direct member of the local Administrators group? Nested groups and a domain
+    account that gets there through a group are not followed (the check says "not that I can
+    see"), so it can only miss, never invent, an administrator."""
+    sid_text = resolve_sid(account)
+    buffer = ctypes.c_void_p()
+    read, total = wintypes.DWORD(), wintypes.DWORD()
+    status = _netapi32.NetLocalGroupGetMembers(
+        None, _group_name(ADMINISTRATORS_SID), 0, ctypes.byref(buffer), 0xFFFFFFFF,
+        ctypes.byref(read), ctypes.byref(total), None,
+    )  # fmt: skip
+    if status != 0:
+        raise WindowsApiError(f"NetLocalGroupGetMembers falhou (erro {status})")
+    try:
+        entries = ctypes.cast(buffer, ctypes.POINTER(ctypes.c_void_p))
+        for index in range(read.value):
+            text = wintypes.LPWSTR()
+            if _advapi32.ConvertSidToStringSidW(entries[index], ctypes.byref(text)):
+                try:
+                    if text.value == sid_text:
+                        return True
+                finally:
+                    _kernel32.LocalFree(ctypes.cast(text, ctypes.c_void_p))
+        return False
+    finally:
+        _netapi32.NetApiBufferFree(buffer)
+
+
+# SIDs that may change the program files of a service: SYSTEM, Administrators and the installer.
+TRUSTED_INSTALLER_SID = "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464"
+_DANGEROUS_BITS = 0x2 | 0x40 | 0x10000 | _CONTROL_BITS  # add file, delete child, delete, ACL, owner
+
+
+def writable_by_others(path: Path) -> list[str]:
+    """Who, besides SYSTEM, Administrators and the installer, can change what is at `path` or
+    replace it (any folder above it included). Each entry names the SID and the folder."""
+    problems: list[str] = []
+    trusted = {SYSTEM_SID, ADMINISTRATORS_SID, TRUSTED_INSTALLER_SID, "S-1-3-0"}
+    current = path.resolve()
+    while True:
+        try:
+            dacl = read_dacl(current)
+        except OSError:
+            break
+        for ace in dacl.aces:
+            if ace.kind != "A" or ace.sid in trusted or "IO" in ace.flags:
+                continue
+            if (
+                rights_mask(ace.rights) & _DANGEROUS_BITS
+                or mask_level(rights_mask(ace.rights)) == "F"
+            ):
+                problems.append(f"{ace.sid} em {current}")
+        if current.parent == current:
+            break
+        current = current.parent
+    return problems

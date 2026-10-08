@@ -17,7 +17,12 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from regista_agent import protocol, sysinfo
-from regista_agent.config import DEFAULT_SERVICE_ACCOUNT, AgentSettings, save_identity
+from regista_agent.config import (
+    DEFAULT_ROBOT_ACCOUNT,
+    DEFAULT_SERVICE_ACCOUNT,
+    AgentSettings,
+    save_identity,
+)
 from regista_agent.errors import AgentError, EnrollmentRefused
 from regista_agent.keystore import KeyStore
 from regista_agent.transport import HttpSession, error_code, make_client
@@ -36,9 +41,9 @@ REFUSED = (
 )
 SESSION_NEEDS_ACCOUNT = (
     "Esta máquina foi cadastrada no modo Sessão, e o modo Sessão exige a conta do usuário "
-    "dedicado que roda o agente. A chave de registro já foi usada, então a identidade não foi "
-    "gravada. Gere uma nova chave no painel e rode o cadastro de novo com --agent-account "
-    "<usuário>."
+    "dedicado em que o hospedeiro e os robôs rodam. A chave de registro já foi usada, então a "
+    "identidade não foi gravada. Gere uma nova chave no painel e rode o cadastro de novo com "
+    "--robot-account <usuário>."
 )
 
 
@@ -49,6 +54,7 @@ class EnrollResult:
     heartbeat_seconds: int
     config_path: Path
     agent_account: str | None
+    robot_account: str | None = None
 
 
 def normalize_url(url: str) -> str:
@@ -82,6 +88,7 @@ def enroll(
     url: str,
     key: str,
     agent_account: str | None,
+    robot_account: str | None = None,
     force: bool = False,
     http: HttpSession | None = None,
 ) -> EnrollResult:
@@ -125,7 +132,7 @@ def enroll(
         mode = str(answer["mode"])
         tenant_id = uuid.UUID(str(answer["tenant_id"]))
         staged_identity = store.stage_identity(tenant_id)
-        if mode == "session" and agent_account is None and sys.platform == "win32":
+        if mode == "session" and robot_account is None and sys.platform == "win32":
             raise AgentError(SESSION_NEEDS_ACCOUNT)
     except BaseException:
         store.discard(*(p for p in (staged, staged_identity) if p is not None))
@@ -134,12 +141,18 @@ def enroll(
     store.commit(staged)
     store.commit_identity(staged_identity)
     machine_id = uuid.UUID(str(answer["machine_id"]))
+    # In `service` mode the robot runs as its own virtual account (ADR 0022); in `session`
+    # mode as the dedicated user the person named. Never as the agent.
+    robot = robot_account or (
+        DEFAULT_ROBOT_ACCOUNT if sys.platform == "win32" and mode == "service" else None
+    )
     config_path = save_identity(
         settings.home,
         server_url=server_url,
         machine_id=machine_id,
         mode=mode,
         agent_account=account,
+        robot_account=robot,
     )
     return EnrollResult(
         machine_id=machine_id,
@@ -147,4 +160,5 @@ def enroll(
         heartbeat_seconds=int(answer["heartbeat_seconds"]),
         config_path=config_path,
         agent_account=account,
+        robot_account=robot,
     )

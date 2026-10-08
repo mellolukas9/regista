@@ -60,6 +60,7 @@ async def job_stack(
         "REGISTA_ENVIRONMENT": "dev",
         "REGISTA_DEV_UNSIGNED": "1",
         "REGISTA_DEV_BOTS_DIR": str(bots_dir),
+        "REGISTA_DEV_DIRECT_ROBOT": "1",  # no robot host in these runs (ADR 0022)
         "REGISTA_CANCEL_GRACE_SECONDS": "2",
         "REGISTA_LOG_FLUSH_SECONDS": "0.3",
         "REGISTA_POLL_WAIT_SECONDS": "5",

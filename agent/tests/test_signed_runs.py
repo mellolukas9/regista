@@ -4,7 +4,6 @@ with its code and reason, the runtime and the environment, the local list and th
 Environments are made by the real uv, offline, from the Python of the test run (the stand-in for
 the runtime that `regista-agent setup` installs on a customer's machine)."""
 
-import json
 import os
 import subprocess
 import sys
@@ -16,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from regista_agent import environment, policy, runtime
+from regista_agent import environment, launcher, layout, policy, runtime
 from regista_agent.config import AgentSettings
 from regista_agent.jobapi import Assignment
 from regista_agent.jobs import JobExecutor, JobState
@@ -32,25 +31,15 @@ VERSION_ID = "11111111-1111-4111-8111-111111111111"
 
 
 @pytest.fixture
-def key(tmp_path: Path) -> TestKey:
-    return new_key(tmp_path / "keys")
-
-
-@pytest.fixture
 def no_runtime_acl(monkeypatch: pytest.MonkeyPatch) -> None:
     """The ACL of the runtime folders has its own test on Windows; here it is stood in for."""
-    if sys.platform == "win32":
-        from regista_agent import _windows
+    from regista_agent import layout
 
-        monkeypatch.setattr(_windows, "restrict_directory_read_only", lambda d, sid: None)
+    monkeypatch.setattr(layout, "apply", lambda settings, agent_sid, robot_sid: [])
 
 
-@pytest.fixture
-def agent_home(home: Path) -> Path:
-    keys = home / "keys"
-    keys.mkdir(parents=True)
-    (keys / "identity.json").write_text(json.dumps({"tenant_id": str(TENANT_ID)}), "utf-8")
-    return home
+REAL_LOCK_APPLIES = layout.lock_applies
+DIRECT = launcher.DirectLauncher()  # the host has its own tests (test_host.py)
 
 
 def settings(**over: Any) -> AgentSettings:
@@ -97,6 +86,7 @@ def execute(cfg: AgentSettings, api: FakeApi, key: TestKey, job: Assignment | No
             "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
         },
         keys=key.trusted(),
+        robot_launcher=DIRECT,
     )
     executor.execute(job or assignment())
 
@@ -112,7 +102,9 @@ def outcome(api: FakeApi) -> tuple[str, str | None]:
 # --- the good path ----------------------------------------------------------------------------
 
 
-def test_a_signed_package_runs_in_its_own_environment(agent_home: Path, key: TestKey) -> None:
+def test_a_signed_package_runs_in_an_environment_made_for_this_run(
+    agent_home: Path, key: TestKey
+) -> None:
     built = build(key, tenant_id=TENANT_ID)
     api = FakeApi()
     serve(api, built)
@@ -121,26 +113,31 @@ def test_a_signed_package_runs_in_its_own_environment(agent_home: Path, key: Tes
 
     assert outcome(api) == ("completed", None)
     assert "hello from a signed robot" in api.messages
-    env = environment.env_path(cfg, built.sha256)
-    assert (env / environment.MARKER).is_file()
     assert (cfg.packages_dir / PACKAGE / f"{built.sha256}.rgpkg").is_file()
+    assert not any(cfg.runs_dir.iterdir()), "the run folder, environment included, is gone"
 
 
-def test_the_second_run_reuses_the_cache_and_the_environment(
-    agent_home: Path, key: TestKey
+def test_the_second_run_reuses_the_cache_but_not_the_environment(
+    agent_home: Path, key: TestKey, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     built = build(key, tenant_id=TENANT_ID)
     api = FakeApi()
     serve(api, built)
     cfg = settings()
+    made: list[Path] = []
+    real = environment.build
+
+    def spy(*args: Any, **kwargs: Any) -> Path:
+        made.append(kwargs["venv"])
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(environment, "build", spy)
     execute(cfg, api, key)
-    marker = environment.env_path(cfg, built.sha256) / environment.MARKER
-    first = marker.stat().st_mtime_ns
     api.failed.clear()
     execute(cfg, api, key)
     assert api.completed == [assignment().job_id, assignment().job_id]
-    assert marker.stat().st_mtime_ns == first, "the environment was not made again"
-    assert api.downloads == [built.url], "and the package was not downloaded again"
+    assert len(made) == 2 and made[0] != made[1], "a new environment each time"
+    assert api.downloads == [built.url], "but the package was not downloaded again"
 
 
 # --- every refusal, with its code and reason --------------------------------------------------
@@ -197,7 +194,7 @@ def test_a_hostile_zip_never_runs_and_leaves_nothing_behind(
     execute(cfg, api, key)
     assert outcome(api) == ("package_invalid", "unsafe_archive")
     assert not list(tmp_path.rglob("escaped.py")) and not list(agent_home.rglob("escaped.py"))
-    assert not environment.env_path(cfg, built.sha256).exists()
+    assert not list(cfg.runs_dir.glob("*")), "no run folder stays"
 
 
 def test_a_robot_that_is_not_on_the_local_list_does_not_run(agent_home: Path, key: TestKey) -> None:
@@ -248,7 +245,7 @@ def test_a_failing_uv_is_environment_failed(
     cfg = settings()
     execute(cfg, api, key)
     assert outcome(api) == ("environment_failed", None)
-    assert not list(cfg.envs_dir.glob("*")), "no half-made environment stays"
+    assert not list(cfg.runs_dir.glob("*")), "no half-made environment stays"
 
 
 def test_a_run_without_a_version_is_refused_by_an_agent_without_the_dev_flag(
@@ -280,7 +277,7 @@ def test_with_the_kill_switch_on_no_run_is_asked_for(agent_home: Path, key: Test
     cfg = settings()
     policy.pause(cfg)
     stop = threading.Event()
-    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted())
+    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted(), robot_launcher=DIRECT)
     worker = threading.Thread(target=executor.loop, daemon=True)
     worker.start()
     time.sleep(0.5)
@@ -469,7 +466,7 @@ def test_setup_refuses_a_chromium_that_is_not_the_one_the_package_declares(
         )
 
 
-def test_the_environment_is_installed_from_the_package_wheels_offline(
+def test_the_environment_is_installed_from_the_package_wheels_offline_hashed_and_without_cache(
     agent_home: Path, tmp_path: Path
 ) -> None:
     cfg = settings()
@@ -488,36 +485,21 @@ def test_the_environment_is_installed_from_the_package_wheels_offline(
 
     lock = tmp_path / "requirements.lock"
     lock.write_text("dep==1.0 --hash=sha256:" + "a" * 64 + "\n", "utf-8")
-    python = environment.ensure(
+    python = environment.build(
         cfg,
-        sha256="b" * 64,
         base_python=Path(sys.executable),
         wheels=tmp_path / "wheels",
         lock=lock,
+        venv=tmp_path / "venv",
         runner=runner,
     )
     assert python.is_file()
     install = next(c for c in calls if c[1:3] == ["pip", "install"])
-    for flag in ("--offline", "--no-index", "--require-hashes"):
+    # No cache: uv does not recheck the hash of what it takes from it. Copy: a hardlink would share
+    # the ACL of the cache.
+    for flag in ("--offline", "--no-index", "--require-hashes", "--no-cache", "--link-mode=copy"):
         assert flag in install
     assert install[install.index("--find-links") + 1] == str(tmp_path / "wheels")
-    environment.ensure(
-        cfg,
-        sha256="b" * 64,
-        base_python=Path(sys.executable),
-        wheels=tmp_path,
-        lock=lock,
-        runner=runner,
-    )
-    assert len([c for c in calls if c[1] == "venv"]) == 1, "reused, not made again"
-
-
-def test_old_environments_are_cleaned_up(agent_home: Path) -> None:
-    cfg = settings()
-    for name in ("a" * 20, "b" * 20, "c" * 20 + ".deadbe.tmp"):
-        (cfg.envs_dir / name).mkdir(parents=True)
-    environment.prune(cfg, live={"a" * 64})
-    assert sorted(p.name for p in cfg.envs_dir.iterdir()) == ["a" * 20]
 
 
 def test_the_identity_reader_is_what_the_executor_uses(agent_home: Path) -> None:
@@ -545,7 +527,7 @@ def test_a_run_taken_just_as_the_kill_switch_went_on_is_given_back_untouched(
 
     api = PausingApi()
     api.queue = [assignment()]
-    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted())
+    executor = JobExecutor(cfg, api, JobState(), stop, keys=key.trusted(), robot_launcher=DIRECT)
     worker = threading.Thread(target=executor.loop, daemon=True)
     worker.start()
     worker.join(15)
@@ -598,19 +580,24 @@ def test_uv_gets_the_proxy_and_certificates_the_agent_is_configured_with(
 def test_a_development_setup_without_elevation_does_not_lock_the_folders(
     agent_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The read-only ACL would shut out the very person running a dev agent."""
+    """The ACLs would shut out the very person running a dev agent."""
     if sys.platform != "win32":
         pytest.skip("the ACL is a Windows thing")
-    from regista_agent import _windows
+    monkeypatch.setattr(layout, "lock_applies", REAL_LOCK_APPLIES)
+    applied: list[object] = []
 
-    locked: list[Path] = []
-    monkeypatch.setattr(_windows, "restrict_directory_read_only", lambda d, sid: locked.append(d))
+    def record(cfg: object, agent_sid: str, robot_sid: str) -> list[str]:
+        applied.append(cfg)
+        return []
+
+    monkeypatch.setattr(layout, "apply", record)
     monkeypatch.setattr(policy, "is_elevated", lambda: False)
-    runtime.prepare_folders(settings(), SID)
-    assert locked == []
-    runtime.prepare_folders(settings(environment="prod"), SID)  # production always locks them
-    assert len(locked) == 2
-    locked.clear()
+    runtime.prepare_folders(settings(dev_direct_robot=True), SID, SID)
+    assert applied == []
+    runtime.prepare_folders(settings(environment="prod"), SID, SID)  # production always locks
+    assert len(applied) == 1
     monkeypatch.setattr(policy, "is_elevated", lambda: True)
-    runtime.prepare_folders(settings(), SID)  # an elevated dev console too
-    assert len(locked) == 2
+    runtime.prepare_folders(
+        settings(dev_direct_robot=True), SID, SID
+    )  # an elevated dev console too
+    assert len(applied) == 2

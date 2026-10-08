@@ -147,6 +147,8 @@ function refusalText(job: Pick<Job, "error_code" | "bot_version"> & { package_na
       return `Esta máquina ainda não está preparada para a versão ${job.bot_version ?? ""} do robô. Peça a quem cuida da máquina para rodar regista-agent setup como administrador.`;
     case "environment_failed":
       return "Não foi possível montar o ambiente do robô nesta máquina. Veja os logs da execução e avise a equipe Artemisys.";
+    case "robot_host_unavailable":
+      return "O serviço que roda os robôs nesta máquina não respondeu. Peça a quem cuida da máquina para rodar regista-agent diagnose como administrador.";
     default:
       return null;
   }

@@ -278,7 +278,10 @@ async def test_a_reason_outside_the_closed_list_is_dropped(rig: Rig) -> None:
     assert detail["error_code"] == "package_invalid" and detail["error_reason"] is None
 
 
-@pytest.mark.parametrize("code", ["robot_not_allowed", "runtime_missing", "environment_failed"])
+@pytest.mark.parametrize(
+    "code",
+    ["robot_not_allowed", "runtime_missing", "environment_failed", "robot_host_unavailable"],
+)
 async def test_the_other_new_codes_keep_no_free_text(rig: Rig, code: str) -> None:
     detail, _ = await _fail(rig, error_code=code, reason="hash_mismatch", message="segredo?")
     assert detail["error_code"] == code and detail["error_reason"] is None

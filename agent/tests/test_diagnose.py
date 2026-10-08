@@ -2,7 +2,10 @@
 
 import socket
 import ssl
+import subprocess
+import sys
 import uuid
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from pathlib import Path
@@ -84,8 +87,14 @@ LOCAL_CHECKS = {
     "Robôs permitidos",
     "Kill switch",
     "Runtimes instalados",
-    "Permissões do runtime",
+    "Permissões das pastas",
     "Runtimes do pool",
+    # The agent and the robot host as the system runs them (ADR 0022): tests of their own below.
+    "Serviço do agente",
+    "Hospedeiro do robô",
+    "Usuário dedicado",
+    "Canal do hospedeiro",
+    "Arquivos do programa",
 }
 
 
@@ -279,3 +288,84 @@ def test_the_dev_override_in_production_is_an_error_in_diagnose(
     by_name = {c.name: c for c in run_checks(AgentSettings(), _probes())}
     assert by_name["Chaves de assinatura"].status == "erro"
     assert "REGISTA_ENVIRONMENT=dev" in by_name["Chaves de assinatura"].detail
+
+
+# --- the agent and the robot host as the system runs them (ADR 0022) ----------------------------
+
+windows_only = pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
+
+
+def _sc(states: dict[str, str]) -> "Callable[[Sequence[str]], subprocess.CompletedProcess[str]]":
+    def run(args: Sequence[str]) -> "subprocess.CompletedProcess[str]":
+        call = list(args)
+        if call[0] == "sc.exe" and call[1] in ("query", "qc", "queryex"):
+            if call[2] not in states:
+                return subprocess.CompletedProcess(call, 1060, "", "")
+            text = f"STATE : 4 {states[call[2]]}\nPID : 7"
+            return subprocess.CompletedProcess(call, 0, text, "")
+        return subprocess.CompletedProcess(call, 0 if call[0] == "schtasks.exe" else 1, "", "")
+
+    return run
+
+
+@windows_only
+def test_diagnose_names_a_missing_or_stopped_host(
+    enrolled: AgentSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from regista_agent import diagnose, service
+
+    monkeypatch.setattr(service, "insecure_paths", lambda python: [])
+    monkeypatch.setattr(
+        diagnose,
+        "_service_user",
+        lambda name, run: ("RUNNING", "tester") if name == "RegistaAgent" else ("", ""),
+    )
+    checks = _by_name(diagnose.host_checks(enrolled, _sc({"RegistaAgent": "RUNNING"})))
+    assert checks["Serviço do agente"].status == "ok"
+    assert checks["Hospedeiro do robô"].status == "erro"
+    assert "service install" in checks["Hospedeiro do robô"].detail
+
+
+@windows_only
+def test_diagnose_refuses_a_host_that_runs_as_the_agent(
+    enrolled: AgentSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from regista_agent import diagnose, service
+
+    monkeypatch.setattr(service, "insecure_paths", lambda python: [])
+    same = "tester"  # the agent's account in this machine
+    monkeypatch.setattr(diagnose, "_service_user", lambda name, run: ("RUNNING", same))
+    checks = _by_name(
+        diagnose.host_checks(enrolled, _sc({"RegistaAgent": "RUNNING", "RegistaRobot": "RUNNING"}))
+    )
+    assert checks["Hospedeiro do robô"].status == "erro"
+
+
+@windows_only
+def test_diagnose_is_content_with_the_right_accounts(
+    enrolled: AgentSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from regista_agent import diagnose, service
+
+    monkeypatch.setattr(service, "insecure_paths", lambda python: [])
+    users = {"RegistaAgent": "tester", "RegistaRobot": r"NT SERVICE\RegistaRobot"}
+    monkeypatch.setattr(diagnose, "_service_user", lambda name, run: ("RUNNING", users[name]))
+    checks = _by_name(
+        diagnose.host_checks(enrolled, _sc({"RegistaAgent": "RUNNING", "RegistaRobot": "RUNNING"}))
+    )
+    assert checks["Serviço do agente"].status == "ok"
+    assert checks["Hospedeiro do robô"].status == "ok"
+    assert checks["Arquivos do programa"].status == "ok"
+
+
+@windows_only
+def test_diagnose_warns_about_program_files_others_can_change(
+    enrolled: AgentSettings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from regista_agent import diagnose, service
+
+    monkeypatch.setattr(service, "insecure_paths", lambda python: ["S-1-5-21-1-2-3-1001 em C:\app"])
+    monkeypatch.setattr(diagnose, "_service_user", lambda name, run: ("", ""))
+    checks = _by_name(diagnose.host_checks(enrolled, _sc({})))
+    assert checks["Arquivos do programa"].status == "aviso"
+    assert "C:\app" in checks["Arquivos do programa"].detail

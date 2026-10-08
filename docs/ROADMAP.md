@@ -105,9 +105,26 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 - [x] Lib compartilhada `regista_pkg` (formato, assinatura, extração segura) usada pela API, pelo agente e pelo `regista-pack`
 - [x] `POST /agent/jobs/{id}/release` (devolve à fila uma execução que o agente não vai iniciar) e devolução automática de execução "atribuída" que o heartbeat não reconhece
 - [x] Tarefa do worker que expira uploads de versão abandonados
-- [ ] **Fora do M4, pré-requisito do primeiro cliente:** conta separada para o robô (ADR 0022, proposta) e chaves de produção (`docs/STATUS.md`)
+- [x] Pré-requisito do primeiro cliente resolvido no **M4b** (conta separada para o robô, ADR 0022); as chaves de produção continuam pendentes (`docs/STATUS.md`)
 
 **Pronto quando:** pacote adulterado é recusado pelo agente e o painel mostra o motivo; pacote de outro cliente é recusado mesmo que o servidor o envie; robô fora da lista local não executa; trocar a versão em uso faz a próxima execução usar a nova.
+
+---
+
+## M4b — Separação de privilégios entre agente e robô
+
+Antes do M5, porque o token de job do SDK passa pelo modo como o robô é iniciado. Decisão e custos: ADR 0022.
+
+- [x] ADR 0022 **aceita**: hospedeiro do robô com identidade própria + ambiente novo por execução; spike com números (venv por execução ~1 s, Chromium sob `NT SERVICE\RegistaRobot`, Job Object, pipe entre serviços, persistência por HKCU)
+- [x] Matriz de permissões de `%ProgramData%\Regista` como código (`layout.py`), aplicada pelo `setup` (idempotente, migra máquinas já preparadas: apaga `envs\`, esvazia `uv-cache\`) e conferida pelo `diagnose`; `agent.toml` e `PAUSED` sem escrita para o agente; usuários locais sem acesso
+- [x] Pasta por execução (`runs\<id>\`) com permissões gravadas antes de popular; ambiente novo por execução (`--offline --require-hashes --no-cache --link-mode=copy`), apagado sempre; capturas e arquivos do robô tratados como não confiáveis (sem seguir links ou junctions); `envs\` removido
+- [x] Hospedeiro do robô (`regista-agent host`): sem credencial, Job Object com `KILL_ON_JOB_CLOSE`, caminhos revalidados; protocolo de mão única por named pipe (instância única, DACL só do hospedeiro, identidade conferida pelo kernel nos dois sentidos); sem fallback (`robot_host_unavailable`)
+- [x] `regista-agent service install | uninstall | status` (serviços `RegistaAgent` e `RegistaRobot` com contas virtuais, ou a tarefa de logon do modo Sessão sem senha; recusa programa em pasta alterável por não administradores); `enroll --robot-account`; modos reinterpretados (ADR 0010 emendada)
+- [x] Migration `0006` e texto fixo no painel para `robot_host_unavailable` (design-system §16)
+- [x] Robô `bots/isolation_probe` e testes na CI do Windows com os serviços, as contas e o pipe de verdade: o robô não lê `keys\`, não escreve em `packages\`, `uv-cache\`, `agent.toml`, `PAUSED`, no runtime nem na própria versão, não segue junction, roda normalmente (Chromium inclusive); hospedeiro parado, cancelado e derrubado; usuário local sem acesso
+- [x] Documentação: ADR 0022, ADR 0010 emendada, `agent.md`, `security.md`, `data-model.md`, runbook (migração e falha do hospedeiro), `CLAUDE.md`, `agent/README.md`
+
+**Pronto quando:** um robô de prova roda pelo hospedeiro, com a conta do robô, e tudo que tenta contra a chave, a configuração, o kill switch, os pacotes, o cache e a própria versão é negado, no CI e na conferência manual em console elevado; sem o hospedeiro a execução falha com texto claro e o robô nunca roda com a conta do agente.
 
 ---
 
@@ -161,7 +178,7 @@ A interface de cada marco segue `docs/specs/design-system.md` (mapa de telas por
 
 ## M8 — Produção e primeiro cliente
 
-- [ ] Empacotamento do agente: PyInstaller + WinSW + instalador MSI (WiX), assinatura de código
+- [ ] Empacotamento do agente: PyInstaller + WinSW + instalador MSI (WiX), assinatura de código. O MSI cria os **dois serviços** (`RegistaAgent` e `RegistaRobot`, contas virtuais) e, no modo Sessão, a tarefa de logon do hospedeiro, e instala em `Program Files` (o `service install` do M4b é provisório e só avisa quando o caminho é alterável por outras contas)
 - [ ] Autoatualização assinada do agente
 - [ ] Deploy em VPS: Docker Compose de produção, Caddy com HTTPS, CORS e hosts por ambiente
 - [ ] Backup diário do Postgres para S3 com teste de restauração; Sentry
