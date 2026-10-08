@@ -16,9 +16,10 @@ Parâmetros (JSON em REGISTA_JOB_PARAMS):
 - `phase`: `probe` (padrão), `wait` (fica até o cancelamento, com um processo filho), `persist`
   (grava no registro do usuário, como um robô malicioso faria para afetar a próxima execução) ou
   `verify` (confere que a execução seguinte não foi afetada e limpa o que `persist` gravou);
-- `browser`: se verdadeiro, abre uma página local no Chromium do Playwright;
-- `junction`: se verdadeiro, deixa em `artifacts` uma junction para a pasta da chave (o agente
-  não pode seguir esse link ao enviar capturas).
+- `browser` (padrão verdadeiro; o painel dispara sem parâmetros): abre uma página local no
+  Chromium do Playwright;
+- `junction` (padrão verdadeiro): deixa em `artifacts` uma junction para a pasta da chave (o
+  agente não pode seguir esse link ao enviar capturas).
 """
 
 import base64
@@ -134,7 +135,7 @@ def probe() -> None:
     must_work("rodar com o Python do ambiente da execução", lambda: _in_run_venv())
     must_work("o ambiente não traz segredos do agente", lambda: _clean_environment())
 
-    if params.get("junction"):
+    if params.get("junction", True):
         link = ARTIFACTS / "evil.png"
         must_work(
             "deixar uma junction em artifacts apontando para a pasta da chave",
@@ -144,7 +145,7 @@ def probe() -> None:
                 capture_output=True,
             ),
         )
-    if params.get("browser"):
+    if params.get("browser", True):
         must_work("abrir uma página no Chromium", _browser)
 
 
