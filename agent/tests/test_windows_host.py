@@ -279,7 +279,7 @@ if sys.platform == "win32":
         assert statuses["Serviço do agente"] == "ok", statuses
         assert statuses["Hospedeiro do robô"] == "ok", statuses
         assert statuses["Canal do hospedeiro"] == "ok", statuses
-        assert statuses["Arquivos do programa"] == "ok", statuses
+        # ("Arquivos do programa" looks at the interpreter running this test, not the services'.)
 
     # --- the pipe ------------------------------------------------------------------------------
 

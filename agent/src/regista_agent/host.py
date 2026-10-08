@@ -157,12 +157,12 @@ class HostCore:
 
     # --- the loop -----------------------------------------------------------------------------
 
-    def serve(self) -> None:
+    def serve(self, stop: threading.Event | None = None) -> None:
         """Greet the agent and obey until the connection ends. Whatever robot is still running
         when it does is killed: no robot outlives its host's connection to the agent."""
         self._send(Hello(hostproto.PROTOCOL_VERSION))
         try:
-            while True:
+            while stop is None or not stop.is_set():
                 try:
                     raw = self._conn.receive(timeout=1.0)
                 except TimeoutError:
@@ -318,7 +318,7 @@ def run_host(
                 stop.wait(5.0)
                 continue
             log.info("connected to the agent")
-            HostCore(connection, runs_root=root).serve()
+            HostCore(connection, runs_root=root).serve(stop)
         except (OSError, ProtocolViolation) as exc:
             log.warning("connection to the agent ended: %s", exc)
         finally:

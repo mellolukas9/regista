@@ -18,6 +18,7 @@ this installer and installs under `Program Files`.
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -284,6 +285,16 @@ def _remove_task(run: Run, say: Say, *, quiet: bool = False) -> None:
         say(f"Tarefa {TASK_NAME}: nada a remover.")
 
 
+def _wait_stopped(run: Run, name: str, seconds: float = 40.0) -> None:
+    """`sc stop` returns at once; deleting a service that is still stopping leaves it half there."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        state = query(run, name).state
+        if not state or "STOPPED" in state:
+            return
+        time.sleep(0.5)
+
+
 def uninstall(settings: AgentSettings, *, say: Say = print, run: Run = _default_run) -> None:
     if sys.platform != "win32":
         raise AgentError("O instalador de serviços só existe no Windows.")
@@ -291,6 +302,7 @@ def uninstall(settings: AgentSettings, *, say: Say = print, run: Run = _default_
     for name in (ROBOT_SERVICE_NAME, AGENT_SERVICE_NAME):  # the host first, the agent after
         if exists(run, name):
             _sc(run, "stop", name)
+            _wait_stopped(run, name)
             _check(_sc(run, "delete", name), f"Remover o serviço {name}")
             say(f"Serviço {name} removido.")
         else:

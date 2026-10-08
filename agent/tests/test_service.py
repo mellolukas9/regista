@@ -25,6 +25,7 @@ class Recorder:
     def __init__(self, existing: set[str] | None = None) -> None:
         self.calls: list[list[str]] = []
         self.services = set(existing or ())
+        self.stopped: set[str] = set()
         self.xml_seen: list[str] = []
 
     def __call__(self, args: Sequence[str]) -> "subprocess.CompletedProcess[str]":
