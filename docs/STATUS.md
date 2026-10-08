@@ -9,6 +9,19 @@ _Atualize este arquivo ao final de cada marco ou sessão de trabalho relevante._
 - **Próximo passo:** conferência manual do M4b pelo responsável; depois o fechamento descrito acima e, após o merge, a branch `m5-queues` e o plano do M5.
 - **Pendências para decisão:** ESLint 10 (depois do M3, abaixo).
 
+## Conferência manual do M4b (console elevado)
+
+Resultado automático já obtido: CI verde (Python, Web e Windows com serviços, contas virtuais e pipe de verdade). Roteiro para o responsável:
+
+1. `git pull`; instalar o programa em pasta só de administradores, com Python gerenciado pelo uv: `$env:UV_PYTHON_INSTALL_DIR="C:\Program Files\Regista\python"; uv venv --python 3.13 "C:\Program Files\Registaenv"` e `uv pip install --python "C:\Program Files\Registaenv\Scripts\python.exe" .\libs\pkg .gent`. Depois `icacls "C:\Program Files\Regista" /grant "*S-1-5-32-545:(OI)(CI)RX"` (usuários só leem e executam).
+2. Cadastrar a máquina no painel (modo Serviço), então: `regista-agent enroll --url ... --key rgk_...`, `regista-agent setup --from-server`, `regista-agent service install --start`, `regista-agent service status` e `regista-agent diagnose` (tudo verde). Rodar `service install` de novo (idempotente).
+3. Assinar e publicar `bots/isolation_probe` (chave de teste, `regista-pack build ... --python <X.Y.Z>`; `REGISTA_DEV_TRUSTED_KEYS` no registro dos serviços, ver `agent/tests/test_windows_host.py`), `regista-agent allow isolation_probe`, **Executar agora** com os parâmetros `{"browser": true, "junction": true}`: o painel mostra cada tentativa **NEGADA** e a execução conclui.
+4. Rodar o robô de demonstração (Playwright) e conferir a duração do passo do ambiente.
+5. Como usuário local comum (`runas /user:<usuario> cmd`): confirmar que não lê `C:\ProgramData\Regista`.
+6. `Stop-Service RegistaRobot`, **Executar agora**: o painel mostra o texto da §16; religar e rodar de novo.
+7. Modo Sessão: máquina cadastrada no modo Sessão com `--robot-account <usuário dedicado, não administrador>`, `service install --mode session --robot-account <usuário>`, logar o usuário e repetir os passos 3 e 6 (a tarefa de logon); `diagnose` confere que o usuário não é administrador.
+8. `regista-agent service uninstall` e conferir que nada fica (`sc query RegistaAgent`, `schtasks /Query /TN Regista\RobotHost`).
+
 ## PRÉ-REQUISITOS OBRIGATÓRIOS ANTES DO PRIMEIRO CLIENTE EM PRODUÇÃO
 
 Não são evolução opcional: o primeiro cliente não entra em produção sem os dois.
